@@ -5,19 +5,10 @@ import type {
   SupplierBlock,
 } from "@/domains/gonenkukumi/types";
 import {
-  GONEN_REPORT_GRID_DAYS,
+  createEmptyDayQtySeries,
   normalizeDayQtySeries31,
   sumDayQtySeriesActiveDays,
 } from "@/domains/gonenkukumi/report-grid";
-
-const EMPTY_DAY_SERIES: DayQtySeries = Array.from(
-  { length: GONEN_REPORT_GRID_DAYS },
-  () => null,
-);
-
-function emptySeries(): DayQtySeries {
-  return EMPTY_DAY_SERIES;
-}
 
 /**
  * 行計の値（共通仕様）。
@@ -85,7 +76,7 @@ export const CUSTOMER_ROW_SPECS: readonly CustomerRowSpec[] = [
   },
   {
     label: "本日在庫",
-    series: () => emptySeries(),
+    series: () => createEmptyDayQtySeries(),
     prev: () => null,
     rowSumKind: "zaiko",
     webClass: "text-amber-900",
@@ -160,7 +151,7 @@ export const SUPPLIER_ROW_SPECS: readonly SupplierRowSpec[] = [
   },
   {
     label: "本日在庫",
-    series: () => emptySeries(),
+    series: () => createEmptyDayQtySeries(),
     prev: () => null,
     rowSumKind: "zaiko",
     webClass: "text-amber-900",

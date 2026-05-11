@@ -1,8 +1,7 @@
 import "server-only";
 
 import oracledb from "oracledb";
-import { getMariCompanyCd } from "@/infrastructure/oracle/config";
-import { getOraclePool, isOracleConfigured } from "@/infrastructure/oracle/pool";
+import { withOracleReadConnection } from "@/infrastructure/oracle/with-connection";
 
 /**
  * 得意先品目（M_CUST_ITEM.CUST_ITEM_CD）を得意先コードで全件取得。
@@ -13,17 +12,10 @@ export async function listGonenKukumiCustItems(input: {
   custCode: string;
   asOfDate: string;
 }): Promise<string[]> {
-  if (!isOracleConfigured()) {
-    return [];
-  }
-
   const custCd = input.custCode.trim();
   if (!custCd) return [];
 
-  const pool = await getOraclePool();
-  const conn = await pool.getConnection();
-  try {
-    const companyCd = getMariCompanyCd() ?? null;
+  return withOracleReadConnection<string[]>([], async (conn, { companyCd }) => {
     const sql = `
       SELECT DISTINCT M_CUST_ITEM.CUST_ITEM_CD AS "CUST_ITEM_CD"
       FROM M_CUST_ITEM
@@ -48,8 +40,5 @@ export async function listGonenKukumiCustItems(input: {
       out.push(v);
     }
     return out;
-  } finally {
-    await conn.close();
-  }
+  });
 }
-

@@ -1,14 +1,12 @@
 import { NextResponse } from "next/server";
-import { auth } from "@/auth";
+import { jsonErrorResponse, requireAuthenticatedUser } from "@/app/api/_lib/require-auth";
 import { GONEN_AS_OF_DATE_REGEX } from "@/domains/gonenkukumi/schemas";
 import { listGonenKukumiCustItems } from "@/infrastructure/oracle/gonenkukumi/list-cust-items";
 
 /** 得意先品目のプリフェッチ用（全件）。GET ?custCode=&asOfDate= */
 export async function GET(req: Request) {
-  const session = await auth();
-  if (!session?.user?.id) {
-    return NextResponse.json({ error: "認証が必要です" }, { status: 401 });
-  }
+  const guard = await requireAuthenticatedUser();
+  if (!guard.ok) return guard.response;
 
   const { searchParams } = new URL(req.url);
   const custCode = (searchParams.get("custCode") ?? "").trim();
@@ -25,8 +23,6 @@ export async function GET(req: Request) {
     const items = await listGonenKukumiCustItems({ custCode, asOfDate });
     return NextResponse.json({ items });
   } catch (e) {
-    const msg = e instanceof Error ? e.message : String(e);
-    return NextResponse.json({ error: msg, items: [] as string[] }, { status: 500 });
+    return jsonErrorResponse(e, { items: [] as string[] });
   }
 }
-

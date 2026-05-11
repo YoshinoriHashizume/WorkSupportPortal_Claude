@@ -1,3 +1,5 @@
+import { PortalPlaceholderPage } from "@/components/portal-placeholder-page";
+
 const labels: Record<string, string> = {
   "company-wide": "全社",
   hr: "人事",
@@ -17,11 +19,9 @@ export default async function DeptPage({
   const title = labels[dept] ?? dept;
 
   return (
-    <div>
-      <h1 className="text-lg font-semibold text-slate-900">{title}</h1>
-      <p className="mt-2 text-sm text-slate-600">
-        この部門向けのアプリは順次追加予定です。
-      </p>
-    </div>
+    <PortalPlaceholderPage
+      title={title}
+      description="この部門向けのアプリは順次追加予定です。"
+    />
   );
 }

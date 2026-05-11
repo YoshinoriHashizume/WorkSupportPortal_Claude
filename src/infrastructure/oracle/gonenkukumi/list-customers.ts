@@ -1,8 +1,7 @@
 import "server-only";
 
 import oracledb from "oracledb";
-import { getMariCompanyCd } from "@/infrastructure/oracle/config";
-import { getOraclePool, isOracleConfigured } from "@/infrastructure/oracle/pool";
+import { withOracleReadConnection } from "@/infrastructure/oracle/with-connection";
 
 export type GonenKukumiCustomerOption = {
   custCode: string;
@@ -19,14 +18,7 @@ type Row = {
  * 件数は業務上 ~150 件程度を想定し、上限 500 行で打ち切る。
  */
 export async function listGonenKukumiCustomers(): Promise<GonenKukumiCustomerOption[]> {
-  if (!isOracleConfigured()) {
-    return [];
-  }
-
-  const pool = await getOraclePool();
-  const conn = await pool.getConnection();
-  try {
-    const companyCd = getMariCompanyCd() ?? null;
+  return withOracleReadConnection<GonenKukumiCustomerOption[]>([], async (conn, { companyCd }) => {
     const sql = `
       SELECT M_CUST.CUST_CD AS "CUST_CD", M_CUST.CUST_ANAME AS "CUST_ANAME"
       FROM M_CUST
@@ -43,7 +35,5 @@ export async function listGonenKukumiCustomers(): Promise<GonenKukumiCustomerOpt
       custCode: String(row.CUST_CD ?? "").trim(),
       custName: String(row.CUST_ANAME ?? "").trim(),
     })).filter((x) => /^\d{3}$/.test(x.custCode));
-  } finally {
-    await conn.close();
-  }
+  });
 }

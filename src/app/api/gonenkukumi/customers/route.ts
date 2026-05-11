@@ -1,12 +1,10 @@
 import { NextResponse } from "next/server";
-import { auth } from "@/auth";
+import { requireAuthenticatedUser } from "@/app/api/_lib/require-auth";
 import { listGonenKukumiCustomers } from "@/infrastructure/oracle/gonenkukumi/list-customers";
 
 export async function GET() {
-  const session = await auth();
-  if (!session?.user?.id) {
-    return NextResponse.json({ error: "認証が必要です" }, { status: 401 });
-  }
+  const guard = await requireAuthenticatedUser();
+  if (!guard.ok) return guard.response;
 
   try {
     const items = await listGonenKukumiCustomers();

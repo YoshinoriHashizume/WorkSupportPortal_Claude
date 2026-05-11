@@ -1,15 +1,13 @@
 import { NextResponse } from "next/server";
-import { auth } from "@/auth";
+import { requireAuthenticatedUser } from "@/app/api/_lib/require-auth";
 import { prisma } from "@/infrastructure/persistence/prisma/client";
 
 export async function GET() {
-  const session = await auth();
-  if (!session?.user?.id) {
-    return NextResponse.json({ error: "認証が必要です" }, { status: 401 });
-  }
+  const guard = await requireAuthenticatedUser();
+  if (!guard.ok) return guard.response;
 
   const rows = await prisma.gonenKukumiSearchHistory.findMany({
-    where: { userId: session.user.id },
+    where: { userId: guard.userId },
     orderBy: { executedAt: "desc" },
     distinct: ["custCode", "custItem", "optionChange", "yearMonth"],
     take: 50,

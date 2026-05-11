@@ -115,13 +115,16 @@ export function isOracleConfigured(): boolean {
 }
 
 /** 必須 Oracle 環境変数の一覧。値は `.env.local` / シークレットに集約する。 */
-const REQUIRED_ORACLE_ENVS = [
+export const REQUIRED_ORACLE_ENVS = [
   "ORACLE_HOST",
   "ORACLE_PORT",
   "ORACLE_SID",
   "ORACLE_USER",
   "ORACLE_PASSWORD",
 ] as const;
+
+/** Oracle が未設定のとき UI / エラー応答で示す案内文（単一の文言ソース）。 */
+export const ORACLE_NOT_CONFIGURED_HINT = `Oracle 接続が未設定です。\`.env.local\` に必須環境変数（${REQUIRED_ORACLE_ENVS.join(", ")}）を設定してください（接続パラメータの仕様: アプリケーション仕様書 §8.2.1）。`;
 
 function missingOracleEnvKeys(env: ReturnType<typeof getOracleConnectEnv>): string[] {
   const missing: string[] = [];
@@ -139,7 +142,7 @@ export async function getOraclePool(): Promise<oracledb.Pool> {
   const missing = missingOracleEnvKeys(e);
   if (missing.length > 0) {
     throw new Error(
-      `Oracle 接続用の環境変数が未設定です: ${missing.join(", ")}（必須: ${REQUIRED_ORACLE_ENVS.join(", ")}）。値は \`.env.local\` または本番のシークレットに設定してください（接続パラメータの仕様: アプリケーション仕様書 §8.2.1）。`,
+      `Oracle 接続用の環境変数が未設定です: ${missing.join(", ")}。${ORACLE_NOT_CONFIGURED_HINT}`,
     );
   }
   if (!isOracleThinOnlyMode()) {

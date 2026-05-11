@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { auth } from "@/auth";
+import { requireAuthenticatedUser } from "@/app/api/_lib/require-auth";
 import { gonenKukumiSearchSchema } from "@/domains/gonenkukumi/schemas";
 import type { GonenKukumiSearchInput } from "@/domains/gonenkukumi/schemas";
 import type { GonenKukumiOracleFailure } from "@/domains/gonenkukumi/types";
@@ -8,11 +8,8 @@ export async function parseGonenKukumiAuthenticatedSearchPost(req: Request): Pro
   | { ok: true; userId: string; input: GonenKukumiSearchInput }
   | { ok: false; response: NextResponse }
 > {
-  const session = await auth();
-  const userId = session?.user?.id;
-  if (!userId) {
-    return { ok: false, response: NextResponse.json({ error: "認証が必要です" }, { status: 401 }) };
-  }
+  const guard = await requireAuthenticatedUser();
+  if (!guard.ok) return guard;
 
   let body: unknown;
   try {
@@ -32,7 +29,7 @@ export async function parseGonenKukumiAuthenticatedSearchPost(req: Request): Pro
     };
   }
 
-  return { ok: true, userId, input: parsed.data };
+  return { ok: true, userId: guard.userId, input: parsed.data };
 }
 
 export function gonenOracleFailureResponse(oracle: GonenKukumiOracleFailure): NextResponse {

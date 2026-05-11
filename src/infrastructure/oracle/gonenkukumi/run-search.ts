@@ -9,14 +9,11 @@ import type {
   GonenKukumiOracleResult,
   SupplierBlock,
 } from "@/domains/gonenkukumi/types";
-import { getMariCompanyCd } from "@/infrastructure/oracle/config";
-import { getOraclePool, isOracleConfigured } from "@/infrastructure/oracle/pool";
+import { withOracleReadConnection } from "@/infrastructure/oracle/with-connection";
+import { ORACLE_NOT_CONFIGURED_HINT } from "@/infrastructure/oracle/pool";
+import { createEmptyDayQtySeries } from "@/domains/gonenkukumi/report-grid";
 
 const OUT_OBJECT = oracledb.OUT_FORMAT_OBJECT;
-
-function emptyDays(): DayQtySeries {
-  return Array.from({ length: 31 }, () => null);
-}
 
 function firstDayOfSearchMonth(yearMonth: string): string {
   return `${yearMonth}/01`;
@@ -140,7 +137,7 @@ const QTY_COL_RE = /^QTY[_\s.-]?0*(\d{1,2})$/i;
  * 結果は区分「月初発注」行（`SupplierBlock.monthlyStartByDay`）にそのまま渡す。
  */
 function aggregateMonthlyOdrWorkRowsToDaySeries(rows: Record<string, unknown>[]): DayQtySeries {
-  const days = emptyDays();
+  const days = createEmptyDayQtySeries();
   const col = (row: Record<string, unknown>, base: string): unknown => {
     const u = row[base];
     if (u !== undefined) return u;
@@ -290,6 +287,47 @@ async function fetchTebanAnzen(
   };
 }
 
+/**
+ * 検索月の `yyyy/mm` を `:ym` バインドにする日別集計 SQL を、共通の
+ * 「実行 → 日別配列にマージ」骨組みで呼び出すヘルパー。
+ *
+ * 各テーブル（T_UNCNFM_ODR / T_ODR / T_UNITE_ODR / T_SHIP / T_SALES_TEMP /
+ * T_OD / T_RLSD_PUCH_ODR / T_PAST_INSPC_ACPT）の SQL は本ファイル内の定数として
+ * 切り出し、薄いラッパー関数（`fetchUncnfmByDay` 等）から呼ぶ。
+ */
+async function fetchDayQtySeriesByMonth(
+  conn: oracledb.Connection,
+  args: {
+    sql: string;
+    binds: oracledb.BindParameters;
+    dateField: string;
+    qtyField: string;
+  },
+): Promise<DayQtySeries> {
+  const days = createEmptyDayQtySeries();
+  const r = await conn.execute<Record<string, unknown>>(
+    args.sql,
+    args.binds,
+    { outFormat: OUT_OBJECT },
+  );
+  for (const row of r.rows ?? []) {
+    addToDay(days, String(row[args.dateField] ?? ""), Number(row[args.qtyField] ?? 0));
+  }
+  return days;
+}
+
+const SQL_UNCNFM_BY_DAY = `
+  SELECT
+    TO_CHAR(UNCNFM_REQUIRED_DATE, 'yyyy/mm/dd') AS "JUDATE",
+    SUM(UNCNFM_REQUIRED_QTY) AS "SURYO"
+  FROM T_UNCNFM_ODR
+  WHERE CUST_CD = :tk
+    AND ITEM_CD = :item
+    AND (:companyCd IS NULL OR COMPANY_CD = :companyCd)
+    AND TO_CHAR(UNCNFM_REQUIRED_DATE, 'yyyy/mm/dd') LIKE :ym
+    AND NVL(DEL_FLG, 0) = 0
+  GROUP BY CUST_CD, CUST_ITEM_CD, TO_CHAR(UNCNFM_REQUIRED_DATE, 'yyyy/mm/dd'), DEL_FLG`;
+
 async function fetchUncnfmByDay(
   conn: oracledb.Connection,
   tk: string,
@@ -297,27 +335,12 @@ async function fetchUncnfmByDay(
   yearMonth: string,
   companyCd: string | null,
 ): Promise<DayQtySeries> {
-  const days = emptyDays();
-  const sql = `
-    SELECT
-      TO_CHAR(UNCNFM_REQUIRED_DATE, 'yyyy/mm/dd') AS "JUDATE",
-      SUM(UNCNFM_REQUIRED_QTY) AS "SURYO"
-    FROM T_UNCNFM_ODR
-    WHERE CUST_CD = :tk
-      AND ITEM_CD = :item
-      AND (:companyCd IS NULL OR COMPANY_CD = :companyCd)
-      AND TO_CHAR(UNCNFM_REQUIRED_DATE, 'yyyy/mm/dd') LIKE :ym
-      AND NVL(DEL_FLG, 0) = 0
-    GROUP BY CUST_CD, CUST_ITEM_CD, TO_CHAR(UNCNFM_REQUIRED_DATE, 'yyyy/mm/dd'), DEL_FLG`;
-  const r = await conn.execute<{ JUDATE: string; SURYO: number }>(
-    sql,
-    { tk, item: itemCd, ym: `${yearMonth}%`, companyCd },
-    { outFormat: OUT_OBJECT },
-  );
-  for (const row of r.rows ?? []) {
-    addToDay(days, String(row.JUDATE), Number(row.SURYO));
-  }
-  return days;
+  return fetchDayQtySeriesByMonth(conn, {
+    sql: SQL_UNCNFM_BY_DAY,
+    binds: { tk, item: itemCd, ym: `${yearMonth}%`, companyCd },
+    dateField: "JUDATE",
+    qtyField: "SURYO",
+  });
 }
 
 /** 確定受注の前月以前残（VBA JUCHUZAN_GET — 検索月より前の納期で未完了） */
@@ -352,6 +375,18 @@ async function fetchJuchuZan(
   return sum;
 }
 
+const SQL_KAKUTEI_BY_DAY = `
+  SELECT
+    TO_CHAR(T_ODR.DESINATED_DLV_DATE, 'yyyy/mm/dd') AS "JDATE",
+    SUM(T_ODR.ODR_QTY) AS "JSURYO"
+  FROM T_ODR
+  WHERE T_ODR.CUST_CD = :tk
+    AND T_ODR.ITEM_CD = :item
+    AND (:companyCd IS NULL OR T_ODR.COMPANY_CD = :companyCd)
+    AND TO_CHAR(T_ODR.DESINATED_DLV_DATE, 'yyyy/mm/dd') LIKE :ym
+    AND NVL(T_ODR.DEL_FLG, 0) <> 1
+  GROUP BY T_ODR.CUST_CD, T_ODR.CUST_ITEM_CD, TO_CHAR(T_ODR.DESINATED_DLV_DATE, 'yyyy/mm/dd')`;
+
 async function fetchKakuteiByDay(
   conn: oracledb.Connection,
   tk: string,
@@ -359,28 +394,29 @@ async function fetchKakuteiByDay(
   yearMonth: string,
   companyCd: string | null,
 ): Promise<DayQtySeries> {
-  const days = emptyDays();
-  const sql = `
-    SELECT
-      TO_CHAR(T_ODR.DESINATED_DLV_DATE, 'yyyy/mm/dd') AS "JDATE",
-      SUM(T_ODR.ODR_QTY) AS "JSURYO"
-    FROM T_ODR
-    WHERE T_ODR.CUST_CD = :tk
-      AND T_ODR.ITEM_CD = :item
-      AND (:companyCd IS NULL OR T_ODR.COMPANY_CD = :companyCd)
-      AND TO_CHAR(T_ODR.DESINATED_DLV_DATE, 'yyyy/mm/dd') LIKE :ym
-      AND NVL(T_ODR.DEL_FLG, 0) <> 1
-    GROUP BY T_ODR.CUST_CD, T_ODR.CUST_ITEM_CD, TO_CHAR(T_ODR.DESINATED_DLV_DATE, 'yyyy/mm/dd')`;
-  const r = await conn.execute<{ JDATE: string; JSURYO: number }>(
-    sql,
-    { tk, item: itemCd, ym: `${yearMonth}%`, companyCd },
-    { outFormat: OUT_OBJECT },
-  );
-  for (const row of r.rows ?? []) {
-    addToDay(days, String(row.JDATE), Number(row.JSURYO));
-  }
-  return days;
+  return fetchDayQtySeriesByMonth(conn, {
+    sql: SQL_KAKUTEI_BY_DAY,
+    binds: { tk, item: itemCd, ym: `${yearMonth}%`, companyCd },
+    dateField: "JDATE",
+    qtyField: "JSURYO",
+  });
 }
+
+const SQL_TOUGOU_BY_DAY = `
+  SELECT
+    TO_CHAR(T_UNITE_ODR.SHIP_PLAN_DATE, 'yyyy/mm/dd') AS "JDATE",
+    SUM(T_UNITE_ODR.REQUIRED_QTY) AS "JSURYO"
+  FROM T_UNITE_ODR
+  WHERE NVL(T_UNITE_ODR.DEL_FLG, 0) = 0
+    AND (:companyCd IS NULL OR T_UNITE_ODR.COMPANY_CD = :companyCd)
+    AND T_UNITE_ODR.CUST_CD = :tk
+    AND T_UNITE_ODR.ITEM_CD = :item
+    AND TO_CHAR(T_UNITE_ODR.SHIP_PLAN_DATE, 'yyyy/mm/dd') LIKE :ym
+  GROUP BY
+    T_UNITE_ODR.CUST_CD,
+    T_UNITE_ODR.CUST_ITEM_CD,
+    T_UNITE_ODR.ITEM_CD,
+    TO_CHAR(T_UNITE_ODR.SHIP_PLAN_DATE, 'yyyy/mm/dd')`;
 
 async function fetchTougouByDay(
   conn: oracledb.Connection,
@@ -389,32 +425,29 @@ async function fetchTougouByDay(
   yearMonth: string,
   companyCd: string | null,
 ): Promise<DayQtySeries> {
-  const days = emptyDays();
-  const sql = `
-    SELECT
-      TO_CHAR(T_UNITE_ODR.SHIP_PLAN_DATE, 'yyyy/mm/dd') AS "JDATE",
-      SUM(T_UNITE_ODR.REQUIRED_QTY) AS "JSURYO"
-    FROM T_UNITE_ODR
-    WHERE NVL(T_UNITE_ODR.DEL_FLG, 0) = 0
-      AND (:companyCd IS NULL OR T_UNITE_ODR.COMPANY_CD = :companyCd)
-      AND T_UNITE_ODR.CUST_CD = :tk
-      AND T_UNITE_ODR.ITEM_CD = :item
-      AND TO_CHAR(T_UNITE_ODR.SHIP_PLAN_DATE, 'yyyy/mm/dd') LIKE :ym
-    GROUP BY
-      T_UNITE_ODR.CUST_CD,
-      T_UNITE_ODR.CUST_ITEM_CD,
-      T_UNITE_ODR.ITEM_CD,
-      TO_CHAR(T_UNITE_ODR.SHIP_PLAN_DATE, 'yyyy/mm/dd')`;
-  const r = await conn.execute<{ JDATE: string; JSURYO: number }>(
-    sql,
-    { tk, item: itemCd, ym: `${yearMonth}%`, companyCd },
-    { outFormat: OUT_OBJECT },
-  );
-  for (const row of r.rows ?? []) {
-    addToDay(days, String(row.JDATE), Number(row.JSURYO));
-  }
-  return days;
+  return fetchDayQtySeriesByMonth(conn, {
+    sql: SQL_TOUGOU_BY_DAY,
+    binds: { tk, item: itemCd, ym: `${yearMonth}%`, companyCd },
+    dateField: "JDATE",
+    qtyField: "JSURYO",
+  });
 }
+
+const SQL_SHIP_BY_DAY = `
+  SELECT
+    TO_CHAR(T_SHIP.SHIP_DATE, 'yyyy/mm/dd') AS "SDATE",
+    SUM(T_SHIP.SHIP_QTY) AS "SSURYO"
+  FROM T_SHIP
+  WHERE T_SHIP.CUST_CD = :tk
+    AND T_SHIP.ITEM_CD = :item
+    AND (:companyCd IS NULL OR T_SHIP.COMPANY_CD = :companyCd)
+    AND TO_CHAR(T_SHIP.SHIP_DATE, 'yyyy/mm/dd') LIKE :ym
+    AND NVL(T_SHIP.DEL_FLG, 0) <> 1
+  GROUP BY
+    T_SHIP.CUST_CD,
+    T_SHIP.CUST_ITEM_CD,
+    T_SHIP.ITEM_CD,
+    TO_CHAR(T_SHIP.SHIP_DATE, 'yyyy/mm/dd')`;
 
 async function fetchShipByDay(
   conn: oracledb.Connection,
@@ -423,32 +456,29 @@ async function fetchShipByDay(
   yearMonth: string,
   companyCd: string | null,
 ): Promise<DayQtySeries> {
-  const days = emptyDays();
-  const sql = `
-    SELECT
-      TO_CHAR(T_SHIP.SHIP_DATE, 'yyyy/mm/dd') AS "SDATE",
-      SUM(T_SHIP.SHIP_QTY) AS "SSURYO"
-    FROM T_SHIP
-    WHERE T_SHIP.CUST_CD = :tk
-      AND T_SHIP.ITEM_CD = :item
-      AND (:companyCd IS NULL OR T_SHIP.COMPANY_CD = :companyCd)
-      AND TO_CHAR(T_SHIP.SHIP_DATE, 'yyyy/mm/dd') LIKE :ym
-      AND NVL(T_SHIP.DEL_FLG, 0) <> 1
-    GROUP BY
-      T_SHIP.CUST_CD,
-      T_SHIP.CUST_ITEM_CD,
-      T_SHIP.ITEM_CD,
-      TO_CHAR(T_SHIP.SHIP_DATE, 'yyyy/mm/dd')`;
-  const r = await conn.execute<{ SDATE: string; SSURYO: number }>(
-    sql,
-    { tk, item: itemCd, ym: `${yearMonth}%`, companyCd },
-    { outFormat: OUT_OBJECT },
-  );
-  for (const row of r.rows ?? []) {
-    addToDay(days, String(row.SDATE), Number(row.SSURYO));
-  }
-  return days;
+  return fetchDayQtySeriesByMonth(conn, {
+    sql: SQL_SHIP_BY_DAY,
+    binds: { tk, item: itemCd, ym: `${yearMonth}%`, companyCd },
+    dateField: "SDATE",
+    qtyField: "SSURYO",
+  });
 }
+
+const SQL_SALES_BY_DAY = `
+  SELECT
+    TO_CHAR(T_SALES_TEMP.SALES_DATE, 'yyyy/mm/dd') AS "SDATE",
+    SUM(T_SALES_TEMP.SALES_QTY) AS "USURYO"
+  FROM T_SALES_TEMP
+  WHERE T_SALES_TEMP.CUST_CD = :tk
+    AND T_SALES_TEMP.ITEM_CD = :item
+    AND (:companyCd IS NULL OR T_SALES_TEMP.COMPANY_CD = :companyCd)
+    AND TO_CHAR(T_SALES_TEMP.SALES_DATE, 'yyyy/mm/dd') LIKE :ym
+    AND NVL(T_SALES_TEMP.DEL_FLG, 0) <> 1
+    AND NVL(T_SALES_TEMP.ONEROUS_CONS_SALES_TYP, 0) <> 1
+  GROUP BY
+    T_SALES_TEMP.CUST_CD,
+    T_SALES_TEMP.ITEM_CD,
+    TO_CHAR(T_SALES_TEMP.SALES_DATE, 'yyyy/mm/dd')`;
 
 async function fetchSalesByDay(
   conn: oracledb.Connection,
@@ -457,31 +487,12 @@ async function fetchSalesByDay(
   yearMonth: string,
   companyCd: string | null,
 ): Promise<DayQtySeries> {
-  const days = emptyDays();
-  const sql = `
-    SELECT
-      TO_CHAR(T_SALES_TEMP.SALES_DATE, 'yyyy/mm/dd') AS "SDATE",
-      SUM(T_SALES_TEMP.SALES_QTY) AS "USURYO"
-    FROM T_SALES_TEMP
-    WHERE T_SALES_TEMP.CUST_CD = :tk
-      AND T_SALES_TEMP.ITEM_CD = :item
-      AND (:companyCd IS NULL OR T_SALES_TEMP.COMPANY_CD = :companyCd)
-      AND TO_CHAR(T_SALES_TEMP.SALES_DATE, 'yyyy/mm/dd') LIKE :ym
-      AND NVL(T_SALES_TEMP.DEL_FLG, 0) <> 1
-      AND NVL(T_SALES_TEMP.ONEROUS_CONS_SALES_TYP, 0) <> 1
-    GROUP BY
-      T_SALES_TEMP.CUST_CD,
-      T_SALES_TEMP.ITEM_CD,
-      TO_CHAR(T_SALES_TEMP.SALES_DATE, 'yyyy/mm/dd')`;
-  const r = await conn.execute<{ SDATE: string; USURYO: number }>(
-    sql,
-    { tk, item: itemCd, ym: `${yearMonth}%`, companyCd },
-    { outFormat: OUT_OBJECT },
-  );
-  for (const row of r.rows ?? []) {
-    addToDay(days, String(row.SDATE), Number(row.USURYO));
-  }
-  return days;
+  return fetchDayQtySeriesByMonth(conn, {
+    sql: SQL_SALES_BY_DAY,
+    binds: { tk, item: itemCd, ym: `${yearMonth}%`, companyCd },
+    dateField: "SDATE",
+    qtyField: "USURYO",
+  });
 }
 
 type BomRow = { COMP_ITEM_CD: string; KAISO: number; CONS_TYP: number | null };
@@ -614,32 +625,29 @@ async function fetchMonthlyStartByDay(
   return aggregateMonthlyOdrWorkRowsToDaySeries(rows);
 }
 
+const SQL_DEMAND_BY_DAY = `
+  SELECT
+    TO_CHAR(T_OD.PRD_DUE_DATE, 'yyyy/mm/dd') AS "KDATE",
+    SUM(T_OD.ODR_QTY) AS "ODR"
+  FROM T_OD T_OD
+  LEFT OUTER JOIN T_RLSD_PUCH_ODR ON T_OD.OD_NO = T_RLSD_PUCH_ODR.OD_NO
+  WHERE T_OD.ITEM_CD = :item
+    AND TO_CHAR(T_OD.PRD_DUE_DATE, 'yyyy/mm/dd') LIKE :ym
+    AND T_OD.OD_TYP = 2
+    AND (T_RLSD_PUCH_ODR.PUCH_ODR_CD IS NULL OR NVL(T_RLSD_PUCH_ODR.ODR_CANCEL_SLIP_ISS_FLG, 0) = 0)
+  GROUP BY T_OD.ITEM_CD, T_OD.OD_TYP, TO_CHAR(T_OD.PRD_DUE_DATE, 'yyyy/mm/dd')`;
+
 async function fetchDemandByDay(
   conn: oracledb.Connection,
   itemCd: string,
   yearMonth: string,
 ): Promise<DayQtySeries> {
-  const days = emptyDays();
-  const sql = `
-    SELECT
-      TO_CHAR(T_OD.PRD_DUE_DATE, 'yyyy/mm/dd') AS "KDATE",
-      SUM(T_OD.ODR_QTY) AS "ODR"
-    FROM T_OD T_OD
-    LEFT OUTER JOIN T_RLSD_PUCH_ODR ON T_OD.OD_NO = T_RLSD_PUCH_ODR.OD_NO
-    WHERE T_OD.ITEM_CD = :item
-      AND TO_CHAR(T_OD.PRD_DUE_DATE, 'yyyy/mm/dd') LIKE :ym
-      AND T_OD.OD_TYP = 2
-      AND (T_RLSD_PUCH_ODR.PUCH_ODR_CD IS NULL OR NVL(T_RLSD_PUCH_ODR.ODR_CANCEL_SLIP_ISS_FLG, 0) = 0)
-    GROUP BY T_OD.ITEM_CD, T_OD.OD_TYP, TO_CHAR(T_OD.PRD_DUE_DATE, 'yyyy/mm/dd')`;
-  const r = await conn.execute<{ KDATE: string; ODR: number }>(
-    sql,
-    { item: itemCd, ym: `${yearMonth}%` },
-    { outFormat: OUT_OBJECT },
-  );
-  for (const row of r.rows ?? []) {
-    addToDay(days, String(row.KDATE), Number(row.ODR));
-  }
-  return days;
+  return fetchDayQtySeriesByMonth(conn, {
+    sql: SQL_DEMAND_BY_DAY,
+    binds: { item: itemCd, ym: `${yearMonth}%` },
+    dateField: "KDATE",
+    qtyField: "ODR",
+  });
 }
 
 async function fetchChuzan(
@@ -677,6 +685,22 @@ async function fetchChuzan(
   return total;
 }
 
+const SQL_KAKUTEI_PUCH_BY_DAY = `
+  SELECT
+    TO_CHAR(T_RLSD_PUCH_ODR.PUCH_ODR_DLV_DATE, 'yyyy/mm/dd') AS "HDATE",
+    SUM(T_RLSD_PUCH_ODR.PUCH_ODR_QTY) AS "HSURYO"
+  FROM T_RLSD_PUCH_ODR
+  WHERE T_RLSD_PUCH_ODR.VEND_CD = :vend
+    AND T_RLSD_PUCH_ODR.ITEM_CD = :item
+    AND (:companyCd IS NULL OR T_RLSD_PUCH_ODR.COMPANY_CD = :companyCd)
+    AND TO_CHAR(T_RLSD_PUCH_ODR.PUCH_ODR_DLV_DATE, 'yyyy/mm/dd') LIKE :ym
+    AND NVL(T_RLSD_PUCH_ODR.PUCH_ODR_STS_TYP, 0) <> 1
+    AND NVL(T_RLSD_PUCH_ODR.ODR_CANCEL_SLIP_ISS_FLG, 0) = 0
+  GROUP BY
+    T_RLSD_PUCH_ODR.VEND_CD,
+    T_RLSD_PUCH_ODR.ITEM_CD,
+    TO_CHAR(T_RLSD_PUCH_ODR.PUCH_ODR_DLV_DATE, 'yyyy/mm/dd')`;
+
 async function fetchKakuteiPuchByDay(
   conn: oracledb.Connection,
   vendCd: string,
@@ -684,32 +708,28 @@ async function fetchKakuteiPuchByDay(
   yearMonth: string,
   companyCd: string | null,
 ): Promise<DayQtySeries> {
-  const days = emptyDays();
-  const sql = `
-    SELECT
-      TO_CHAR(T_RLSD_PUCH_ODR.PUCH_ODR_DLV_DATE, 'yyyy/mm/dd') AS "HDATE",
-      SUM(T_RLSD_PUCH_ODR.PUCH_ODR_QTY) AS "HSURYO"
-    FROM T_RLSD_PUCH_ODR
-    WHERE T_RLSD_PUCH_ODR.VEND_CD = :vend
-      AND T_RLSD_PUCH_ODR.ITEM_CD = :item
-      AND (:companyCd IS NULL OR T_RLSD_PUCH_ODR.COMPANY_CD = :companyCd)
-      AND TO_CHAR(T_RLSD_PUCH_ODR.PUCH_ODR_DLV_DATE, 'yyyy/mm/dd') LIKE :ym
-      AND NVL(T_RLSD_PUCH_ODR.PUCH_ODR_STS_TYP, 0) <> 1
-      AND NVL(T_RLSD_PUCH_ODR.ODR_CANCEL_SLIP_ISS_FLG, 0) = 0
-    GROUP BY
-      T_RLSD_PUCH_ODR.VEND_CD,
-      T_RLSD_PUCH_ODR.ITEM_CD,
-      TO_CHAR(T_RLSD_PUCH_ODR.PUCH_ODR_DLV_DATE, 'yyyy/mm/dd')`;
-  const r = await conn.execute<{ HDATE: string; HSURYO: number }>(
-    sql,
-    { vend: vendCd, item: itemCd, ym: `${yearMonth}%`, companyCd },
-    { outFormat: OUT_OBJECT },
-  );
-  for (const row of r.rows ?? []) {
-    addToDay(days, String(row.HDATE), Number(row.HSURYO));
-  }
-  return days;
+  return fetchDayQtySeriesByMonth(conn, {
+    sql: SQL_KAKUTEI_PUCH_BY_DAY,
+    binds: { vend: vendCd, item: itemCd, ym: `${yearMonth}%`, companyCd },
+    dateField: "HDATE",
+    qtyField: "HSURYO",
+  });
 }
+
+const SQL_RECEIPT_BY_DAY = `
+  SELECT
+    TO_CHAR(T_PAST_INSPC_ACPT.ACPT_DATE, 'yyyy/mm/dd') AS "NYDATE",
+    SUM(T_PAST_INSPC_ACPT.INSPC_ACPT_QTY) AS "NSURYO"
+  FROM T_PAST_INSPC_ACPT
+  WHERE T_PAST_INSPC_ACPT.VEND_CD = :vend
+    AND T_PAST_INSPC_ACPT.ITEM_CD = :item
+    AND (:companyCd IS NULL OR T_PAST_INSPC_ACPT.COMPANY_CD = :companyCd)
+    AND TO_CHAR(T_PAST_INSPC_ACPT.ACPT_DATE, 'yyyy/mm/dd') LIKE :ym
+  GROUP BY
+    T_PAST_INSPC_ACPT.VEND_CD,
+    T_PAST_INSPC_ACPT.ITEM_CD,
+    TO_CHAR(T_PAST_INSPC_ACPT.ACPT_DATE, 'yyyy/mm/dd')
+  ORDER BY TO_CHAR(T_PAST_INSPC_ACPT.ACPT_DATE, 'yyyy/mm/dd')`;
 
 async function fetchReceiptByDay(
   conn: oracledb.Connection,
@@ -718,30 +738,12 @@ async function fetchReceiptByDay(
   yearMonth: string,
   companyCd: string | null,
 ): Promise<DayQtySeries> {
-  const days = emptyDays();
-  const sql = `
-    SELECT
-      TO_CHAR(T_PAST_INSPC_ACPT.ACPT_DATE, 'yyyy/mm/dd') AS "NYDATE",
-      SUM(T_PAST_INSPC_ACPT.INSPC_ACPT_QTY) AS "NSURYO"
-    FROM T_PAST_INSPC_ACPT
-    WHERE T_PAST_INSPC_ACPT.VEND_CD = :vend
-      AND T_PAST_INSPC_ACPT.ITEM_CD = :item
-      AND (:companyCd IS NULL OR T_PAST_INSPC_ACPT.COMPANY_CD = :companyCd)
-      AND TO_CHAR(T_PAST_INSPC_ACPT.ACPT_DATE, 'yyyy/mm/dd') LIKE :ym
-    GROUP BY
-      T_PAST_INSPC_ACPT.VEND_CD,
-      T_PAST_INSPC_ACPT.ITEM_CD,
-      TO_CHAR(T_PAST_INSPC_ACPT.ACPT_DATE, 'yyyy/mm/dd')
-    ORDER BY TO_CHAR(T_PAST_INSPC_ACPT.ACPT_DATE, 'yyyy/mm/dd')`;
-  const r = await conn.execute<{ NYDATE: string; NSURYO: number }>(
-    sql,
-    { vend: vendCd, item: itemCd, ym: `${yearMonth}%`, companyCd },
-    { outFormat: OUT_OBJECT },
-  );
-  for (const row of r.rows ?? []) {
-    addToDay(days, String(row.NYDATE), Number(row.NSURYO));
-  }
-  return days;
+  return fetchDayQtySeriesByMonth(conn, {
+    sql: SQL_RECEIPT_BY_DAY,
+    binds: { vend: vendCd, item: itemCd, ym: `${yearMonth}%`, companyCd },
+    dateField: "NYDATE",
+    qtyField: "NSURYO",
+  });
 }
 
 function sumSeries(a: DayQtySeries, b: DayQtySeries): DayQtySeries {
@@ -807,11 +809,11 @@ async function fetchHolidayDays(
 }
 
 function buildCustomerTotals(blocks: CustomerShipBlock[]): CustomerTotalsBlock {
-  let u = emptyDays();
-  let k = emptyDays();
-  let t = emptyDays();
-  let s = emptyDays();
-  let sa = emptyDays();
+  let u = createEmptyDayQtySeries();
+  let k = createEmptyDayQtySeries();
+  let t = createEmptyDayQtySeries();
+  let s = createEmptyDayQtySeries();
+  let sa = createEmptyDayQtySeries();
   for (const b of blocks) {
     u = sumSeries(u, b.uncnfmByDay);
     k = sumSeries(k, b.confirmedOrderByDay);
@@ -831,20 +833,14 @@ function buildCustomerTotals(blocks: CustomerShipBlock[]): CustomerTotalsBlock {
 export async function runGonenKukumiOracleSearch(
   input: GonenKukumiSearchInput,
 ): Promise<GonenKukumiOracleResult> {
-  if (!isOracleConfigured()) {
-    return {
-      ok: false,
-      code: "ORACLE_NOT_CONFIGURED",
-      message:
-        "Oracle 接続が未設定です。.env に ORACLE_PASSWORD 等を設定してください（5年9組 §7.1）。",
-    };
-  }
+  const notConfigured: GonenKukumiOracleResult = {
+    ok: false,
+    code: "ORACLE_NOT_CONFIGURED",
+    message: ORACLE_NOT_CONFIGURED_HINT,
+  };
 
-  let conn: oracledb.Connection | null = null;
   try {
-    const pool = await getOraclePool();
-    conn = await pool.getConnection();
-    const companyCd = getMariCompanyCd() ?? null;
+    return await withOracleReadConnection<GonenKukumiOracleResult>(notConfigured, async (conn, { companyCd }) => {
     const internalItemCd = await naisakGet(conn, input, companyCd);
     if (!internalItemCd) {
       return { ok: false, code: "NAISAK_NOT_FOUND", message: "内作品目が見つかりません" };
@@ -1007,6 +1003,7 @@ export async function runGonenKukumiOracleSearch(
       customerTotals,
       supplierBlocks,
     };
+    });
   } catch (e) {
     const msg = e instanceof Error ? e.message : String(e);
     return {
@@ -1014,13 +1011,5 @@ export async function runGonenKukumiOracleSearch(
       code: "ORACLE_ERROR",
       message: `Oracle エラー: ${msg}`,
     };
-  } finally {
-    if (conn) {
-      try {
-        await conn.close();
-      } catch {
-        /* ignore */
-      }
-    }
   }
 }

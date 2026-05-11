@@ -13,6 +13,17 @@ export const GONEN_FIXED_GRID_BORDER_HEX = "#E2E8F0";
 
 export const GONEN_FIXED_GRID_BORDER_EXCEL_ARGB = "FFE2E8F0";
 
+/**
+ * 日次列（31 列）の空配列を新規生成して返す。
+ * 共有参照すると累積処理（`addToDay` 等）で他のブロックの値を破壊するため、
+ * 必ず毎回新しい配列を返す。
+ */
+export function createEmptyDayQtySeries(
+  maxDays: number = GONEN_REPORT_GRID_DAYS,
+): DayQtySeries {
+  return Array.from({ length: maxDays }, () => null);
+}
+
 const YEAR_MONTH_RE = /^(\d{4})\/(\d{1,2})$/;
 
 /** 検索年月 yyyy/mm からその月の「有効」日数（2月=28/29 等） */
@@ -58,7 +69,7 @@ export function normalizeDayQtySeries31(
   series: DayQtySeries | undefined | null,
   maxDays: number = GONEN_REPORT_GRID_DAYS,
 ): DayQtySeries {
-  const out: DayQtySeries = Array.from({ length: maxDays }, () => null);
+  const out = createEmptyDayQtySeries(maxDays);
   if (!series || !Array.isArray(series)) return out;
   for (let i = 0; i < maxDays; i++) {
     const v = series[i] as unknown;

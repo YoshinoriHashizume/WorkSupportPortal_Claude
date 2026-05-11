@@ -1,6 +1,7 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { useListboxPopup } from "@/components/hooks/use-listbox-popup";
 
 export type CustOption = { custCode: string; custName: string };
 
@@ -23,11 +24,14 @@ function matches(opt: CustOption, query: string): boolean {
 export function CustCodeCombobox({ value, onChange, disabled }: Props) {
   const [options, setOptions] = useState<CustOption[]>([]);
   const [loadError, setLoadError] = useState<string | null>(null);
-  const [open, setOpen] = useState(false);
-  const [highlight, setHighlight] = useState(-1);
-  const wrapRef = useRef<HTMLDivElement>(null);
-  const listRef = useRef<HTMLUListElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
+
+  const filtered = useMemo(() => {
+    return options.filter((o) => matches(o, value));
+  }, [options, value]);
+
+  const { open, setOpen, highlight, setHighlight, close, wrapRef, listRef, onInputKeyDownWith } =
+    useListboxPopup<CustOption>(filtered.length);
 
   useEffect(() => {
     let cancelled = false;
@@ -53,65 +57,13 @@ export function CustCodeCombobox({ value, onChange, disabled }: Props) {
     };
   }, []);
 
-  const filtered = useMemo(() => {
-    return options.filter((o) => matches(o, value));
-  }, [options, value]);
-
-  const close = useCallback(() => {
-    setOpen(false);
-    setHighlight(-1);
-  }, []);
-
-  useEffect(() => {
-    if (!open) return;
-    function onDocMouseDown(e: MouseEvent) {
-      const el = wrapRef.current;
-      if (el && !el.contains(e.target as Node)) close();
-    }
-    document.addEventListener("mousedown", onDocMouseDown);
-    return () => document.removeEventListener("mousedown", onDocMouseDown);
-  }, [open, close]);
-
-  useEffect(() => {
-    if (!open || highlight < 0 || !listRef.current) return;
-    const li = listRef.current.children[highlight] as HTMLElement | undefined;
-    li?.scrollIntoView({ block: "nearest" });
-  }, [open, highlight]);
-
   function pick(code: string) {
     onChange(code);
     close();
     inputRef.current?.focus();
   }
 
-  function onInputKeyDown(e: React.KeyboardEvent<HTMLInputElement>) {
-    if (disabled) return;
-    if (e.key === "ArrowDown") {
-      e.preventDefault();
-      if (!open) {
-        setOpen(true);
-        setHighlight(filtered.length > 0 ? 0 : -1);
-      } else {
-        setHighlight((h) => {
-          if (filtered.length === 0) return -1;
-          return h < 0 ? 0 : Math.min(h + 1, filtered.length - 1);
-        });
-      }
-    } else if (e.key === "ArrowUp" && open) {
-      e.preventDefault();
-      setHighlight((h) => {
-        if (filtered.length === 0) return -1;
-        if (h <= 0) return 0;
-        return h - 1;
-      });
-    } else if (e.key === "Enter" && open && highlight >= 0 && filtered[highlight]) {
-      e.preventDefault();
-      pick(filtered[highlight].custCode);
-    } else if (e.key === "Escape" && open) {
-      e.preventDefault();
-      close();
-    }
-  }
+  const onInputKeyDown = onInputKeyDownWith(filtered, (opt) => pick(opt.custCode));
 
   const listId = "gonenkukumi-cust-code-listbox";
 
@@ -133,7 +85,10 @@ export function CustCodeCombobox({ value, onChange, disabled }: Props) {
           onFocus={() => {
             setOpen(true);
           }}
-          onKeyDown={onInputKeyDown}
+          onKeyDown={(e) => {
+            if (disabled) return;
+            onInputKeyDown(e);
+          }}
           role="combobox"
           aria-expanded={open}
           aria-controls={open ? listId : undefined}
@@ -144,8 +99,12 @@ export function CustCodeCombobox({ value, onChange, disabled }: Props) {
           type="button"
           disabled={disabled}
           onClick={() => {
-            setOpen((o) => !o);
-            if (!open) setHighlight(filtered.length > 0 ? 0 : -1);
+            if (open) {
+              close();
+            } else {
+              setOpen(true);
+              setHighlight(filtered.length > 0 ? 0 : -1);
+            }
           }}
           className="mt-1 shrink-0 rounded-md border border-slate-300 bg-slate-50 px-2.5 py-2 text-slate-600 shadow-sm hover:bg-slate-100 disabled:opacity-50"
           aria-label="得意先一覧を開く"

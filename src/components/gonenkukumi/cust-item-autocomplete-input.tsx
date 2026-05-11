@@ -1,6 +1,7 @@
 "use client";
 
-import { useCallback, useEffect, useId, useMemo, useRef, useState } from "react";
+import { useEffect, useId, useMemo, useRef, useState } from "react";
+import { useListboxPopup } from "@/components/hooks/use-listbox-popup";
 
 const MAX_LEN = 200;
 const MAX_SHOW = 1000;
@@ -23,24 +24,26 @@ export function CustItemAutocompleteInput({ id, value, onChange, custCode, asOfD
   const listboxId = `${reactId}-listbox`;
   const inputId = id ?? `${reactId}-input`;
 
-  const [open, setOpen] = useState(false);
   const [suggestions, setSuggestions] = useState<string[]>([]);
   const [allItems, setAllItems] = useState<string[] | null>(null);
   const [loading, setLoading] = useState(false);
   const [fetchHint, setFetchHint] = useState<string | null>(null);
   /** 直近の検索が成功し、候補が 0 件だった */
   const [noMatchingItems, setNoMatchingItems] = useState(false);
-  const [highlight, setHighlight] = useState(-1);
-  const wrapRef = useRef<HTMLDivElement>(null);
   const abortRef = useRef<AbortController | null>(null);
 
-  const close = useCallback(() => {
-    setOpen(false);
-    setHighlight(-1);
-  }, []);
+  const {
+    open,
+    setOpen,
+    highlight,
+    setHighlight,
+    close,
+    wrapRef,
+    listRef,
+    onInputKeyDownWith,
+  } = useListboxPopup<string>(suggestions.length);
 
   const cacheKey = useMemo(() => {
-    // 得意先コードが「191/」等で崩れても、数字3桁に正規化して扱う
     const cc = custCode.replace(/\D/g, "").trim();
     const d = asOfDate.trim();
     return cc.length === 3 && d ? (`${cc}\x1f${d}` as CacheKey) : null;
@@ -119,7 +122,6 @@ export function CustItemAutocompleteInput({ id, value, onChange, custCode, asOfD
     };
   }, [cacheKey, disabled, close]);
 
-  // 入力1文字ごとにローカル候補を表示（通信なし）
   useEffect(() => {
     const q = value.trim();
     if (disabled || !cacheKey) {
@@ -128,7 +130,6 @@ export function CustItemAutocompleteInput({ id, value, onChange, custCode, asOfD
       close();
       return;
     }
-    // 履歴反映直後など、全件キャッシュ取得前は「不一致」を出さない
     if (!allItems) {
       setSuggestions([]);
       setNoMatchingItems(false);
@@ -147,25 +148,14 @@ export function CustItemAutocompleteInput({ id, value, onChange, custCode, asOfD
     setOpen(list.length > 0);
     setHighlight(list.length > 0 ? 0 : -1);
     setNoMatchingItems(list.length === 0);
-  }, [value, cacheKey, allItems, disabled, close]);
+  }, [value, cacheKey, allItems, disabled, close, setOpen, setHighlight]);
 
-  useEffect(() => {
-    function onDocMouseDown(e: MouseEvent) {
-      const el = wrapRef.current;
-      if (!el || !open) return;
-      if (e.target instanceof Node && !el.contains(e.target)) close();
-    }
-    document.addEventListener("mousedown", onDocMouseDown);
-    return () => document.removeEventListener("mousedown", onDocMouseDown);
-  }, [open, close]);
+  function pick(s: string) {
+    onChange(s);
+    close();
+  }
 
-  const pick = useCallback(
-    (s: string) => {
-      onChange(s);
-      close();
-    },
-    [onChange, close],
-  );
+  const onInputKeyDown = onInputKeyDownWith(suggestions, pick);
 
   return (
     <div ref={wrapRef} className="relative mt-1">
@@ -183,19 +173,9 @@ export function CustItemAutocompleteInput({ id, value, onChange, custCode, asOfD
         }}
         onKeyDown={(e) => {
           if (!open || suggestions.length === 0) return;
-          if (e.key === "ArrowDown") {
-            e.preventDefault();
-            setHighlight((h) => (h + 1) % suggestions.length);
-          } else if (e.key === "ArrowUp") {
-            e.preventDefault();
-            setHighlight((h) => (h - 1 + suggestions.length) % suggestions.length);
-          } else if (e.key === "Enter" && highlight >= 0 && highlight < suggestions.length) {
-            e.preventDefault();
-            pick(suggestions[highlight]!);
-          } else if (e.key === "Escape") {
-            close();
-          }
+          onInputKeyDown(e);
         }}
+        role="combobox"
         aria-autocomplete="list"
         aria-expanded={open}
         aria-controls={listboxId}
@@ -203,6 +183,7 @@ export function CustItemAutocompleteInput({ id, value, onChange, custCode, asOfD
       />
       {open && suggestions.length > 0 ? (
         <ul
+          ref={listRef}
           id={listboxId}
           role="listbox"
           className="absolute z-[100] mt-1 max-h-48 w-full overflow-auto rounded-md border border-slate-200 bg-white py-1 text-sm shadow-lg"
