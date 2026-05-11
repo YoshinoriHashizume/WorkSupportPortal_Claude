@@ -1,11 +1,12 @@
 import { auth } from "@/auth";
+import { requirePageSession } from "@/app/_lib/server-auth";
 import { custHeadlineFromOracle } from "@/domains/gonenkukumi/cust-headline";
 import type { GonenKukumiSearchInput } from "@/domains/gonenkukumi/schemas";
 import { gonenKukumiSearchParamsFromFlatRecord } from "@/domains/gonenkukumi/search-params-from-url";
 import { runGonenKukumiOracleSearch } from "@/infrastructure/oracle/gonenkukumi/run-search";
 import { GonenKukumiResultView } from "@/components/gonenkukumi/result-view";
 import type { Metadata } from "next";
-import { notFound, redirect } from "next/navigation";
+import { notFound } from "next/navigation";
 import { cache } from "react";
 
 /** generateMetadata とページ本体で Oracle を二重に叩かない */
@@ -42,10 +43,7 @@ export default async function GonenKukumiResultPage({
 }: {
   searchParams: Promise<Record<string, string | string[] | undefined>>;
 }) {
-  const session = await auth();
-  if (!session?.user?.id) {
-    redirect("/login");
-  }
+  await requirePageSession();
 
   const sp = await searchParams;
   const parsed = gonenKukumiSearchParamsFromFlatRecord(sp);
@@ -66,27 +64,10 @@ export default async function GonenKukumiResultPage({
           code: "ORACLE_ERROR",
           message: `サーバー処理でエラーが発生しました: ${message}`,
         }}
-        params={{
-          custCode: input.custCode,
-          custItem: input.custItem,
-          optionChange: input.optionChange,
-          yearMonth: input.yearMonth,
-          asOfDate: input.asOfDate,
-        }}
+        params={input}
       />
     );
   }
 
-  return (
-    <GonenKukumiResultView
-      oracle={oracle}
-      params={{
-        custCode: input.custCode,
-        custItem: input.custItem,
-        optionChange: input.optionChange,
-        yearMonth: input.yearMonth,
-        asOfDate: input.asOfDate,
-      }}
-    />
-  );
+  return <GonenKukumiResultView oracle={oracle} params={input} />;
 }

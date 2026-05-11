@@ -7,6 +7,7 @@ import type {
   GonenKukumiOracleSuccess,
   SupplierBlock,
 } from "@/domains/gonenkukumi/types";
+import type { GonenKukumiSearchInput } from "@/domains/gonenkukumi/schemas";
 import { gonenQtyCellJa } from "@/domains/gonenkukumi/gonen-display-format";
 import {
   daysInMonthYm,
@@ -23,8 +24,8 @@ import {
   findSupplierBlock,
 } from "@/domains/gonenkukumi/block-finders";
 import {
-  gonenSegmentKaisoIndex,
-  gonenSupplierBlockKaisoIndex,
+  kaisoColorForSegment,
+  kaisoColorForSupplierBlock,
 } from "@/domains/gonenkukumi/segment-theme";
 import {
   resolveCustomerRows,
@@ -37,13 +38,11 @@ import {
 
 export type { GonenPanelSegment };
 
-export type GonenKukumiResultPanelParams = {
-  custCode: string;
-  custItem: string;
-  optionChange: string;
-  yearMonth: string;
-  asOfDate: string;
-};
+/**
+ * 5年9組 結果パネル用の入力パラメータ。
+ * 検索フォームのスキーマと一致するため `GonenKukumiSearchInput` を別名で公開する。
+ */
+export type GonenKukumiResultPanelParams = GonenKukumiSearchInput;
 
 function weekendBgClass(ym: string, day: number): string {
   const d = ymdForDay(ym, day);
@@ -299,6 +298,33 @@ function CustomerBlockTable({
   );
 }
 
+function BlockSection({
+  theme,
+  header,
+  children,
+  className,
+}: {
+  theme: SectionTheme;
+  header: React.ReactNode;
+  children: React.ReactNode;
+  className?: string;
+}) {
+  return (
+    <section
+      style={{ borderColor: theme.cssOuterBorder }}
+      className={`overflow-x-auto rounded-lg border-2 bg-white shadow-sm ${className ?? ""}`}
+    >
+      <h2
+        style={{ backgroundColor: theme.cssBg, borderColor: theme.cssBorder }}
+        className="border-b px-4 py-2"
+      >
+        {header}
+      </h2>
+      <div className="p-2">{children}</div>
+    </section>
+  );
+}
+
 function SupplierBlockTable({
   block,
   activeDays,
@@ -370,7 +396,7 @@ export function GonenKukumiOracleMonthPanels({
           <p className="px-2 py-4 text-sm text-slate-500">この月は該当の得意先行がありません。</p>
         );
       }
-      const theme = kaisoColor(gonenSegmentKaisoIndex(segment, oracle));
+      const theme = kaisoColorForSegment(segment, oracle);
       return (
         <div className="overflow-x-auto">
           <CustomerBlockTable
@@ -411,7 +437,7 @@ export function GonenKukumiOracleMonthPanels({
           <p className="px-2 py-4 text-sm text-slate-500">この月は該当の仕入先行がありません。</p>
         );
       }
-      const theme = kaisoColor(gonenSegmentKaisoIndex(segment, oracle));
+      const theme = kaisoColorForSegment(segment, oracle);
       return (
         <div className="overflow-x-auto">
           <SupplierBlockTable
@@ -427,7 +453,7 @@ export function GonenKukumiOracleMonthPanels({
     return (
       <div className="space-y-6">
         {oracle.supplierBlocks.map((block, si) => {
-          const theme = kaisoColor(gonenSupplierBlockKaisoIndex(block));
+          const theme = kaisoColorForSupplierBlock(block);
           return (
             <div key={`${block.vendCode}-${block.itemCdWithLevel}-${si}`} className="overflow-x-auto">
               <SupplierBlockTable
@@ -449,57 +475,38 @@ export function GonenKukumiOracleMonthPanels({
       {oracle.customerBlocks.map((block, bi) => {
         const theme = kaisoColor(1);
         return (
-          <section
+          <BlockSection
             key={`${block.custCode}-${bi}`}
-            style={{ borderColor: theme.cssOuterBorder }}
-            className="overflow-x-auto rounded-lg border-2 bg-white shadow-sm"
+            theme={theme}
+            header={<CustomerBannerHeader block={block} />}
           >
-            <h2
-              style={{ backgroundColor: theme.cssBg, borderColor: theme.cssBorder }}
-              className="border-b px-4 py-2"
-            >
-              <CustomerBannerHeader block={block} />
-            </h2>
-            <div className="p-2">
-              <CustomerBlockTable
-                block={block}
-                activeDays={activeDays}
-                yearMonth={params.yearMonth}
-                holidaySet={holidaySet}
-                theme={theme}
-              />
-            </div>
-          </section>
+            <CustomerBlockTable
+              block={block}
+              activeDays={activeDays}
+              yearMonth={params.yearMonth}
+              holidaySet={holidaySet}
+              theme={theme}
+            />
+          </BlockSection>
         );
       })}
 
       {oracle.supplierBlocks.map((block, si) => {
-        const theme = kaisoColor(gonenSupplierBlockKaisoIndex(block));
+        const theme = kaisoColorForSupplierBlock(block);
         return (
-          <section
+          <BlockSection
             key={`${block.vendCode}-${block.itemCdWithLevel}-${si}`}
-            style={{ borderColor: theme.cssOuterBorder }}
-            className="overflow-x-auto rounded-lg border-2 bg-white shadow-sm"
+            theme={theme}
+            header={<SupplierBannerHeader block={block} />}
           >
-            <h2
-              style={{
-                backgroundColor: theme.cssBg,
-                borderColor: theme.cssBorder,
-              }}
-              className="border-b px-4 py-2"
-            >
-              <SupplierBannerHeader block={block} />
-            </h2>
-            <div className="p-2">
-              <SupplierBlockTable
-                block={block}
-                activeDays={activeDays}
-                yearMonth={params.yearMonth}
-                holidaySet={holidaySet}
-                theme={theme}
-              />
-            </div>
-          </section>
+            <SupplierBlockTable
+              block={block}
+              activeDays={activeDays}
+              yearMonth={params.yearMonth}
+              holidaySet={holidaySet}
+              theme={theme}
+            />
+          </BlockSection>
         );
       })}
     </div>

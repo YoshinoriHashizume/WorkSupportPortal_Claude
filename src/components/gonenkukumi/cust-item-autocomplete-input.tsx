@@ -2,6 +2,7 @@
 
 import { useEffect, useId, useMemo, useRef, useState } from "react";
 import { useListboxPopup } from "@/components/hooks/use-listbox-popup";
+import { getJson } from "@/lib/http";
 
 const MAX_LEN = 200;
 const MAX_SHOW = 1000;
@@ -82,36 +83,27 @@ export function CustItemAutocompleteInput({ id, value, onChange, custCode, asOfD
     const [cc, d] = cacheKey.split("\x1f");
     const qs = new URLSearchParams({ custCode: cc ?? "", asOfDate: d ?? "" });
     void (async () => {
+      const result = await getJson<{ items?: unknown }>(
+        `/api/gonenkukumi/cust-items?${qs}`,
+        { signal: ac.signal, credentials: "same-origin" },
+      );
+      if (ac.signal.aborted) return;
       try {
-        const res = await fetch(`/api/gonenkukumi/cust-items?${qs}`, {
-          signal: ac.signal,
-          credentials: "same-origin",
-        });
-        const data: unknown = await res.json().catch(() => ({}));
-        if (ac.signal.aborted) return;
-        if (!res.ok) {
-          if (res.status === 401) {
+        if (!result.ok) {
+          if (result.status === 401) {
             setFetchHint("候補を取得するにはログインが必要です。");
-          } else if (res.status === 400) {
-            const msg =
-              typeof data === "object" && data && "error" in data && typeof (data as { error: unknown }).error === "string"
-                ? (data as { error: string }).error
-                : "対象日付の形式が不正です。";
-            setFetchHint(msg);
+          } else if (result.status === 400) {
+            setFetchHint(result.error || "対象日付の形式が不正です。");
           } else {
             setFetchHint("候補の取得に失敗しました。しばらくしてから再度お試しください。");
           }
           return;
         }
-        const list =
-          typeof data === "object" && data && "items" in data && Array.isArray((data as { items: unknown }).items)
-            ? ((data as { items: string[] }).items ?? []).filter((s) => typeof s === "string")
-            : [];
+        const list = Array.isArray(result.data.items)
+          ? (result.data.items as unknown[]).filter((s): s is string => typeof s === "string")
+          : [];
         custItemCache.set(cacheKey, { items: list, fetchedAt: Date.now() });
         setAllItems(list);
-      } catch (e) {
-        if ((e as Error).name === "AbortError") return;
-        setFetchHint("候補の取得に失敗しました。");
       } finally {
         if (!ac.signal.aborted) setLoading(false);
       }

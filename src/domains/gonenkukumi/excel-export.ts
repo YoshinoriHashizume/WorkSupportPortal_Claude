@@ -1,5 +1,6 @@
 import ExcelJS from "exceljs";
 import { GONENKUKUMI_EXCEL_FONT_NAME } from "@/domains/gonenkukumi/ms-gothic";
+import { TOKYO_TIME_ZONE } from "@/domains/shared/timezone";
 import { kaisoColor } from "@/domains/gonenkukumi/kaiso-color";
 import { groupSegmentsFromCache } from "@/domains/gonenkukumi/panel-segments";
 import {
@@ -199,6 +200,19 @@ function sectionTheme(index: number): SectionTheme {
   };
 }
 
+function sectionThemeForSegment(
+  segment: Parameters<typeof gonenSegmentKaisoIndex>[0],
+  banner: Parameters<typeof gonenSegmentKaisoIndex>[1],
+): SectionTheme {
+  return sectionTheme(gonenSegmentKaisoIndex(segment, banner));
+}
+
+function sectionThemeForSupplierBlock(
+  block: Parameters<typeof gonenSupplierBlockKaisoIndex>[0],
+): SectionTheme {
+  return sectionTheme(gonenSupplierBlockKaisoIndex(block));
+}
+
 /** シート使用範囲の全セルに MS ゴシック（Excel 名: MS Gothic）を付与（既存の太字・サイズ・書式は維持） */
 function applyMsGothicToUsedRange(ws: ExcelJS.Worksheet, lastCol: number, lastRow: number) {
   for (let r = 1; r <= lastRow; r++) {
@@ -325,7 +339,7 @@ function appendCustomerDataRows(
 }
 
 function appendSupplierDataRows(ws: ExcelJS.Worksheet, block: SupplierBlock, activeDays: number, lastCol: number) {
-  const supplierTheme = sectionTheme(gonenSupplierBlockKaisoIndex(block));
+  const supplierTheme = sectionThemeForSupplierBlock(block);
   for (const r of resolveSupplierRows(block, activeDays)) {
     const prevCell = r.prev != null ? excelQty(r.prev) : "";
     ws.addRow(
@@ -429,7 +443,7 @@ export async function buildGonenKukumiExcelBufferForMonths(
   };
 
   for (const segment of segments) {
-    const segTheme = sectionTheme(gonenSegmentKaisoIndex(segment, bannerOracle));
+    const segTheme = sectionThemeForSegment(segment, bannerOracle);
 
     if (segment.kind === "cust" && segment.filter) {
       const b = findCustomerBlock(bannerOracle.customerBlocks, segment.filter);
@@ -464,7 +478,7 @@ export async function buildGonenKukumiExcelBufferForMonths(
           appendMeta("この月は該当の得意先行がありません。", fillSlateNote);
           continue;
         }
-        const theme = sectionTheme(gonenSegmentKaisoIndex(segment, oracle));
+        const theme = sectionThemeForSegment(segment, oracle);
         markThousandAnchor();
 
         const activeDays = daysInMonthYm(ym);
@@ -488,7 +502,7 @@ export async function buildGonenKukumiExcelBufferForMonths(
           appendMeta("この月は該当の仕入先行がありません。", fillSlateNote);
           continue;
         }
-        const theme = sectionTheme(gonenSupplierBlockKaisoIndex(block));
+        const theme = sectionThemeForSupplierBlock(block);
         markThousandAnchor();
 
         const activeDays = daysInMonthYm(ym);
@@ -568,7 +582,7 @@ function sanitizeExcelFilenameSegment(s: string): string {
 /** 東京日時を yyyyMMddHHmmss で返す（出力ボタン押下時刻） */
 function formatExportedAtYmdHmsTokyo(exportedAt: Date): string {
   const parts = new Intl.DateTimeFormat("en-CA", {
-    timeZone: "Asia/Tokyo",
+    timeZone: TOKYO_TIME_ZONE,
     year: "numeric",
     month: "2-digit",
     day: "2-digit",

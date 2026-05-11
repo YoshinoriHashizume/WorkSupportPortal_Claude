@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useListboxPopup } from "@/components/hooks/use-listbox-popup";
+import { getJson } from "@/lib/http";
 
 export type CustOption = { custCode: string; custName: string };
 
@@ -36,21 +37,17 @@ export function CustCodeCombobox({ value, onChange, disabled }: Props) {
   useEffect(() => {
     let cancelled = false;
     (async () => {
-      try {
-        const res = await fetch("/api/gonenkukumi/customers");
-        const raw = await res.text();
-        if (!res.ok) {
-          if (!cancelled) setLoadError("得意先一覧の取得に失敗しました。");
-          return;
-        }
-        const data = JSON.parse(raw) as { items?: CustOption[]; loadError?: string };
-        if (!cancelled) {
-          setOptions(Array.isArray(data.items) ? data.items : []);
-          setLoadError(typeof data.loadError === "string" ? data.loadError : null);
-        }
-      } catch {
-        if (!cancelled) setLoadError("得意先一覧の取得に失敗しました。");
+      const result = await getJson<{ items?: CustOption[]; loadError?: string }>(
+        "/api/gonenkukumi/customers",
+      );
+      if (cancelled) return;
+      if (!result.ok) {
+        setLoadError("得意先一覧の取得に失敗しました。");
+        return;
       }
+      const items = Array.isArray(result.data.items) ? result.data.items : [];
+      setOptions(items);
+      setLoadError(typeof result.data.loadError === "string" ? result.data.loadError : null);
     })();
     return () => {
       cancelled = true;

@@ -12,6 +12,7 @@ import type {
 import { withOracleReadConnection } from "@/infrastructure/oracle/with-connection";
 import { ORACLE_NOT_CONFIGURED_HINT } from "@/infrastructure/oracle/pool";
 import { createEmptyDayQtySeries } from "@/domains/gonenkukumi/report-grid";
+import { SQL_CUST_ITEM_EFF_RANGE } from "@/infrastructure/oracle/gonenkukumi/sql-fragments";
 
 const OUT_OBJECT = oracledb.OUT_FORMAT_OBJECT;
 
@@ -196,8 +197,7 @@ async function naisakGet(
       AND M_CUST_ITEM.CUST_ITEM_CD = :hin
       AND M_CUST_ITEM.ITEM_CD_OPTION_CHANGE_VALUE = :henk
       AND (:companyCd IS NULL OR M_CUST_ITEM.COMPANY_CD = :companyCd)
-      AND M_CUST_ITEM.EFF_PHASE_IN_DATE <= TO_DATE(:asOf2, 'YYYY/MM/DD')
-      AND (M_CUST_ITEM.EFF_PHASE_OUT_DATE IS NULL OR TO_DATE(:asOf, 'YYYY/MM/DD') <= M_CUST_ITEM.EFF_PHASE_OUT_DATE)`;
+      AND${SQL_CUST_ITEM_EFF_RANGE}`;
   const r = await conn.execute<{ ITEM_CD: string }>(
     sql,
     {
@@ -252,8 +252,7 @@ async function fetchCustShipRows(
       AND M_CUST_ITEM.ITEM_CD = :item
       AND M_CUST_ITEM.ITEM_CD_OPTION_CHANGE_VALUE = :henk
       AND (:companyCd IS NULL OR M_CUST_ITEM.COMPANY_CD = :companyCd)
-      AND M_CUST_ITEM.EFF_PHASE_IN_DATE <= TO_DATE(:asOf2, 'YYYY/MM/DD')
-      AND (M_CUST_ITEM.EFF_PHASE_OUT_DATE IS NULL OR TO_DATE(:asOf, 'YYYY/MM/DD') <= M_CUST_ITEM.EFF_PHASE_OUT_DATE)`;
+      AND${SQL_CUST_ITEM_EFF_RANGE}`;
   const r = await conn.execute<CustRow>(
     sql,
     {
@@ -316,6 +315,26 @@ async function fetchDayQtySeriesByMonth(
   return days;
 }
 
+/** 得意先側 月次 SQL のバインド共通形（`:tk` `:item` `:ym` `:companyCd`） */
+function custMonthBinds(
+  tk: string,
+  itemCd: string,
+  yearMonth: string,
+  companyCd: string | null,
+): oracledb.BindParameters {
+  return { tk, item: itemCd, ym: `${yearMonth}%`, companyCd };
+}
+
+/** 仕入先側 月次 SQL のバインド共通形（`:vend` `:item` `:ym` `:companyCd`） */
+function vendorMonthBinds(
+  vendCd: string,
+  itemCd: string,
+  yearMonth: string,
+  companyCd: string | null,
+): oracledb.BindParameters {
+  return { vend: vendCd, item: itemCd, ym: `${yearMonth}%`, companyCd };
+}
+
 const SQL_UNCNFM_BY_DAY = `
   SELECT
     TO_CHAR(UNCNFM_REQUIRED_DATE, 'yyyy/mm/dd') AS "JUDATE",
@@ -337,7 +356,7 @@ async function fetchUncnfmByDay(
 ): Promise<DayQtySeries> {
   return fetchDayQtySeriesByMonth(conn, {
     sql: SQL_UNCNFM_BY_DAY,
-    binds: { tk, item: itemCd, ym: `${yearMonth}%`, companyCd },
+    binds: custMonthBinds(tk, itemCd, yearMonth, companyCd),
     dateField: "JUDATE",
     qtyField: "SURYO",
   });
@@ -396,7 +415,7 @@ async function fetchKakuteiByDay(
 ): Promise<DayQtySeries> {
   return fetchDayQtySeriesByMonth(conn, {
     sql: SQL_KAKUTEI_BY_DAY,
-    binds: { tk, item: itemCd, ym: `${yearMonth}%`, companyCd },
+    binds: custMonthBinds(tk, itemCd, yearMonth, companyCd),
     dateField: "JDATE",
     qtyField: "JSURYO",
   });
@@ -427,7 +446,7 @@ async function fetchTougouByDay(
 ): Promise<DayQtySeries> {
   return fetchDayQtySeriesByMonth(conn, {
     sql: SQL_TOUGOU_BY_DAY,
-    binds: { tk, item: itemCd, ym: `${yearMonth}%`, companyCd },
+    binds: custMonthBinds(tk, itemCd, yearMonth, companyCd),
     dateField: "JDATE",
     qtyField: "JSURYO",
   });
@@ -458,7 +477,7 @@ async function fetchShipByDay(
 ): Promise<DayQtySeries> {
   return fetchDayQtySeriesByMonth(conn, {
     sql: SQL_SHIP_BY_DAY,
-    binds: { tk, item: itemCd, ym: `${yearMonth}%`, companyCd },
+    binds: custMonthBinds(tk, itemCd, yearMonth, companyCd),
     dateField: "SDATE",
     qtyField: "SSURYO",
   });
@@ -489,7 +508,7 @@ async function fetchSalesByDay(
 ): Promise<DayQtySeries> {
   return fetchDayQtySeriesByMonth(conn, {
     sql: SQL_SALES_BY_DAY,
-    binds: { tk, item: itemCd, ym: `${yearMonth}%`, companyCd },
+    binds: custMonthBinds(tk, itemCd, yearMonth, companyCd),
     dateField: "SDATE",
     qtyField: "USURYO",
   });
@@ -710,7 +729,7 @@ async function fetchKakuteiPuchByDay(
 ): Promise<DayQtySeries> {
   return fetchDayQtySeriesByMonth(conn, {
     sql: SQL_KAKUTEI_PUCH_BY_DAY,
-    binds: { vend: vendCd, item: itemCd, ym: `${yearMonth}%`, companyCd },
+    binds: vendorMonthBinds(vendCd, itemCd, yearMonth, companyCd),
     dateField: "HDATE",
     qtyField: "HSURYO",
   });
@@ -740,7 +759,7 @@ async function fetchReceiptByDay(
 ): Promise<DayQtySeries> {
   return fetchDayQtySeriesByMonth(conn, {
     sql: SQL_RECEIPT_BY_DAY,
-    binds: { vend: vendCd, item: itemCd, ym: `${yearMonth}%`, companyCd },
+    binds: vendorMonthBinds(vendCd, itemCd, yearMonth, companyCd),
     dateField: "NYDATE",
     qtyField: "NSURYO",
   });

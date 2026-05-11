@@ -1,5 +1,6 @@
 import { gonenSupplierKaisoFloor } from "@/domains/gonenkukumi/gonen-display-format";
 import { findSupplierBlock } from "@/domains/gonenkukumi/block-finders";
+import { kaisoColor } from "@/domains/gonenkukumi/kaiso-color";
 import type { GonenPanelSegment } from "@/domains/gonenkukumi/panel-segments";
 import type { GonenKukumiOracleSuccess, SupplierBlock } from "@/domains/gonenkukumi/types";
 
@@ -23,4 +24,17 @@ export function gonenSegmentKaisoIndex(
 /** 仕入 block 単体から階層インデックスを決定する（segment を介さない経路用） */
 export function gonenSupplierBlockKaisoIndex(block: SupplierBlock): number {
   return 2 + gonenSupplierKaisoFloor(block.kaiso);
+}
+
+/** segment から `kaisoColor` のテーマを直接得るショートカット */
+export function kaisoColorForSegment(
+  segment: GonenPanelSegment,
+  banner: GonenKukumiOracleSuccess,
+): ReturnType<typeof kaisoColor> {
+  return kaisoColor(gonenSegmentKaisoIndex(segment, banner));
+}
+
+/** supplier block から `kaisoColor` のテーマを直接得るショートカット */
+export function kaisoColorForSupplierBlock(block: SupplierBlock): ReturnType<typeof kaisoColor> {
+  return kaisoColor(gonenSupplierBlockKaisoIndex(block));
 }

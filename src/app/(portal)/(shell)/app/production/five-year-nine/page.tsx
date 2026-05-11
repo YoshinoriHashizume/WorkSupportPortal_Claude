@@ -1,16 +1,12 @@
-import { auth } from "@/auth";
-import { redirect } from "next/navigation";
+import { requirePageSession } from "@/app/_lib/server-auth";
 import { prisma } from "@/infrastructure/persistence/prisma/client";
 import { GonenKukumiSearchClient, type HistoryRow } from "./search-client";
 
 export default async function GonenKukumiSearchPage() {
-  const session = await auth();
-  if (!session?.user?.id) {
-    redirect("/login");
-  }
+  const { userId } = await requirePageSession();
 
   const rows = await prisma.gonenKukumiSearchHistory.findMany({
-    where: { userId: session.user.id },
+    where: { userId },
     orderBy: { executedAt: "desc" },
     distinct: ["custCode", "custItem", "optionChange", "yearMonth"],
     take: 20,

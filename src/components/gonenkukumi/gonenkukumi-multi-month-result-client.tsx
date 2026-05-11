@@ -8,7 +8,6 @@ import {
   getPrevNextYearMonth,
   normalizeYearMonth,
 } from "@/domains/gonenkukumi/year-month-nav";
-import { kaisoColor } from "@/domains/gonenkukumi/kaiso-color";
 import { GonenKukumiExcelExportButton } from "@/components/gonenkukumi/gonenkukumi-excel-export-button";
 import {
   GonenKukumiOracleMonthPanels,
@@ -17,17 +16,10 @@ import {
 import {
   groupSegmentsFromCache,
   panelSegmentKey,
-  type GonenPanelSegment,
 } from "@/domains/gonenkukumi/panel-segments";
-import {
-  findCustomerBlock,
-  findSupplierBlock,
-} from "@/domains/gonenkukumi/block-finders";
-import { gonenSegmentKaisoIndex } from "@/domains/gonenkukumi/segment-theme";
-import {
-  CustomerBannerHeader,
-  SupplierBannerHeader,
-} from "@/components/gonenkukumi/block-banner-header";
+import { kaisoColorForSegment } from "@/domains/gonenkukumi/segment-theme";
+import { SegmentBannerHeader } from "@/components/gonenkukumi/segment-banner-header";
+import { postJson } from "@/lib/http";
 
 function monthsHaveYm(months: string[], ym: string): boolean {
   const n = normalizeYearMonth(ym);
@@ -39,10 +31,6 @@ function addMonthToSorted(months: string[], ym: string): string[] {
   const set = new Set(months.map(normalizeYearMonth));
   set.add(n);
   return [...set].sort(compareGonenKukumiYearMonth);
-}
-
-function segmentSectionTheme(seg: GonenPanelSegment, banner: GonenKukumiOracleSuccess) {
-  return kaisoColor(gonenSegmentKaisoIndex(seg, banner));
 }
 
 export function GonenKukumiMultiMonthResultClient({
@@ -111,38 +99,31 @@ export function GonenKukumiMultiMonthResultClient({
       try {
         let oracle: GonenKukumiOracleSuccess | undefined = cacheRef.current[targetYm];
         if (!oracle) {
-          const res = await fetch("/api/gonenkukumi/oracle-result", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
+          const result = await postJson<{ ok?: boolean; oracle?: GonenKukumiOracleSuccess }>(
+            "/api/gonenkukumi/oracle-result",
+            {
               custCode: initialParams.custCode,
               custItem: initialParams.custItem,
               optionChange: initialParams.optionChange,
               yearMonth: targetYm,
               asOfDate: initialParams.asOfDate,
-            }),
-          });
-          const data: unknown = await res.json().catch(() => ({}));
-          if (!res.ok) {
-            const msg =
-              typeof data === "object" && data && "error" in data && typeof (data as { error: unknown }).error === "string"
-                ? (data as { error: string }).error
-                : "データの取得に失敗しました。";
-            window.alert(msg);
+            },
+          );
+          if (!result.ok) {
+            window.alert(result.error || "データの取得に失敗しました。");
             return;
           }
+          const payload = result.data;
           if (
-            typeof data !== "object" ||
-            !data ||
-            !("oracle" in data) ||
-            typeof (data as { oracle: unknown }).oracle !== "object" ||
-            !(data as { oracle: { ok?: boolean } }).oracle ||
-            (data as { oracle: { ok?: boolean } }).oracle.ok !== true
+            !payload ||
+            typeof payload.oracle !== "object" ||
+            !payload.oracle ||
+            payload.oracle.ok !== true
           ) {
             window.alert("データの形式が不正です。");
             return;
           }
-          oracle = (data as { oracle: GonenKukumiOracleSuccess }).oracle;
+          oracle = payload.oracle;
           setOracleCache((c) => (c[targetYm] ? c : { ...c, [targetYm]: oracle! }));
         }
 
@@ -254,7 +235,7 @@ export function GonenKukumiMultiMonthResultClient({
 
       <div className="space-y-8">
         {panelSegments.map((segment) => {
-          const theme = segmentSectionTheme(segment, bannerOracle);
+          const theme = kaisoColorForSegment(segment, bannerOracle);
           const segKey = panelSegmentKey(segment);
 
           return (
@@ -270,22 +251,7 @@ export function GonenKukumiMultiMonthResultClient({
                 className="border-b px-4 py-3"
                 style={{ backgroundColor: theme.cssBg, borderColor: theme.cssBorder }}
               >
-                {segment.kind === "cust" && segment.filter ? (() => {
-                    const b = findCustomerBlock(bannerOracle.customerBlocks, segment.filter);
-                    return b ? (
-                      <CustomerBannerHeader block={b} />
-                    ) : (
-                      <span className="text-sm text-slate-600">基準月に該当の得意先行がありません</span>
-                    );
-                  })() : null}
-                {segment.kind === "sup" && segment.filter ? (() => {
-                    const block = findSupplierBlock(bannerOracle.supplierBlocks, segment.filter);
-                    return block ? (
-                      <SupplierBannerHeader block={block} />
-                    ) : (
-                      <span className="text-sm text-slate-600">基準月に該当の仕入先行がありません</span>
-                    );
-                  })() : null}
+                <SegmentBannerHeader segment={segment} banner={bannerOracle} />
               </div>
               <div className="space-y-2 p-3">
                 {sortedLoadedMonths.map((ym) => {

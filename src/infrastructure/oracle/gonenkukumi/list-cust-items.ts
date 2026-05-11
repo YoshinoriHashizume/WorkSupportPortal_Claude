@@ -2,6 +2,8 @@ import "server-only";
 
 import oracledb from "oracledb";
 import { withOracleReadConnection } from "@/infrastructure/oracle/with-connection";
+import { dedupeTrimmedColumn } from "@/infrastructure/oracle/rows-helpers";
+import { SQL_CUST_ITEM_EFF_RANGE } from "@/infrastructure/oracle/gonenkukumi/sql-fragments";
 
 /**
  * 得意先品目（M_CUST_ITEM.CUST_ITEM_CD）を得意先コードで全件取得。
@@ -22,23 +24,13 @@ export async function listGonenKukumiCustItems(input: {
       WHERE M_CUST_ITEM.CUST_CD = :custCd
         AND M_CUST_ITEM.DLV_LOC_CD = '*'
         AND (:companyCd IS NULL OR M_CUST_ITEM.COMPANY_CD = :companyCd)
-        AND M_CUST_ITEM.EFF_PHASE_IN_DATE <= TO_DATE(:asOf2, 'YYYY/MM/DD')
-        AND (M_CUST_ITEM.EFF_PHASE_OUT_DATE IS NULL OR TO_DATE(:asOf, 'YYYY/MM/DD') <= M_CUST_ITEM.EFF_PHASE_OUT_DATE)
+        AND${SQL_CUST_ITEM_EFF_RANGE}
       ORDER BY M_CUST_ITEM.CUST_ITEM_CD`;
     const r = await conn.execute<{ CUST_ITEM_CD: string | null }>(
       sql,
       { custCd, asOf: input.asOfDate, asOf2: input.asOfDate, companyCd },
       { outFormat: oracledb.OUT_FORMAT_OBJECT },
     );
-    const rows = (r.rows ?? []) as { CUST_ITEM_CD: string | null }[];
-    const out: string[] = [];
-    const seen = new Set<string>();
-    for (const row of rows) {
-      const v = String(row.CUST_ITEM_CD ?? "").trim();
-      if (!v || seen.has(v)) continue;
-      seen.add(v);
-      out.push(v);
-    }
-    return out;
+    return dedupeTrimmedColumn(r.rows, "CUST_ITEM_CD");
   });
 }

@@ -2,6 +2,8 @@ import "server-only";
 
 import oracledb from "oracledb";
 import { withOracleReadConnection } from "@/infrastructure/oracle/with-connection";
+import { dedupeTrimmedColumn } from "@/infrastructure/oracle/rows-helpers";
+import { SQL_CUST_ITEM_EFF_RANGE } from "@/infrastructure/oracle/gonenkukumi/sql-fragments";
 
 const MAX_ROWS = 5000;
 
@@ -32,23 +34,13 @@ export async function listGonenKukumiCustItemSuggestions(input: {
         AND LENGTH(M_CUST_ITEM.CUST_ITEM_CD) >= LENGTH(:pfx)
         AND SUBSTR(M_CUST_ITEM.CUST_ITEM_CD, 1, LENGTH(:pfx)) = :pfx
         AND (:companyCd IS NULL OR M_CUST_ITEM.COMPANY_CD = :companyCd)
-        AND M_CUST_ITEM.EFF_PHASE_IN_DATE <= TO_DATE(:asOf2, 'YYYY/MM/DD')
-        AND (M_CUST_ITEM.EFF_PHASE_OUT_DATE IS NULL OR TO_DATE(:asOf, 'YYYY/MM/DD') <= M_CUST_ITEM.EFF_PHASE_OUT_DATE)
+        AND${SQL_CUST_ITEM_EFF_RANGE}
       ORDER BY M_CUST_ITEM.CUST_ITEM_CD`;
     const r = await conn.execute<{ CUST_ITEM_CD: string | null }>(
       sql,
       { custCd, pfx, asOf: input.asOfDate, asOf2: input.asOfDate, companyCd },
       { outFormat: oracledb.OUT_FORMAT_OBJECT, maxRows: MAX_ROWS },
     );
-    const rows = (r.rows ?? []) as { CUST_ITEM_CD: string | null }[];
-    const out: string[] = [];
-    const seen = new Set<string>();
-    for (const row of rows) {
-      const v = String(row.CUST_ITEM_CD ?? "").trim();
-      if (!v || seen.has(v)) continue;
-      seen.add(v);
-      out.push(v);
-    }
-    return out;
+    return dedupeTrimmedColumn(r.rows, "CUST_ITEM_CD");
   });
 }

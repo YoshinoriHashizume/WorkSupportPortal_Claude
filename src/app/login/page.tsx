@@ -1,5 +1,4 @@
-import { auth } from "@/auth";
-import { redirect } from "next/navigation";
+import { redirectIfAuthenticated } from "@/app/_lib/server-auth";
 import { LoginClientForms } from "./login-client-forms";
 
 export default async function LoginPage({
@@ -7,11 +6,8 @@ export default async function LoginPage({
 }: {
   searchParams: Promise<{ callbackUrl?: string; error?: string }>;
 }) {
-  const session = await auth();
   const params = await searchParams;
-  if (session) {
-    redirect(params.callbackUrl ?? "/dashboard");
-  }
+  await redirectIfAuthenticated(params.callbackUrl ?? "/dashboard");
 
   const devMode =
     process.env.NODE_ENV === "development" &&

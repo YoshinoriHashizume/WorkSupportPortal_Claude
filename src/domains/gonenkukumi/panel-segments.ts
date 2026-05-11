@@ -1,4 +1,8 @@
-import type { GonenKukumiOracleSuccess } from "@/domains/gonenkukumi/types";
+import type {
+  CustomerShipBlock,
+  GonenKukumiOracleSuccess,
+  SupplierBlock,
+} from "@/domains/gonenkukumi/types";
 import { compareGonenKukumiYearMonth, normalizeYearMonth } from "@/domains/gonenkukumi/year-month-nav";
 
 export type GonenPanelSegment =
@@ -17,6 +21,22 @@ export function panelSegmentKey(s: GonenPanelSegment): string {
   return `sup:${f.vendCode}\x1f${f.itemCdWithLevel}`;
 }
 
+/** 得意先ブロック → 対応するパネルセグメント（filter 付き） */
+export function customerBlockToSegment(b: CustomerShipBlock): GonenPanelSegment {
+  return {
+    kind: "cust",
+    filter: { custCode: b.custCode, custItemCd: b.custItemCd, teban: b.teban },
+  };
+}
+
+/** 仕入先ブロック → 対応するパネルセグメント（filter 付き） */
+export function supplierBlockToSegment(b: SupplierBlock): GonenPanelSegment {
+  return {
+    kind: "sup",
+    filter: { vendCode: b.vendCode, itemCdWithLevel: b.itemCdWithLevel },
+  };
+}
+
 /**
  * 基準月の並びを保ちつつ、他月にだけ現れるブロックも末尾に追加。
  * 同一階層でも仕入先×品目が違えば別セクションになる。
@@ -32,32 +52,15 @@ export function groupSegmentsFromCache(
   const seen = new Set<string>();
   const out: GonenPanelSegment[] = [];
 
-  const custId = (b: { custCode: string; custItemCd: string; teban: number }) =>
-    `c:${b.custCode}\x1f${b.custItemCd}\x1f${b.teban}`;
-  const supId = (b: { vendCode: string; itemCdWithLevel: string }) =>
-    `s:${b.vendCode}\x1f${b.itemCdWithLevel}`;
-
-  const pushCust = (b: (typeof base.customerBlocks)[number]) => {
-    const id = custId(b);
-    if (seen.has(id)) return;
-    seen.add(id);
-    out.push({
-      kind: "cust",
-      filter: { custCode: b.custCode, custItemCd: b.custItemCd, teban: b.teban },
-    });
-  };
-  const pushSup = (b: (typeof base.supplierBlocks)[number]) => {
-    const id = supId(b);
-    if (seen.has(id)) return;
-    seen.add(id);
-    out.push({
-      kind: "sup",
-      filter: { vendCode: b.vendCode, itemCdWithLevel: b.itemCdWithLevel },
-    });
+  const pushIfNew = (seg: GonenPanelSegment) => {
+    const k = panelSegmentKey(seg);
+    if (seen.has(k)) return;
+    seen.add(k);
+    out.push(seg);
   };
 
-  for (const b of base.customerBlocks) pushCust(b);
-  for (const b of base.supplierBlocks) pushSup(b);
+  for (const b of base.customerBlocks) pushIfNew(customerBlockToSegment(b));
+  for (const b of base.supplierBlocks) pushIfNew(supplierBlockToSegment(b));
 
   const otherMonths = Object.keys(cache)
     .map(normalizeYearMonth)
@@ -67,8 +70,8 @@ export function groupSegmentsFromCache(
   for (const ym of otherMonths) {
     const o = cache[ym];
     if (!o) continue;
-    for (const b of o.customerBlocks) pushCust(b);
-    for (const b of o.supplierBlocks) pushSup(b);
+    for (const b of o.customerBlocks) pushIfNew(customerBlockToSegment(b));
+    for (const b of o.supplierBlocks) pushIfNew(supplierBlockToSegment(b));
   }
 
   return out;

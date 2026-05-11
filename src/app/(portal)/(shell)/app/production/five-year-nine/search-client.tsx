@@ -4,6 +4,19 @@ import { CustCodeCombobox } from "@/components/gonenkukumi/cust-code-combobox";
 import { CustItemAutocompleteInput } from "@/components/gonenkukumi/cust-item-autocomplete-input";
 import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useRef, useState } from "react";
+import {
+  clampYm,
+  formatYmJaLabel,
+  isoToYmdSlash,
+  normalizeYearMonth,
+  todayYm,
+  todayYmd,
+  yearMonthBounds,
+  ymdSlashToIso,
+  ymOptionsList,
+} from "@/domains/gonenkukumi/year-month-nav";
+import { TOKYO_TIME_ZONE } from "@/domains/shared/timezone";
+import { postJson } from "@/lib/http";
 
 export type HistoryRow = {
   id: string;
@@ -23,107 +36,11 @@ const executedAtJa = new Intl.DateTimeFormat("ja-JP", {
   minute: "2-digit",
   second: "2-digit",
   hour12: false,
-  timeZone: "Asia/Tokyo",
+  timeZone: TOKYO_TIME_ZONE,
 });
 
 function formatExecutedAt(iso: string): string {
   return executedAtJa.format(new Date(iso));
-}
-
-function todayYmd(): string {
-  const d = new Date();
-  const y = d.getFullYear();
-  const m = String(d.getMonth() + 1).padStart(2, "0");
-  const day = String(d.getDate()).padStart(2, "0");
-  return `${y}/${m}/${day}`;
-}
-
-function todayYm(): string {
-  const d = new Date();
-  const y = d.getFullYear();
-  const m = String(d.getMonth() + 1).padStart(2, "0");
-  return `${y}/${m}`;
-}
-
-const MIN_SEARCH_YM = "2022/01";
-
-function compareYm(a: string, b: string): number {
-  const ma = /^(\d{4})\/(\d{2})$/.exec(a.trim());
-  const mb = /^(\d{4})\/(\d{2})$/.exec(b.trim());
-  if (!ma || !mb) return 0;
-  const ya = Number(ma[1]);
-  const moa = Number(ma[2]);
-  const yb = Number(mb[1]);
-  const mob = Number(mb[2]);
-  if (ya !== yb) return ya - yb;
-  return moa - mob;
-}
-
-function clampYm(ym: string, minYm: string, maxYm: string): string {
-  if (compareYm(ym, minYm) < 0) return minYm;
-  if (compareYm(ym, maxYm) > 0) return maxYm;
-  return ym;
-}
-
-/** 対象日付の 6 か月後の暦月を上限（yyyy/mm） */
-function maxYmFromAsOf(asOfSlash: string): string {
-  const m = /^(\d{4})\/(\d{2})\/(\d{2})$/.exec(asOfSlash.trim());
-  if (!m) return todayYm();
-  const d = new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3]));
-  d.setMonth(d.getMonth() + 6);
-  const y = d.getFullYear();
-  const mo = String(d.getMonth() + 1).padStart(2, "0");
-  return `${y}/${mo}`;
-}
-
-function yearMonthBounds(asOfSlash: string): { min: string; max: string } {
-  const cap = maxYmFromAsOf(asOfSlash);
-  if (compareYm(cap, MIN_SEARCH_YM) < 0) return { min: MIN_SEARCH_YM, max: MIN_SEARCH_YM };
-  return { min: MIN_SEARCH_YM, max: cap };
-}
-
-function ymOptionsList(minYm: string, maxYm: string): string[] {
-  if (compareYm(maxYm, minYm) < 0) return [minYm];
-  const out: string[] = [];
-  const [sy, sm] = minYm.split("/").map(Number);
-  const [ey, em] = maxYm.split("/").map(Number);
-  let y = sy;
-  let mo = sm;
-  while (y < ey || (y === ey && mo <= em)) {
-    out.push(`${y}/${String(mo).padStart(2, "0")}`);
-    mo++;
-    if (mo > 12) {
-      mo = 1;
-      y++;
-    }
-  }
-  return out;
-}
-
-/** 表示は年＋ゼロ埋め月（例 2024年04月） */
-function formatYmJaLabel(ym: string): string {
-  const m = /^(\d{4})\/(\d{2})$/.exec(ym.trim());
-  if (!m) return ym;
-  return `${m[1]}年${m[2]}月`;
-}
-
-function normalizeYearMonth(ym: string): string {
-  const m = /^(\d{4})\/(\d{1,2})$/.exec(ym.trim());
-  if (!m) return ym.trim();
-  return `${m[1]}/${String(Number(m[2])).padStart(2, "0")}`;
-}
-
-/** API・スキーマは yyyy/mm/dd。ブラウザの type=date は yyyy-MM-dd */
-function ymdSlashToIso(ymd: string): string {
-  const m = /^(\d{4})\/(\d{2})\/(\d{2})$/.exec(ymd.trim());
-  if (!m) return "";
-  return `${m[1]}-${m[2]}-${m[3]}`;
-}
-
-function isoToYmdSlash(iso: string): string {
-  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(iso.trim());
-  if (!m) return iso.trim();
-  return `${m[1]}/${m[2]}/${m[3]}`;
 }
 
 export function GonenKukumiSearchClient({ initialHistory }: { initialHistory: HistoryRow[] }) {
@@ -178,43 +95,18 @@ export function GonenKukumiSearchClient({ initialHistory }: { initialHistory: Hi
     setError(null);
     setLoading(true);
     try {
-      const res = await fetch("/api/gonenkukumi/search", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          custCode,
-          custItem,
-          optionChange: optionChange || "*",
-          yearMonth,
-          asOfDate,
-        }),
+      const result = await postJson<{ ok?: boolean }>("/api/gonenkukumi/search", {
+        custCode,
+        custItem,
+        optionChange: optionChange || "*",
+        yearMonth,
+        asOfDate,
       });
-      const raw = await res.text();
-      let data: { ok?: boolean; error?: string };
-      const trimmed = raw.trim();
-      if (trimmed.length === 0) {
-        setError(
-          res.ok
-            ? "サーバーから空の応答が返りました（JSON がありません）。API またはプロキシの設定を確認してください。"
-            : `サーバーエラー (${res.status})。応答ボディが空です。`,
-        );
+      if (!result.ok) {
+        setError(result.error);
         return;
       }
-      try {
-        data = JSON.parse(trimmed) as { ok?: boolean; error?: string };
-      } catch {
-        setError(
-          res.ok
-            ? "サーバーからの応答を解釈できませんでした（有効な JSON ではありません）。"
-            : `サーバーエラー (${res.status})。応答が HTML の場合は API 側で例外が出ている可能性があります。`,
-        );
-        return;
-      }
-      if (!res.ok) {
-        setError(data.error ?? `エラー (${res.status})`);
-        return;
-      }
-      if (data.ok) {
+      if (result.data.ok) {
         const q = new URLSearchParams({
           custCode,
           custItem,
@@ -234,8 +126,6 @@ export function GonenKukumiSearchClient({ initialHistory }: { initialHistory: Hi
       } else {
         setError("検索は成功したように見えますが、結果画面を開けませんでした。応答を確認してください。");
       }
-    } catch (e) {
-      setError(e instanceof Error ? e.message : "通信中にエラーが発生しました。");
     } finally {
       setLoading(false);
     }
