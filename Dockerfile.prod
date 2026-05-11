@@ -1,0 +1,62 @@
+# 本番用: Next.js standalone + PostgreSQL（Prisma）
+# ビルド: docker build -f Dockerfile.prod -t coredataintegrationportal:latest .
+# 起動例: docker compose -f docker-compose.prod.yml up -d
+
+FROM node:22-bookworm-slim AS base
+WORKDIR /app
+ARG ORACLE_IC_ZIP_URL=https://download.oracle.com/otn_software/linux/instantclient/instantclient-basic-linuxx64.zip
+RUN apt-get update -y && apt-get install -y --no-install-recommends \
+    openssl ca-certificates libaio1 wget unzip \
+  && mkdir -p /opt/oracle \
+  && wget -q -O /opt/oracle/ic.zip "${ORACLE_IC_ZIP_URL}" \
+  && unzip -q -d /opt/oracle /opt/oracle/ic.zip \
+  && rm -f /opt/oracle/ic.zip \
+  && d="$(ls -d /opt/oracle/instantclient_* | head -n1)" \
+  && test -n "$d" && test -d "$d" \
+  && ln -sfn "$d" /opt/oracle/instantclient \
+  && echo /opt/oracle/instantclient > /etc/ld.so.conf.d/oracle-instantclient.conf \
+  && ldconfig \
+  && apt-get purge -y wget unzip \
+  && apt-get autoremove -y \
+  && rm -rf /var/lib/apt/lists/*
+ENV ORACLE_CLIENT_LIB_DIR=/opt/oracle/instantclient
+
+FROM base AS deps
+COPY package.json package-lock.json* ./
+COPY prisma ./prisma
+RUN if [ -f package-lock.json ]; then npm ci; else npm install; fi
+
+FROM base AS builder
+COPY --from=deps /app/node_modules ./node_modules
+COPY . .
+RUN mkdir -p public
+ENV NEXT_TELEMETRY_DISABLED=1
+# next build が auth モジュールを評価するため（実行時は compose / ランタイムの値で上書き）
+ENV AUTH_SECRET="docker-build-only-placeholder"
+ENV DATABASE_URL="postgresql://build:build@127.0.0.1:5432/build"
+RUN npx prisma generate
+RUN npm run build
+
+FROM base AS runner
+ENV NODE_ENV=production
+ENV NEXT_TELEMETRY_DISABLED=1
+
+RUN npm install -g prisma@6.19.3 \
+  && addgroup --system --gid 1001 nodejs \
+  && adduser --system --uid 1001 nextjs
+
+COPY --from=builder /app/public ./public
+COPY --from=builder --chown=nextjs:nodejs /app/.next/standalone ./
+COPY --from=builder --chown=nextjs:nodejs /app/.next/static ./.next/static
+COPY --from=builder --chown=nextjs:nodejs /app/node_modules/.prisma ./node_modules/.prisma
+COPY --from=builder --chown=nextjs:nodejs /app/node_modules/@prisma ./node_modules/@prisma
+COPY --from=builder --chown=nextjs:nodejs /app/prisma ./prisma
+
+COPY docker/entrypoint.prod.sh /entrypoint.sh
+RUN chmod +x /entrypoint.sh && chown nextjs:nodejs /entrypoint.sh
+
+USER nextjs
+EXPOSE 3000
+ENV PORT=3000
+ENV HOSTNAME="0.0.0.0"
+ENTRYPOINT ["/entrypoint.sh"]

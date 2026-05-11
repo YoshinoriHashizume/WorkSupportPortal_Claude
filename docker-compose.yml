@@ -1,0 +1,64 @@
+# ローカル開発用（`Document/ローカル開発環境構築手順.md` §5 と整合）
+# Docker Desktop の「コンテナ」一覧では、この name がプロジェクト名として表示されます。
+name: coredataintegrationportal
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: coredataintegrationportal-postgres
+    environment:
+      POSTGRES_USER: coredataintegrationportal
+      POSTGRES_PASSWORD: coredataintegrationportal_local_dev
+      POSTGRES_DB: coredataintegrationportal
+    ports:
+      - "5432:5432"
+    volumes:
+      - coredataintegrationportal_pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U coredataintegrationportal -d coredataintegrationportal"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: coredataintegrationportal-app
+    ports:
+      - "3000:3000"
+    environment:
+      NODE_ENV: development
+      WATCHPACK_POLLING: "true"
+      DATABASE_URL: postgresql://coredataintegrationportal:coredataintegrationportal_local_dev@postgres:5432/coredataintegrationportal
+      # AUTH_URL は .env.local に `http://<開発PCのLAN IP>:3000` を書く（別PCデバッグ時）。未設定時は Auth.js の trustHost に任せる
+      AUTH_DEV_MODE: "true"
+      # Dockerfile と整合（env_file で同名キーを空にしないこと）
+      ORACLE_CLIENT_LIB_DIR: /opt/oracle/instantclient
+      LD_LIBRARY_PATH: /opt/oracle/instantclient
+    env_file:
+      - path: .env.local
+        required: false
+    volumes:
+      - .:/app
+      - coredataintegrationportal_node_modules:/app/node_modules
+      - coredataintegrationportal_next:/app/.next
+    depends_on:
+      postgres:
+        condition: service_healthy
+    command: sh -c "npm install && npx prisma db push && npx prisma db seed && npm run dev"
+
+  nginx:
+    image: nginx:alpine
+    container_name: coredataintegrationportal-nginx
+    ports:
+      - "8080:80"
+    volumes:
+      - ./docker/nginx/local.conf:/etc/nginx/conf.d/default.conf:ro
+    depends_on:
+      - app
+
+volumes:
+  coredataintegrationportal_pgdata:
+  coredataintegrationportal_node_modules:
+  coredataintegrationportal_next:
