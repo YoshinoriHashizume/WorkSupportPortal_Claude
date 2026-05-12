@@ -207,7 +207,7 @@ export function GonenKukumiMultiMonthResultClient({
         </div>
         <dl className="mt-2 grid grid-cols-2 gap-2 text-sm text-slate-600 md:grid-cols-3">
           <div>
-            <dt className="text-slate-500">得意先</dt>
+            <dt className="text-slate-500">得意先(得意先コード)</dt>
             <dd>{custDisplay}</dd>
           </div>
           <div>

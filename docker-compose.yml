@@ -46,7 +46,9 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
-    command: sh -c "npm install && npx prisma db push && npx prisma db seed && npm run dev"
+    # Docker（特に Windows ホストの bind mount）では Turbopack が変更を拾えないことが多い。
+    # dev:docker は Webpack 由来の WATCHPACK_POLLING と相性がよい（ローカル直実行は従来どおり npm run dev）。
+    command: sh -c "npm install && npx prisma db push && npx prisma db seed && npm run dev:docker"
 
   nginx:
     image: nginx:alpine
