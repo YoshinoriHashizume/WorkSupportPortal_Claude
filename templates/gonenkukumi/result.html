@@ -1,0 +1,121 @@
+﻿{% extends "base.html" %}
+{% load gonenkukumi_format %}
+{% block title %}5年9組 結果{% endblock %}
+{% block body_class %}bare-result-page{% endblock %}
+{% block content %}
+{% if error %}
+  <div class="error">{{ error }}</div>
+{% elif result %}
+  <section class="next-result-shell">
+    <section class="next-summary-card">
+      <div class="summary-header">
+        <h2>検索条件</h2>
+        <div class="summary-actions">
+          <button type="button" class="button next-subtle-button" id="prev-month-button">前月を追加</button>
+          <button type="button" class="button next-subtle-button" id="next-month-button">次月を追加</button>
+          <a class="button" href="/api/gonenkukumi/export?custCode={{ result.custCode|urlencode }}&custItem={{ result.custItem|urlencode }}&yearMonth={{ result.yearMonth|urlencode }}&asOfDate={{ result.asOfDate|urlencode }}&optionChange={{ result.optionChange|urlencode }}&months={% for month in result.months %}{{ month.yearMonth|urlencode }}{% if not forloop.last %},{% endif %}{% endfor %}">Excelで出力</a>
+        </div>
+      </div>
+      <div class="summary-grid">
+        <div><span>得意先(得意先コード)</span><strong>{{ result.customerName }}（{{ result.custCode }}）</strong></div>
+        <div><span>得意先品目</span><strong>{{ result.custItem }}</strong></div>
+        <div><span>品目任意変換値</span><strong>{{ result.optionChange }}</strong></div>
+        <div><span>検索年月（基準）</span><strong>{{ result.yearMonth|date_slash }}</strong></div>
+        <div><span>対象日付</span><strong>{{ result.asOfDate|date_slash }}</strong></div>
+        <div><span>内作品番</span><strong>{{ result.internalItemCd }}</strong></div>
+      </div>
+    </section>
+
+    {% for block in result.blocks %}
+      <section class="next-segment {% if block.kind == 'supplier' %}supplier-block{% else %}customer-block{% endif %}" style="--section-bg: {{ block.theme.bg }}; --section-light-bg: {{ block.theme.lightBg }}; --section-very-light-bg: {{ block.theme.veryLightBg }}; --section-border: {{ block.theme.border }}; --section-outer: {{ block.theme.outerBorder }};">
+        <div class="next-segment-banner">
+          {% if block.kind != 'supplier' %}
+            <strong>得意先：{{ block.meta.customerName|default:result.customerName }}（{{ block.meta.custCode|default:result.custCode }}）</strong>
+            <span>出荷</span>
+            <small>得意先品目：{{ block.meta.custItem|default:result.custItem }}</small>
+            <small>手番：{{ block.meta.teban|default:"0" }}</small>
+            <small>安全在庫：{{ block.meta.anzen|default:"0" }}</small>
+          {% else %}
+            <strong>仕入先：{{ block.meta.vendName|default:block.meta.vendCd }}（{{ block.meta.vendCd|default:"" }}）</strong>
+            <span>入荷</span>
+            <small>品目番号：{{ block.meta.itemCd|default:"" }}</small>
+            <small>手番：{{ block.meta.teban|default:"0" }}</small>
+            <small>安全在庫：{{ block.meta.anzen|default:"0" }}</small>
+            <small>手配区分：{{ block.meta.requestType|default:"" }}</small>
+            <small>保管区：{{ block.meta.whCd|default:"" }}</small>
+            <small class="supplier-kaiso">階層：{{ block.meta.kaiso|default:forloop.counter0 }}</small>
+          {% endif %}
+        </div>
+        <div class="next-month-panel-wrap">
+          {% for panel in block.monthPanels %}
+            <details class="next-month-panel" open>
+              <summary>
+                <span>検索年月 <strong>{{ panel.yearMonth|date_slash }}</strong>{% if panel.label != "基準" %}<em>（{{ panel.label }}）</em>{% endif %}</span>
+                <span class="summary-closed">クリックで展開</span>
+                <span class="summary-open">クリックで折りたたみ</span>
+              </summary>
+              <div class="next-table-wrap">
+                <table class="next-report-grid">
+                  <colgroup>
+                    <col class="label-col">
+                    <col class="sum-col">
+                    <col class="prev-col">
+                    {% for day in panel.days %}<col class="day-col">{% endfor %}
+                  </colgroup>
+                  <thead>
+                    <tr>
+                      <th>区分</th>
+                      <th>行計</th>
+                      <th>前月残</th>
+                      {% for day in panel.days %}
+                        <th class="{% if day > panel.activeDays %}pad-day{% endif %}">{% if day <= panel.activeDays %}{{ day }}日{% endif %}</th>
+                      {% endfor %}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {% for row in panel.rows %}
+                      <tr>
+                        <th>{{ row.item }}</th>
+                        <td class="qty row-total">{{ row.total|quantity }}</td>
+                        <td class="qty">{% if row.balance is not None %}{{ row.balance|quantity }}{% endif %}</td>
+                        {% for value in row.values %}
+                          <td class="qty {% if forloop.counter > panel.activeDays %}pad-day{% elif forloop.counter in panel.holidayDays %}holiday-day{% endif %}">{{ value|quantity }}</td>
+                        {% endfor %}
+                      </tr>
+                    {% endfor %}
+                  </tbody>
+                </table>
+              </div>
+            </details>
+          {% endfor %}
+        </div>
+      </section>
+    {% endfor %}
+  </section>
+  <script>
+    const displayedMonths = [{% for month in result.months %}'{{ month.yearMonth }}'{% if not forloop.last %}, {% endif %}{% endfor %}];
+
+    function addMonthsToYearMonth(value, delta) {
+      const [yearText, monthText] = value.split('-');
+      const date = new Date(Number(yearText), Number(monthText) - 1 + delta, 1);
+      return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
+    }
+
+    function sortedUniqueMonths(values) {
+      return [...new Set(values)].sort();
+    }
+
+    function addAdjacentMonth(delta) {
+      const months = sortedUniqueMonths(displayedMonths);
+      const baseMonth = delta < 0 ? months[0] : months[months.length - 1];
+      const nextMonth = addMonthsToYearMonth(baseMonth, delta);
+      const url = new URL(window.location.href);
+      url.searchParams.set('months', sortedUniqueMonths([...months, nextMonth]).join(','));
+      window.location.href = url.toString();
+    }
+
+    document.querySelector('#prev-month-button')?.addEventListener('click', () => addAdjacentMonth(-1));
+    document.querySelector('#next-month-button')?.addEventListener('click', () => addAdjacentMonth(1));
+  </script>
+{% endif %}
+{% endblock %}

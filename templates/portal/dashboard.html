@@ -1,0 +1,56 @@
+﻿{% extends "base.html" %}
+{% block title %}メニュー{% endblock %}
+{% block content %}
+<section class="portal-dashboard">
+  <section class="favorite-section">
+    <div class="portal-section-head">
+      <h1>お気に入り</h1>
+      <p>よく使うメニューをお気に入りに登録できます。</p>
+    </div>
+    {% if favorite_items %}
+      <div class="favorite-card-grid" id="favorite-card-grid">
+        {% for item in favorite_items %}
+          <div class="favorite-card" draggable="true" data-menu-key="{{ item.key }}">
+            <button
+              type="button"
+              class="favorite-toggle is-favorite"
+              data-menu-key="{{ item.key }}"
+              data-menu-title="{{ item.title }}"
+              aria-label="{{ item.title }}のお気に入りを解除"
+            >♥</button>
+            <a class="favorite-card-link" href="{{ item.href }}">
+              <strong>{{ item.title }}</strong>
+              {% if item.group_title %}<span>{{ item.group_title }}</span>{% endif %}
+            </a>
+          </div>
+        {% endfor %}
+      </div>
+    {% else %}
+      <p class="favorite-empty">お気に入りはありません。左メニューのハートから追加できます。</p>
+    {% endif %}
+  </section>
+
+  <section class="notice-section">
+    <div class="portal-section-head">
+      <h2>お知らせ</h2>
+    </div>
+    <div class="notice-panel">
+      {% if notices %}
+        <div class="notice-list">
+          {% for notice in notices %}
+            <article class="notice-item">
+              <div class="notice-item-head">
+                <h3>{{ notice.title }}</h3>
+                <time>{{ notice.created_at|date:"Y/m/d H:i" }}</time>
+              </div>
+              <p>{{ notice.body|linebreaksbr }}</p>
+            </article>
+          {% endfor %}
+        </div>
+      {% else %}
+        <p>現在、お知らせはありません。</p>
+      {% endif %}
+    </div>
+  </section>
+</section>
+{% endblock %}

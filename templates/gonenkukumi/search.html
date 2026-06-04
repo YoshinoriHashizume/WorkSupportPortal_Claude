@@ -1,0 +1,453 @@
+﻿{% extends "base.html" %}
+{% load gonenkukumi_format %}
+{% block title %}5年9組 検索{% endblock %}
+{% block body_class %}gonen-search-page{% endblock %}
+{% block extra_head %}
+  <link rel="stylesheet" href="/static/vendor/flatpickr/flatpickr.min.css">
+  <link rel="stylesheet" href="/static/vendor/flatpickr/plugins/monthSelect/style.css">
+{% endblock %}
+{% block content %}
+<div class="gonen-search-title-row">
+  <h1 class="gonen-search-title">5年9組</h1>
+  <button
+    type="button"
+    class="favorite-toggle gonen-title-favorite{% if is_five_year_nine_favorite %} is-favorite{% endif %}"
+    data-menu-key="five-year-nine"
+    data-menu-title="5年9組"
+    aria-label="5年9組のお気に入りを切り替え"
+  >{% if is_five_year_nine_favorite %}♥{% else %}♡{% endif %}</button>
+</div>
+<div class="gonen-search-shell">
+  <form id="search-form" class="card stack gonen-search-card" autocomplete="off">
+    {% csrf_token %}
+    <h2>検索条件</h2>
+    <label>得意先コード
+      <div class="customer-combobox" id="customer-combobox">
+        <div class="customer-code-row">
+          <input name="custCode" required pattern="\d{3}" value="{{ initial.custCode }}" autocomplete="off" aria-controls="customers" aria-expanded="false">
+          <button id="customer-toggle" class="customer-toggle" type="button" aria-label="得意先候補を展開" aria-expanded="false">▼</button>
+        </div>
+        <div id="customers" class="customer-options" role="listbox" hidden></div>
+      </div>
+    </label>
+    <label>得意先品目
+      <input class="cust-item-input" name="custItem" value="{{ initial.custItem }}" list="cust-items" autocomplete="off">
+      <datalist id="cust-items"></datalist>
+      <div id="cust-item-empty" class="cust-item-empty" hidden>候補がありません</div>
+    </label>
+    <label>品目任意変換値
+      <input name="optionChange" value="{{ initial.optionChange }}" maxlength="20">
+    </label>
+    <div class="date-row">
+      <label>検索年月
+        <input id="year-month-picker" class="month-picker-input" name="yearMonth" type="text" required value="{{ initial.yearMonth|date_slash }}" readonly autocomplete="off">
+      </label>
+      <label>対象日付
+        <input name="asOfDate" type="date" required>
+      </label>
+    </div>
+    <button type="submit">検索</button>
+    <div id="search-error" class="error"></div>
+  </form>
+  <section class="card gonen-history-card">
+    <h2>検索履歴</h2>
+    <p>履歴をクリックすると、検索条件にその内容を反映します。</p>
+    <div class="history-table-wrap">
+      <table class="history-table">
+        <thead>
+          <tr>
+            <th>得意先コード</th>
+            <th>得意先品目</th>
+            <th>品目任意変換値</th>
+            <th>検索年月</th>
+            <th>検索日時</th>
+          </tr>
+        </thead>
+        <tbody id="history-list">
+          <tr><td colspan="5">履歴を読み込み中...</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+</div>
+<script src="/static/vendor/flatpickr/flatpickr.min.js"></script>
+<script src="/static/vendor/flatpickr/ja.js"></script>
+<script src="/static/vendor/flatpickr/plugins/monthSelect/index.js"></script>
+<script>
+const form = document.querySelector('#search-form');
+const error = document.querySelector('#search-error');
+const csrfToken = document.querySelector('[name=csrfmiddlewaretoken]').value;
+const custCodeInput = form.elements.custCode;
+const custItemInput = form.elements.custItem;
+const yearMonthInput = form.elements.yearMonth;
+const customerCombobox = document.querySelector('#customer-combobox');
+const customerToggle = document.querySelector('#customer-toggle');
+const customersList = document.querySelector('#customers');
+const custItemsList = document.querySelector('#cust-items');
+const custItemEmpty = document.querySelector('#cust-item-empty');
+let customerOptions = [];
+let custItemOptions = [];
+let loadedCustItemKey = '';
+const yearMonthPicker = flatpickr(yearMonthInput, {
+  locale: flatpickr.l10ns.ja,
+  plugins: [
+    new monthSelectPlugin({
+      shorthand: false,
+      dateFormat: 'Y/m',
+      altFormat: 'Y年m月',
+    }),
+  ],
+  allowInput: false,
+  clickOpens: true,
+  defaultDate: yearMonthInput.value,
+  disableMobile: true,
+});
+
+function formParams(sourceForm) {
+  const data = new FormData(sourceForm);
+  return {
+    custCode: data.get('custCode'),
+    custItem: data.get('custItem') || '',
+    yearMonth: normalizeYearMonth(data.get('yearMonth')),
+    asOfDate: data.get('asOfDate') || todayIsoDate(),
+    optionChange: data.get('optionChange') || '*',
+  };
+}
+
+function todayIsoDate() {
+  const today = new Date();
+  return `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
+}
+
+function setYearMonth(value) {
+  const normalized = normalizeYearMonth(value);
+  yearMonthInput.value = formatDateSlash(normalized);
+  yearMonthPicker.setDate(normalized, false, 'Y-m');
+}
+
+function formatExecutedAt(value) {
+  if (!value) return '';
+  return new Intl.DateTimeFormat('ja-JP', {
+    year: 'numeric',
+    month: 'numeric',
+    day: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit',
+    hour12: false,
+  }).format(new Date(value));
+}
+
+function formatHistoryOptionChange(value) {
+  if (value === false || String(value || '').toLowerCase() === 'false') {
+    return '';
+  }
+  return value || '*';
+}
+
+function formatDateSlash(value) {
+  return String(value || '').replaceAll('-', '/');
+}
+
+function normalizeYearMonth(value) {
+  const text = String(value || '')
+    .trim()
+    .replace(/[０-９]/g, (char) => String.fromCharCode(char.charCodeAt(0) - 0xfee0))
+    .replace(/[\\¥]u[0-9a-fA-F]{4}/g, '')
+    .replace(/\u3000/g, '')
+    .replace(/\s/g, '');
+  const japanese = text.match(/^(\d{4})年(\d{1,2})月$/);
+  if (japanese) {
+    return `${japanese[1]}-${japanese[2].padStart(2, '0')}`;
+  }
+  const separated = text.replace('/', '-').match(/^(\d{4})-(\d{1,2})$/);
+  if (separated) {
+    return `${separated[1]}-${separated[2].padStart(2, '0')}`;
+  }
+  const year = text.match(/(\d{4})/);
+  if (year) {
+    const rest = text.slice(year.index + year[1].length);
+    const monthMatches = [...rest.matchAll(/(\d{1,2})月?/g)];
+    const month = monthMatches.map((match) => Number(match[1])).find((value) => value >= 1 && value <= 12);
+    if (month) {
+      return `${year[1]}-${String(month).padStart(2, '0')}`;
+    }
+  }
+  const monthOnly = text.match(/^\D*(\d{1,2})\D*$/);
+  if (monthOnly) {
+    const month = Number(monthOnly[1]);
+    if (month >= 1 && month <= 12) {
+      return `${new Date().getFullYear()}-${String(month).padStart(2, '0')}`;
+    }
+  }
+  return text;
+}
+
+function resultUrl(params) {
+  const query = new URLSearchParams({
+    custCode: params.custCode,
+    custItem: params.custItem,
+    yearMonth: params.yearMonth,
+    asOfDate: params.asOfDate,
+    optionChange: String(params.optionChange),
+  });
+  return `/app/production/five-year-nine/result?${query.toString()}`;
+}
+
+async function loadHistory() {
+  const response = await fetch('/api/gonenkukumi/history');
+  const payload = await response.json();
+  const root = document.querySelector('#history-list');
+  if (!payload.histories?.length) {
+    root.innerHTML = '<tr><td colspan="5">まだ履歴がありません。</td></tr>';
+    return;
+  }
+  root.innerHTML = '';
+  for (const item of payload.histories) {
+    const row = document.createElement('tr');
+    row.tabIndex = 0;
+    row.innerHTML = `
+      <td class="mono">${item.custCode}</td>
+      <td title="${item.custItem || ''}">${item.custItem || '-'}</td>
+      <td>${formatHistoryOptionChange(item.optionChange)}</td>
+      <td class="mono">${formatDateSlash(item.yearMonth)}</td>
+      <td>${formatExecutedAt(item.executedAt)}</td>
+    `;
+    const apply = () => {
+      form.custCode.value = item.custCode;
+      form.custItem.value = item.custItem || '';
+      setYearMonth(item.yearMonth);
+      form.optionChange.value = formatHistoryOptionChange(item.optionChange) || '*';
+      renderCustomerOptions(filterCustomerOptions());
+      loadCustItemsForCurrentCustomer();
+    };
+    row.addEventListener('click', apply);
+    row.addEventListener('keydown', (event) => {
+      if (event.key === 'Enter' || event.key === ' ') {
+        event.preventDefault();
+        apply();
+      }
+    });
+    root.append(row);
+  }
+}
+
+function setOptions(root, values, valueKey, labelKey = null) {
+  root.innerHTML = '';
+  for (const item of values) {
+    const option = document.createElement('option');
+    option.value = item[valueKey];
+    option.label = item[labelKey] ? `${item[valueKey]} ${item[labelKey]}` : item[valueKey];
+    root.append(option);
+  }
+}
+
+function setCustItemOptions(values) {
+  custItemOptions = values;
+  renderCustItemOptions(filterCustItemOptions());
+}
+
+function filterCustItemOptions() {
+  const query = String(custItemInput.value || '').trim().toLowerCase();
+  if (!query) {
+    return custItemOptions;
+  }
+  return custItemOptions.filter((item) => {
+    const custItem = String(item.custItem || '').toLowerCase();
+    return custItem.startsWith(query);
+  });
+}
+
+function renderCustItemOptions(values) {
+  setOptions(custItemsList, values, 'custItem');
+  const shouldShowEmpty = Boolean(custCodeInput.value && custItemInput.value && !values.length);
+  custItemEmpty.hidden = !shouldShowEmpty;
+}
+
+function setCustomerOptions(values) {
+  customerOptions = values;
+  renderCustomerOptions(filterCustomerOptions());
+}
+
+function filterCustomerOptions() {
+  const query = String(custCodeInput.value || '').trim().toLowerCase();
+  if (!query) {
+    return customerOptions;
+  }
+  return customerOptions.filter((item) => {
+    const code = String(item.custCode || '').toLowerCase();
+    const name = String(item.custName || '').toLowerCase();
+    return code.startsWith(query) || name.includes(query);
+  });
+}
+
+function renderCustomerOptions(values) {
+  customersList.innerHTML = '';
+  if (!values.length) {
+    const empty = document.createElement('div');
+    empty.className = 'customer-option is-empty';
+    empty.textContent = '候補がありません';
+    customersList.append(empty);
+    return;
+  }
+  for (const item of values) {
+    const option = document.createElement('button');
+    option.type = 'button';
+    option.className = 'customer-option';
+    option.setAttribute('role', 'option');
+    option.dataset.value = item.custCode;
+    option.textContent = `${item.custCode} ${item.custName || ''}`.trim();
+    customersList.append(option);
+  }
+}
+
+function setCustomerOpen(isOpen) {
+  customersList.hidden = !isOpen;
+  custCodeInput.setAttribute('aria-expanded', String(isOpen));
+  customerToggle.setAttribute('aria-expanded', String(isOpen));
+}
+
+function openCustomerOptions() {
+  renderCustomerOptions(filterCustomerOptions());
+  setCustomerOpen(true);
+}
+
+function closeCustomerOptions() {
+  setCustomerOpen(false);
+}
+
+function selectCustomer(value) {
+  custCodeInput.value = value;
+  clearCustItemSelection();
+  closeCustomerOptions();
+  loadCustItemsForCurrentCustomer();
+}
+
+async function loadCustomers() {
+  const response = await fetch('/api/gonenkukumi/customers');
+  const payload = await response.json();
+  if (response.ok) {
+    setCustomerOptions(payload.customers || []);
+  }
+}
+
+function resetCustItems() {
+  custItemOptions = [];
+  loadedCustItemKey = '';
+  custItemsList.innerHTML = '';
+  custItemEmpty.hidden = true;
+}
+
+function clearCustItemSelection() {
+  custItemInput.value = '';
+  resetCustItems();
+}
+
+async function loadCustItemsForCurrentCustomer() {
+  const custCode = String(custCodeInput.value || '').trim();
+  const asOfDate = form.asOfDate.value || todayIsoDate();
+  if (!custCode || !/^\d{3}$/.test(custCode)) {
+    resetCustItems();
+    return;
+  }
+  const nextKey = `${custCode}|${asOfDate}`;
+  if (loadedCustItemKey === nextKey) {
+    renderCustItemOptions(filterCustItemOptions());
+    return;
+  }
+  const query = new URLSearchParams({custCode, asOfDate});
+  const response = await fetch(`/api/gonenkukumi/cust-items?${query.toString()}`);
+  const payload = await response.json();
+  if (response.ok) {
+    loadedCustItemKey = nextKey;
+    setCustItemOptions(payload.items || []);
+  } else {
+    resetCustItems();
+  }
+}
+
+function handleCustomerCodeEditing() {
+  if (loadedCustItemKey && !loadedCustItemKey.startsWith(`${custCodeInput.value}|`)) {
+    resetCustItems();
+  }
+}
+
+async function loadCustItems() {
+  await loadCustItemsForCurrentCustomer();
+}
+
+function filterLoadedCustItems() {
+  if (!custCodeInput.value) {
+    custItemsList.innerHTML = '';
+    custItemEmpty.hidden = true;
+    return;
+  }
+  renderCustItemOptions(filterCustItemOptions());
+}
+
+custCodeInput.addEventListener('input', () => {
+  clearCustItemSelection();
+  handleCustomerCodeEditing();
+  renderCustomerOptions(filterCustomerOptions());
+  openCustomerOptions();
+  filterLoadedCustItems();
+});
+custCodeInput.addEventListener('focus', () => {
+  renderCustomerOptions(filterCustomerOptions());
+});
+custCodeInput.addEventListener('change', () => {
+  clearCustItemSelection();
+  loadCustItemsForCurrentCustomer();
+});
+customerToggle.addEventListener('click', () => {
+  if (customersList.hidden) {
+    openCustomerOptions();
+  } else {
+    closeCustomerOptions();
+  }
+});
+customersList.addEventListener('click', (event) => {
+  const option = event.target.closest('.customer-option');
+  if (!option || !option.dataset.value) {
+    return;
+  }
+  selectCustomer(option.dataset.value);
+});
+document.addEventListener('click', (event) => {
+  if (!customerCombobox.contains(event.target)) {
+    closeCustomerOptions();
+  }
+});
+custItemInput.addEventListener('focus', loadCustItemsForCurrentCustomer);
+custItemInput.addEventListener('input', filterLoadedCustItems);
+form.asOfDate.addEventListener('change', () => {
+  loadedCustItemKey = '';
+  loadCustItemsForCurrentCustomer();
+});
+
+form.addEventListener('submit', async (event) => {
+  event.preventDefault();
+  error.textContent = '';
+  const params = formParams(form);
+  form.elements.yearMonth.value = params.yearMonth;
+  const response = await fetch('/api/gonenkukumi/search', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json', 'X-CSRFToken': csrfToken},
+    body: JSON.stringify(params),
+  });
+  const payload = await response.json();
+  if (!response.ok) {
+    error.textContent = payload.error?.message || '検索に失敗しました。';
+    return;
+  }
+  await loadHistory();
+  window.open(resultUrl(params), '_blank');
+});
+
+loadHistory();
+loadCustomers();
+setYearMonth(yearMonthInput.value);
+form.asOfDate.value = todayIsoDate();
+loadCustItems();
+</script>
+{% endblock %}

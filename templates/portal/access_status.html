@@ -1,0 +1,16 @@
+{% extends "base.html" %}
+{% block title %}利用申請状況{% endblock %}
+{% block content %}
+<section class="access-status card">
+  <h1>利用申請状況</h1>
+  {% if access_request.status == "pending" %}
+    <p>利用申請を受け付けました。管理者の承認をお待ちください。</p>
+  {% elif access_request.status == "rejected" %}
+    <p>利用申請は拒否されました。必要な場合は管理者へお問い合わせください。</p>
+    {% if access_request.note %}<p class="muted">理由: {{ access_request.note }}</p>{% endif %}
+  {% else %}
+    <p>利用可能です。</p>
+    <a class="button" href="/app">メニューへ</a>
+  {% endif %}
+</section>
+{% endblock %}

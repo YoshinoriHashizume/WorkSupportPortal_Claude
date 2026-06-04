@@ -1,0 +1,20 @@
+﻿{% extends "base.html" %}
+{% block title %}ログイン{% endblock %}
+{% block content %}
+<div class="card narrow">
+  <h1>ログイン</h1>
+  <p>社員番号とdesknet's NEOのパスワードでログインします。</p>
+  <form method="post" action="/auth/desknet-login" class="stack">
+    {% csrf_token %}
+    <input type="hidden" name="next" value="{{ next }}">
+    <label>社員番号
+      <input name="employee_id" autocomplete="username" inputmode="numeric" required>
+    </label>
+    <label>パスワード
+      <input name="password" type="password" autocomplete="current-password" required>
+    </label>
+    <button type="submit">ログイン</button>
+  </form>
+  <p class="muted">将来Microsoft Entra IDへ切り替える場合も、Djangoユーザーは社員番号で引き継ぎます。</p>
+</div>
+{% endblock %}

@@ -1,0 +1,63 @@
+﻿<!doctype html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{% block title %}基幹システム連携ポータル{% endblock %}</title>
+  {% block extra_head %}{% endblock %}
+  <link rel="stylesheet" href="/static/css/app.css?v=20260604-1749">
+</head>
+<body class="{% block body_class %}{% endblock %}">
+  {% if user.is_authenticated %}
+    <script>window.portalCsrfToken = "{{ csrf_token }}";</script>
+    <div class="portal-shell">
+      <aside class="sidebar">
+        <div class="sidebar-head">
+          <a class="brand" href="/app">基幹システム連携ポータル</a>
+        </div>
+        <nav class="sidebar-nav">
+          <a class="sidebar-home-link" href="/app">メニュー</a>
+          {% for group in portal_menu_groups %}
+            <div class="sidebar-menu-group">
+              <div class="sidebar-menu-group-title">{{ group.title }}</div>
+              {% for item in group.items %}
+                <div class="sidebar-menu-item">
+                  <button
+                    type="button"
+                    class="favorite-toggle{% if item.is_favorite %} is-favorite{% endif %}"
+                    data-menu-key="{{ item.key }}"
+                    data-menu-title="{{ item.title }}"
+                    aria-label="{{ item.title }}のお気に入りを切り替え"
+                  >{% if item.is_favorite %}♥{% else %}♡{% endif %}</button>
+                  <a href="{{ item.href }}">{{ item.title }}</a>
+                </div>
+              {% endfor %}
+            </div>
+          {% endfor %}
+        </nav>
+      </aside>
+      <div class="portal-main">
+        <header class="topbar">
+          <span>{% if user.last_name or user.first_name %}ようこそ、{{ user.last_name }} {{ user.first_name }} さん{% elif user.get_username %}ようこそ、{{ user.get_username }} さん{% endif %}</span>
+          <a href="/logout">ログアウト</a>
+        </header>
+        <main class="layout">
+          <section class="content">
+  {% else %}
+    <main class="auth-shell">
+  {% endif %}
+            {% for message in messages %}<div class="message">{{ message }}</div>{% endfor %}
+            {% block content %}{% endblock %}
+            {% if user.is_authenticated %}
+              <script src="/static/js/portal-favorites.js?v=20260604-1421"></script>
+            {% endif %}
+  {% if user.is_authenticated %}
+          </section>
+        </main>
+      </div>
+    </div>
+  {% else %}
+    </main>
+  {% endif %}
+</body>
+</html>

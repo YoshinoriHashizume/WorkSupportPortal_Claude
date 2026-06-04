@@ -1,0 +1,129 @@
+{% extends "base.html" %}
+{% block title %}ユーザー管理{% endblock %}
+{% block body_class %}user-management-page{% endblock %}
+{% block content %}
+<section class="user-management">
+  <div class="portal-section-head">
+    <h1>ユーザー管理</h1>
+    <p>登録済みユーザーの情報、権限、利用可能グループを確認できます。</p>
+  </div>
+
+  <div class="db-table-card">
+    <div class="db-table-head">
+      <h2>ユーザー一覧</h2>
+      <p>全 {{ user_entries|length }} 件</p>
+    </div>
+    <div class="db-table-wrap">
+      <table class="db-table">
+        <thead>
+          <tr>
+            {% for column in column_headers %}
+              <th>
+                <a class="db-sort-link" href="?sort={{ column.key }}&dir={{ column.sort_direction }}">
+                  {{ column.label }}
+                  {% if column.is_sorted %}
+                    <span>{% if sort_direction == "asc" %}▲{% else %}▼{% endif %}</span>
+                  {% endif %}
+                </a>
+              </th>
+            {% endfor %}
+          </tr>
+        </thead>
+        <tbody>
+          {% for entry in user_entries %}
+            <tr class="user-management-row" data-dialog-id="user-edit-dialog-{{ entry.user.id }}">
+              <td>{{ entry.user.username }}</td>
+              <td>{{ entry.user.last_name }}</td>
+              <td>{{ entry.user.first_name }}</td>
+              <td>{{ entry.full_name }}</td>
+              <td>{{ entry.role }}</td>
+              <td>{{ entry.menu_groups }}</td>
+              <td>{{ entry.status_label }}</td>
+              <td>{% if entry.user.is_active %}有効{% else %}無効{% endif %}</td>
+              <td>{% if entry.user.last_login %}{{ entry.user.last_login|date:"Y/m/d H:i" }}{% else %}-{% endif %}</td>
+            </tr>
+          {% empty %}
+            <tr><td colspan="9">ユーザーがありません。</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  {% for entry in user_entries %}
+    <dialog class="user-edit-dialog" id="user-edit-dialog-{{ entry.user.id }}">
+      <form class="user-edit-form" method="post">
+        {% csrf_token %}
+        <input type="hidden" name="user_id" value="{{ entry.user.id }}">
+        <div class="user-edit-head">
+          <h2>{{ entry.full_name }}</h2>
+          <button type="button" class="dialog-close-button" data-dialog-close>×</button>
+        </div>
+        <div class="user-edit-grid">
+          <label>姓
+            <input name="last_name" value="{{ entry.user.last_name }}">
+          </label>
+          <label>名
+            <input name="first_name" value="{{ entry.user.first_name }}">
+          </label>
+          <label>メールアドレス
+            <input name="email" type="email" value="{{ entry.user.email }}">
+          </label>
+        </div>
+        <fieldset>
+          <legend>権限</legend>
+          {% for role_name in role_group_names %}
+            <label class="inline">
+              <input type="radio" name="role" value="{{ role_name }}" {% if entry.editable_role == role_name %}checked{% endif %}>
+              {{ role_name }}
+            </label>
+          {% endfor %}
+        </fieldset>
+        <fieldset class="user-edit-menu-groups">
+          <legend>グループ</legend>
+          {% for group in menu_group_choices %}
+            <label class="inline">
+              <input type="checkbox" name="menu_groups" value="{{ group.key }}" {% if group.key in entry.selected_menu_group_keys %}checked{% endif %}>
+              {{ group.title }}
+            </label>
+          {% endfor %}
+        </fieldset>
+        <div class="access-request-actions">
+          <button type="submit">保存</button>
+          <button type="button" class="button dialog-cancel-button" data-dialog-close>キャンセル</button>
+        </div>
+      </form>
+    </dialog>
+  {% endfor %}
+</section>
+<script>
+document.querySelectorAll('.user-management-row').forEach((row) => {
+  row.addEventListener('click', () => {
+    const dialog = document.getElementById(row.dataset.dialogId);
+    if (dialog) dialog.showModal();
+  });
+});
+document.querySelectorAll('[data-dialog-close]').forEach((button) => {
+  button.addEventListener('click', () => {
+    const dialog = button.closest('dialog');
+    if (dialog) dialog.close();
+  });
+});
+function updateMenuGroupState(form) {
+  const selectedRole = form.querySelector('input[name="role"]:checked');
+  const isAdmin = selectedRole && selectedRole.value === '管理者';
+  form.querySelectorAll('input[name="menu_groups"]').forEach((checkbox) => {
+    checkbox.disabled = isAdmin;
+    if (isAdmin) checkbox.checked = false;
+  });
+  const fieldset = form.querySelector('.user-edit-menu-groups');
+  if (fieldset) fieldset.classList.toggle('is-disabled', Boolean(isAdmin));
+}
+document.querySelectorAll('.user-edit-form').forEach((form) => {
+  updateMenuGroupState(form);
+  form.querySelectorAll('input[name="role"]').forEach((radio) => {
+    radio.addEventListener('change', () => updateMenuGroupState(form));
+  });
+});
+</script>
+{% endblock %}

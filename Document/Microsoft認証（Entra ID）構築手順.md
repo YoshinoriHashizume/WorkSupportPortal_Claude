@@ -4,9 +4,9 @@
 
 | 項目 | 内容 |
 |------|------|
-| 目的 | 本ポータルで **「Microsoft で続行」** ログインを動かすまでを、**Microsoft 側の画面操作**と**アプリの環境変数**まで手順どおりに示す |
+| 目的 | 将来、本ポータルで **「Microsoft で続行」** ログインへ切り替えるために、**Microsoft 側の画面操作**と**アプリの環境変数**まで手順どおりに示す |
 | 前提 | 会社の **Microsoft 365 / Entra ID のテナントはすでにある**（テナント新規作成は対象外） |
-| 実装 | Auth.js（NextAuth.js）、プロバイダ `microsoft-entra-id`（[`src/auth.ts`](../src/auth.ts)） |
+| 実装 | Django 認証 + **Authlib** + Microsoft Entra ID（OIDC / OAuth2）。Django セッションにログイン状態を保持する。ポータル内ユーザーは社員番号で紐づける |
 
 ### 作業開始前に確定していること
 
@@ -14,7 +14,7 @@
 
 | 用途 | 入力・登録に使うオリジン（本ドキュメントの固定値） |
 |------|------------------------------------------------------|
-| PC で開発アプリを `npm run dev` し、`http://localhost:3000` で開く | `http://localhost:3000` |
+| PC で開発アプリを `python manage.py runserver 0.0.0.0:3000` し、`http://localhost:3000` で開く | `http://localhost:3000` |
 | 本番（[`本番環境デプロイ手順.md`](本番環境デプロイ手順.md) と同じ公開 URL） | `http://192.168.3.196` |
 | Docker Compose の nginx で `http://localhost:8080` だけを開く | `http://localhost:8080` |
 
@@ -69,7 +69,7 @@
 
 ### A-2. リダイレクト URI を登録する
 
-コールバック URL は次の **テンプレート** である（`{オリジン}` を **スキーム + ホスト + ポート（ポートがあるときのみ）** に置き換える。末尾 `/` は付けない）。
+コールバック URL は次の **テンプレート** である（`{オリジン}` を **スキーム + ホスト + ポート（ポートがあるときのみ）** に置き換える。末尾 `/` は付けない）。Django 側ではこのパスを Authlib のコールバック view に割り当てる。
 
 ```text
 {オリジン}/api/auth/callback/microsoft-entra-id
@@ -166,17 +166,18 @@ https://login.microsoftonline.com/aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee/v2.0
 
 | 環境変数名 | 必須 | 入力する値 |
 |------------|------|------------|
-| `AUTH_SECRET` | はい | 直下の **AUTH_SECRET の生成** に従って生成した文字列を、`AUTH_SECRET="..."` の形式で入力する。変数名 `NEXTAUTH_SECRET` でも可（実装が `AUTH_SECRET` と併読する）。 |
-| `AUTH_TRUST_HOST` | はい | `true` |
+| `DJANGO_SECRET_KEY` | はい | 直下の **DJANGO_SECRET_KEY の生成** に従って生成した文字列を、`DJANGO_SECRET_KEY="..."` の形式で入力する。 |
+| `DJANGO_ALLOWED_HOSTS` | はい | カンマ区切り。例: `localhost,127.0.0.1,192.168.3.196` |
+| `DJANGO_CSRF_TRUSTED_ORIGINS` | 必要時 | HTTPS 終端や nginx 経由で必要な場合に、例: `http://localhost:8080,http://192.168.3.196` |
 | `AUTH_URL` | はい（またはコメントアウト） | 直下の **AUTH_URL に入力する値** の表から **1 行だけ**選び、その「入力する値」列を入力する。`AUTH_URL` を設定しない運用にする場合は、`.env.example` と同様に **`AUTH_URL=` 行をコメントアウト**する。 |
 | `AUTH_MICROSOFT_ENTRA_ID_ID` | はい | A-5 の項目 1（クライアント ID）を **そのまま貼り付け**る。 |
 | `AUTH_MICROSOFT_ENTRA_ID_SECRET` | はい | A-5 の項目 3（シークレットの値）を **そのまま貼り付け**る。 |
 | `AUTH_MICROSOFT_ENTRA_ID_ISSUER` | はい | A-5 の項目 4（組み立てた Issuer URL）を **そのまま 1 行で貼り付け**る。 |
 
-**AUTH_SECRET の生成（いずれか 1 つ）**
+**DJANGO_SECRET_KEY の生成（いずれか 1 つ）**
 
-- Git Bash / WSL / macOS / Linux: ターミナルで `openssl rand -base64 32` を実行し、表示された 1 行をコピーする。  
-- PowerShell: 下記「PowerShell で `AUTH_SECRET` を生成」を実行し、表示 1 行をコピーする。
+- Git Bash / WSL / macOS / Linux: ターミナルで `openssl rand -base64 50` を実行し、表示された 1 行をコピーする。  
+- PowerShell: 下記「PowerShell で `DJANGO_SECRET_KEY` を生成」を実行し、表示 1 行をコピーする。
 
 **AUTH_URL に入力する値**
 
@@ -187,11 +188,20 @@ https://login.microsoftonline.com/aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee/v2.0
 | `http://localhost:8080` | `http://localhost:8080` |
 | 上記以外 | 作業開始前にメモしたオリジンと **同一の文字列** |
 
+**Django 側の実装方針**
+
+- `/login` には「Microsoft で続行」ボタンを表示し、押下時に Authlib で Entra ID の認可エンドポイントへリダイレクトする。
+- `/api/auth/callback/microsoft-entra-id` は Authlib のコールバック view とし、ID トークンを検証して Django ユーザーへ対応付ける。
+- 初回ログイン時は Entra ID から取得できる **社員番号** を最優先キーとして、Django ユーザーを作成または更新する。Django ユーザーの `username` は社員番号とし、desknet's 認証で作成済みのユーザーがある場合は同じユーザーへ紐づける。
+- Entra ID の `sub` または `oid` は外部認証識別子として保持してよいが、ポータル内のユーザー同一性の正は社員番号とする。
+- ログイン完了後は Django セッションで認証状態を保持し、保護画面・API は `request.user.is_authenticated` で判定する。
+
 **`.env.local` の記入例**
 
 ```env
-AUTH_SECRET="（AUTH_SECRET の生成で得た文字列）"
-AUTH_TRUST_HOST="true"
+DJANGO_SECRET_KEY="（DJANGO_SECRET_KEY の生成で得た文字列）"
+DJANGO_ALLOWED_HOSTS="localhost,127.0.0.1"
+DJANGO_CSRF_TRUSTED_ORIGINS="http://localhost:3000"
 AUTH_URL="http://localhost:3000"
 
 AUTH_MICROSOFT_ENTRA_ID_ID="bbbbbbbb-cccc-dddd-eeee-ffffffffffff"
@@ -199,19 +209,19 @@ AUTH_MICROSOFT_ENTRA_ID_SECRET="（A-4 でコピーしたシークレットの�
 AUTH_MICROSOFT_ENTRA_ID_ISSUER="https://login.microsoftonline.com/aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee/v2.0"
 ```
 
-- `AUTH_SECRET` の引用符内は、上記 **AUTH_SECRET の生成** の出力に置き換える。  
+- `DJANGO_SECRET_KEY` の引用符内は、上記 **DJANGO_SECRET_KEY の生成** の出力に置き換える。  
 - `AUTH_MICROSOFT_ENTRA_ID_ID` の引用符内は、A-5 の **項目 1** に置き換える（`bbbbbbbb-...` はダミー）。  
 - `AUTH_MICROSOFT_ENTRA_ID_SECRET` の引用符内は、A-5 の **項目 3** に置き換える。  
 - `AUTH_MICROSOFT_ENTRA_ID_ISSUER` の 1 行は、A-5 の **項目 4** に置き換える（`aaaaaaaa-...` はダミー）。  
 - `AUTH_URL` の行は、**AUTH_URL に入力する値** の表に合わせて書き換える。
 
-**PowerShell で `AUTH_SECRET` を生成する**
+**PowerShell で `DJANGO_SECRET_KEY` を生成する**
 
 ```powershell
-[Convert]::ToBase64String([byte[]](1..32 | ForEach-Object { Get-Random -Maximum 256 }))
+[Convert]::ToBase64String([byte[]](1..50 | ForEach-Object { Get-Random -Maximum 256 }))
 ```
 
-表示された **1 行**をコピーし、`AUTH_SECRET="..."` の引用符内に貼り付ける。
+表示された **1 行**をコピーし、`DJANGO_SECRET_KEY="..."` の引用符内に貼り付ける。
 
 ### B-2. URL の一致確認（チェックリスト）
 
@@ -219,7 +229,7 @@ AUTH_MICROSOFT_ENTRA_ID_ISSUER="https://login.microsoftonline.com/aaaaaaaa-bbbb-
 
 1. ログイン試験時にブラウザのアドレスバーに表示される `http...` または `https...` まで（パスより前）。  
 2. Entra の **認証** に登録したリダイレクト URI のうち、今回使っている行の **`/api/auth/callback/microsoft-entra-id` より前**の部分。  
-3. `.env.local` に **`AUTH_URL` または `NEXTAUTH_URL` の行がある場合**は、その行の値が 1 と同じオリジンか確認する。**`AUTH_URL` / `NEXTAUTH_URL` をコメントアウトしている場合**は、1 と 2 の一致だけを確認する。
+3. `.env.local` に **`AUTH_URL` の行がある場合**は、その行の値が 1 と同じオリジンか確認する。**`AUTH_URL` をコメントアウトしている場合**は、1 と 2 の一致だけを確認する。
 
 ### B-3. 動作確認
 
@@ -229,7 +239,7 @@ AUTH_MICROSOFT_ENTRA_ID_ISSUER="https://login.microsoftonline.com/aaaaaaaa-bbbb-
 
 ### B-4. Entra 未設定で画面だけ試す場合
 
-`NODE_ENV=development` かつ **`AUTH_DEV_MODE=true`** のとき、ログイン画面から **メール `dev@local` / パスワード `dev`** でサインインできる。本番では **`AUTH_DEV_MODE` を書かない** または `false` にする。詳細は [`ローカル開発環境構築手順.md`](ローカル開発環境構築手順.md) を参照する。
+開発者専用ログインは設けない。Entra ID 未設定の期間は、当面の認証方式である desknet's NEO Login API による通常ログインで確認する。認証済み状態だけを必要とする自動テストでは、Django テストクライアントのログイン fixture 等を使う。
 
 ---
 
@@ -238,8 +248,8 @@ AUTH_MICROSOFT_ENTRA_ID_ISSUER="https://login.microsoftonline.com/aaaaaaaa-bbbb-
 | 症状 | 確認する項目 |
 |------|----------------|
 | `redirect_uri_mismatch` | Entra **認証** のリダイレクト URI が、`{使用中のオリジン}/api/auth/callback/microsoft-entra-id` と **完全一致**か。 |
-| ログイン直後にエラー・ループ | `AUTH_URL` / `NEXTAUTH_URL` が B-2 の 1 と一致しているか。`AUTH_TRUST_HOST` が `true` か。 |
-| Microsoft ボタンが出ない | `AUTH_MICROSOFT_ENTRA_ID_ID` と `AUTH_MICROSOFT_ENTRA_ID_SECRET` が両方とも空でないか（[`src/auth.ts`](../src/auth.ts)）。 |
+| ログイン直後にエラー・ループ | `AUTH_URL` が B-2 の 1 と一致しているか。Django 側の許可ホスト・CSRF / リダイレクト設定が公開オリジンと一致しているか。 |
+| Microsoft ボタンが出ない | `AUTH_MICROSOFT_ENTRA_ID_ID` と `AUTH_MICROSOFT_ENTRA_ID_SECRET` が両方とも空でないか。Django 側の認証設定が有効か。 |
 | シークレット失効 | A-4 で新しいシークレットを発行し、`AUTH_MICROSOFT_ENTRA_ID_SECRET` を新しい値に更新する。 |
 
 ---
@@ -261,3 +271,4 @@ AUTH_MICROSOFT_ENTRA_ID_ISSUER="https://login.microsoftonline.com/aaaaaaaa-bbbb-
 | 0.1 | 2026-04-17 | 初版相当 |
 | 0.2 | 2026-05-12 | 手順の再構成、リダイレクト URI・Issuer・環境変数の対応を追記 |
 | 0.3 | 2026-05-12 | 曖昧表現を削り、画面入力値・固定文字列・分岐を表で明示 |
+| 0.4 | 2026-06-03 | 将来の Entra ID 切替時も Django ユーザーを社員番号で紐づける方針を追記 |

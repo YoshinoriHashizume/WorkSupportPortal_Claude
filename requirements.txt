@@ -1,0 +1,10 @@
+﻿Django
+Authlib
+requests
+psycopg[binary]
+oracledb
+openpyxl
+gunicorn
+pytest
+pytest-django
+pytest-playwright

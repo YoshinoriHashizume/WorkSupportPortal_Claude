@@ -1,0 +1,68 @@
+{% extends "base.html" %}
+{% block title %}データベース{% endblock %}
+{% block body_class %}db-viewer-page{% endblock %}
+{% block content %}
+<section class="db-viewer">
+  <div class="portal-section-head">
+    <h1>データベース</h1>
+    <p>テーブルを選択して、先頭100件を参照できます。</p>
+  </div>
+
+  <form class="db-viewer-form" method="get">
+    <label>テーブル
+      <select name="table" onchange="this.form.submit()">
+        <option value="">選択してください</option>
+        {% for table_name in table_names %}
+          <option value="{{ table_name }}" {% if table_name == selected_table %}selected{% endif %}>{{ table_name }}</option>
+        {% endfor %}
+      </select>
+    </label>
+    <button type="submit">表示</button>
+  </form>
+
+  {% if error %}
+    <div class="error">{{ error }}</div>
+  {% elif selected_table %}
+    <section class="db-table-card">
+      <div class="db-table-head">
+        <h2>{{ selected_table }}</h2>
+        <p>
+          全 {{ total_count }} 件中、最大 {{ row_limit }} 件を表示
+          {% if sort_column %} / ソート: {{ sort_column }} {{ sort_direction|upper }}{% endif %}
+        </p>
+      </div>
+      <div class="db-table-wrap">
+        <table class="db-table">
+          <thead>
+            <tr>
+              {% for column in column_headers %}
+                <th>
+                  <a class="db-sort-link" href="?table={{ selected_table|urlencode }}&sort={{ column.name|urlencode }}&dir={{ column.sort_direction }}">
+                    {{ column.name }}
+                    {% if column.is_sorted %}
+                      <span>{% if sort_direction == "asc" %}▲{% else %}▼{% endif %}</span>
+                    {% endif %}
+                  </a>
+                </th>
+              {% endfor %}
+            </tr>
+          </thead>
+          <tbody>
+            {% for row in rows %}
+              <tr>
+                {% for value in row %}
+                  <td>{{ value }}</td>
+                {% endfor %}
+              </tr>
+            {% empty %}
+              <tr><td colspan="{{ columns|length }}">データがありません。</td></tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </section>
+  {% else %}
+    <p class="favorite-empty">表示するテーブルを選択してください。</p>
+  {% endif %}
+</section>
+{% endblock %}

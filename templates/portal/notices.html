@@ -1,0 +1,58 @@
+{% extends "base.html" %}
+{% block title %}お知らせ{% endblock %}
+{% block content %}
+<section class="notice-management">
+  <div class="portal-section-head">
+    <h1>お知らせ</h1>
+    <p>ポータルに表示するお知らせを追加・編集・削除できます。</p>
+  </div>
+
+  <form class="notice-form card" method="post">
+    {% csrf_token %}
+    <h2>新規追加</h2>
+    <label>タイトル
+      <input name="title" maxlength="120" required>
+    </label>
+    <label>内容
+      <textarea name="body" rows="4" required></textarea>
+    </label>
+    <label class="inline">
+      <input type="checkbox" name="is_published" checked>
+      公開する
+    </label>
+    <button type="submit" name="action" value="save">追加</button>
+  </form>
+
+  <div class="notice-admin-list">
+    {% for notice in notices %}
+      <article class="notice-admin-card">
+        <form class="notice-form" method="post">
+          {% csrf_token %}
+          <input type="hidden" name="notice_id" value="{{ notice.id }}">
+          <div class="notice-admin-head">
+            <h2>{{ notice.title }}</h2>
+            <span>{% if notice.is_published %}公開中{% else %}非公開{% endif %}</span>
+          </div>
+          <label>タイトル
+            <input name="title" maxlength="120" value="{{ notice.title }}" required>
+          </label>
+          <label>内容
+            <textarea name="body" rows="4" required>{{ notice.body }}</textarea>
+          </label>
+          <label class="inline">
+            <input type="checkbox" name="is_published" {% if notice.is_published %}checked{% endif %}>
+            公開する
+          </label>
+          <p class="muted">作成: {{ notice.created_at|date:"Y/m/d H:i" }} / 更新: {{ notice.updated_at|date:"Y/m/d H:i" }}</p>
+          <div class="access-request-actions">
+            <button type="submit" name="action" value="save">保存</button>
+            <button type="submit" name="action" value="delete" class="danger-button" onclick="return confirm('このお知らせを削除します。よろしいですか？');">削除</button>
+          </div>
+        </form>
+      </article>
+    {% empty %}
+      <p class="favorite-empty">お知らせはありません。</p>
+    {% endfor %}
+  </div>
+</section>
+{% endblock %}

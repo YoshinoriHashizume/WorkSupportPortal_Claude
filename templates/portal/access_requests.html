@@ -1,0 +1,95 @@
+{% extends "base.html" %}
+{% block title %}承認依頼{% endblock %}
+{% block content %}
+<section class="access-requests">
+  <div class="portal-section-head">
+    <h1>承認依頼</h1>
+    <p>初回ログインしたユーザーの利用可否と権限を設定します。</p>
+  </div>
+
+  <div class="access-request-list">
+    {% for entry in access_request_entries %}
+      {% with request_item=entry.access_request %}
+      <article class="access-request-card">
+        <div class="access-request-summary">
+          <div>
+            <h2>{% if request_item.user.last_name or request_item.user.first_name %}{{ request_item.user.last_name }} {{ request_item.user.first_name }}{% else %}{{ request_item.user.username }}{% endif %}</h2>
+            <p>社員番号: {{ request_item.user.username }}</p>
+          </div>
+          <span class="access-status-badge access-status-{{ request_item.status }}">{{ request_item.get_status_display }}</span>
+        </div>
+
+        <dl class="access-request-meta">
+          <div><dt>申請日時</dt><dd>{{ request_item.requested_at|date:"Y/m/d H:i" }}</dd></div>
+          <div>
+            <dt>確認者</dt>
+            <dd>
+              {% if request_item.reviewed_by %}
+                {% if request_item.reviewed_by.last_name or request_item.reviewed_by.first_name %}
+                  {{ request_item.reviewed_by.last_name }} {{ request_item.reviewed_by.first_name }}
+                {% else %}
+                  {{ request_item.reviewed_by.username }}
+                {% endif %}
+              {% else %}
+                -
+              {% endif %}
+            </dd>
+          </div>
+          <div><dt>確認日時</dt><dd>{% if request_item.reviewed_at %}{{ request_item.reviewed_at|date:"Y/m/d H:i" }}{% else %}-{% endif %}</dd></div>
+        </dl>
+
+        <form class="access-request-form" method="post">
+          {% csrf_token %}
+          <input type="hidden" name="request_id" value="{{ request_item.id }}">
+          <fieldset>
+            <legend>権限</legend>
+            {% for group in role_groups %}
+              <label class="inline">
+                <input type="radio" name="role" value="{{ group.name }}" {% if entry.role == group.name %}checked{% endif %}>
+                {{ group.name }}
+              </label>
+            {% endfor %}
+          </fieldset>
+          <fieldset class="access-request-menu-groups">
+            <legend>使えるグループ</legend>
+            {% for group in menu_group_choices %}
+              <label class="inline">
+                <input type="checkbox" name="menu_groups" value="{{ group.key }}" {% if group.key in entry.selected_menu_group_keys %}checked{% endif %}>
+                {{ group.title }}
+              </label>
+            {% endfor %}
+          </fieldset>
+          <label>メモ
+            <textarea name="note" rows="2">{{ request_item.note }}</textarea>
+          </label>
+          <div class="access-request-actions">
+            <button type="submit" name="action" value="approve">許可</button>
+            <button type="submit" name="action" value="reject" class="danger-button">拒否</button>
+          </div>
+        </form>
+      </article>
+      {% endwith %}
+    {% empty %}
+      <p class="favorite-empty">承認依頼はありません。</p>
+    {% endfor %}
+  </div>
+</section>
+<script>
+function updateAccessRequestMenuGroupState(form) {
+  const selectedRole = form.querySelector('input[name="role"]:checked');
+  const isAdmin = selectedRole && selectedRole.value === '管理者';
+  form.querySelectorAll('input[name="menu_groups"]').forEach((checkbox) => {
+    checkbox.disabled = isAdmin;
+    if (isAdmin) checkbox.checked = false;
+  });
+  const fieldset = form.querySelector('.access-request-menu-groups');
+  if (fieldset) fieldset.classList.toggle('is-disabled', Boolean(isAdmin));
+}
+document.querySelectorAll('.access-request-form').forEach((form) => {
+  updateAccessRequestMenuGroupState(form);
+  form.querySelectorAll('input[name="role"]').forEach((radio) => {
+    radio.addEventListener('change', () => updateAccessRequestMenuGroupState(form));
+  });
+});
+</script>
+{% endblock %}
