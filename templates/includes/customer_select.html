@@ -1,0 +1,28 @@
+{% if not hide_label %}<label{% if label_id %} id="{{ label_id }}"{% endif %} class="portal-customer-field{% if variant %} portal-customer-field--{{ variant }}{% endif %}{% if label_class %} {{ label_class }}{% endif %}">{{ label|default:"得意先" }}{% endif %}
+  <select
+    name="{{ field_name }}"
+    {% if select_id %}id="{{ select_id }}"{% endif %}
+    class="portal-customer-select{% if variant %} portal-customer-select--{{ variant }}{% endif %}{% if select_class %} {{ select_class }}{% endif %}"
+    {% if customers_api %}data-customers-api="{{ customers_api }}"{% endif %}
+    {% if selected_value %}data-selected="{{ selected_value }}"{% endif %}
+    {% if empty_label %}data-empty-label="{{ empty_label }}"{% endif %}
+    {% if required %}required{% endif %}
+    {% if disabled %}disabled{% endif %}
+  >
+    {% if customers_api %}
+      {% if empty_label != False %}
+        <option value="">{{ empty_label|default:"選択してください" }}</option>
+      {% endif %}
+      {% if selected_value %}
+        <option value="{{ selected_value }}" selected>{{ selected_value }}</option>
+      {% endif %}
+    {% else %}
+      {% if empty_label != False %}
+        <option value="" {% if not selected_value %}selected{% endif %}>{{ empty_label|default:"選択してください" }}</option>
+      {% endif %}
+      {% for customer in customers %}
+        <option value="{{ customer.custCode }}" {% if customer.custCode == selected_value %}selected{% endif %}>{{ customer.custCode }} - {{ customer.custName }}</option>
+      {% endfor %}
+    {% endif %}
+  </select>
+{% if not hide_label %}</label>{% endif %}

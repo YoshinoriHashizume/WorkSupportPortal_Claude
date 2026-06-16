@@ -4,6 +4,7 @@ import pytest
 from django.contrib.auth import get_user_model
 from django.contrib.auth.models import Group
 
+from apps.portal.favorites import can_access_menu_item, is_menu_path_active, menu_groups_with_items
 from apps.portal.models import PortalMenuGroupAccess, PortalNotice, UserAccessRequest, UserFavoriteMenu
 
 
@@ -36,11 +37,19 @@ def test_dashboard_shows_portal_title_and_favorite_controls(client, user):
     assert "生産管理" in html
     assert "品保" in html
     assert "管理" in html
+    assert "完成品" in html
+    assert "支給品" in html
+    assert "検収書比較" in html
+    assert 'class="sidebar-menu-branch"' in html
+    assert "<details" in html
+    assert 'class="sidebar-menu-group"' in html
     assert "お知らせ" in html
     assert "承認依頼" in html
     assert "ユーザー管理" in html
     assert "データベース" in html
     assert 'data-menu-key="five-year-nine"' in html
+    assert 'data-menu-key="receipt-comparison-finished-product"' in html
+    assert 'data-menu-key="receipt-comparison-supplied-parts"' in html
     assert 'data-menu-key="notices"' in html
     assert 'data-menu-key="access-requests"' in html
     assert 'data-menu-key="user-management"' in html
@@ -49,6 +58,7 @@ def test_dashboard_shows_portal_title_and_favorite_controls(client, user):
     assert "お気に入りはありません" in html
     assert "お知らせ" in html
     assert "現在、お知らせはありません。" in html
+    assert "portal-sidebar.js" in html
 
 
 @pytest.mark.django_db
@@ -123,6 +133,12 @@ def test_general_user_sees_only_assigned_department_menu(client):
     html = response.content.decode("utf-8")
     assert "生産管理" in html
     assert "5年9組" in html
+    assert "完成品" in html
+    assert "支給品" in html
+    assert "検収書比較" in html
+    assert 'class="sidebar-menu-branch"' in html
+    assert "<details" in html
+    assert 'class="sidebar-menu-group"' in html
     assert "承認依頼" not in html
     assert "データベース" not in html
     assert "営業" not in html
@@ -149,6 +165,117 @@ def test_user_without_department_cannot_open_department_app(client):
     response = client.get("/app/production/five-year-nine")
 
     assert response.status_code == 403
+
+
+def test_is_menu_path_active():
+    assert is_menu_path_active(
+        "/app/production/receipt-comparison",
+        "/app/production/receipt-comparison?type=finished-product",
+        "finished-product",
+    )
+    assert is_menu_path_active(
+        "/app/production/receipt-comparison/export",
+        "/app/production/receipt-comparison?type=finished-product",
+        "finished-product",
+    )
+    assert not is_menu_path_active(
+        "/app/production/five-year-nine",
+        "/app/production/receipt-comparison?type=finished-product",
+        "finished-product",
+    )
+
+
+@pytest.mark.django_db
+def test_receipt_comparison_branch_uses_same_row_layout_as_sibling_items(client):
+    user = get_user_model().objects.create_user(username="branch-layout-user")
+    group, _ = Group.objects.get_or_create(name="一般ユーザー")
+    user.groups.add(group)
+    PortalMenuGroupAccess.objects.create(user=user, group_key="production")
+    client.force_login(user)
+
+    response = client.get("/app")
+
+    html = response.content.decode("utf-8")
+    assert 'class="sidebar-menu-branch-icon"' in html
+    assert 'class="sidebar-menu-branch-label">検収書比較</span>' in html
+    assert 'class="sidebar-menu-item"' in html
+
+
+@pytest.mark.django_db
+def test_receipt_comparison_menu_is_grouped_under_parent(client):
+    user = get_user_model().objects.create_user(username="menu-structure-user")
+    group, _ = Group.objects.get_or_create(name="一般ユーザー")
+    user.groups.add(group)
+    PortalMenuGroupAccess.objects.create(user=user, group_key="production")
+
+    groups = menu_groups_with_items(user)
+    production = next(group for group in groups if group["key"] == "production")
+    receipt_parent = next(item for item in production["items"] if item["key"] == "receipt-comparison")
+
+    assert receipt_parent["title"] == "検収書比較"
+    assert receipt_parent["href"] == ""
+    assert [child["title"] for child in receipt_parent["children"]] == ["完成品", "支給品"]
+    assert receipt_parent["is_expanded"] is False
+
+
+@pytest.mark.django_db
+def test_active_receipt_comparison_page_expands_group_and_branch(client):
+    user = get_user_model().objects.create_user(username="receipt-expand-user")
+    group, _ = Group.objects.get_or_create(name="一般ユーザー")
+    user.groups.add(group)
+    PortalMenuGroupAccess.objects.create(user=user, group_key="production")
+    client.force_login(user)
+
+    response = client.get("/app/production/receipt-comparison?type=finished-product")
+
+    assert response.status_code == 200
+    html = response.content.decode("utf-8")
+    assert 'data-menu-group-key="production"' in html
+    assert 'data-menu-key="receipt-comparison"' in html
+    assert 'data-sidebar-force-open="true"' in html
+    assert "<details" in html and " open" in html
+    assert 'href="/app/production/receipt-comparison?type=finished-product" class="is-active"' in html
+
+
+@pytest.mark.django_db
+def test_menu_groups_expand_when_current_path_matches(client):
+    user = get_user_model().objects.create_user(username="expand-menu-user")
+    group, _ = Group.objects.get_or_create(name="一般ユーザー")
+    user.groups.add(group)
+    PortalMenuGroupAccess.objects.create(user=user, group_key="production")
+
+    groups = menu_groups_with_items(user, "/app/production/receipt-comparison", "supplied-parts")
+    production = next(group for group in groups if group["key"] == "production")
+    receipt_parent = next(item for item in production["items"] if item["key"] == "receipt-comparison")
+
+    assert production["is_expanded"] is True
+    assert receipt_parent["is_expanded"] is True
+    assert receipt_parent["children"][1]["is_active"] is True
+
+
+@pytest.mark.django_db
+def test_parent_menu_cannot_be_favorited(client, user):
+    PortalMenuGroupAccess.objects.create(user=user, group_key="production")
+    client.force_login(user)
+
+    response = client.post(
+        "/api/favorite-menus",
+        data=json.dumps({"menuKey": "receipt-comparison"}),
+        content_type="application/json",
+    )
+
+    assert response.status_code == 400
+    assert not UserFavoriteMenu.objects.filter(user=user, menu_key="receipt-comparison").exists()
+
+
+@pytest.mark.django_db
+def test_can_access_parent_menu_when_child_is_accessible(client):
+    user = get_user_model().objects.create_user(username="parent-access-user")
+    group, _ = Group.objects.get_or_create(name="一般ユーザー")
+    user.groups.add(group)
+    PortalMenuGroupAccess.objects.create(user=user, group_key="production")
+
+    assert can_access_menu_item(user, "receipt-comparison") is True
 
 
 @pytest.mark.django_db

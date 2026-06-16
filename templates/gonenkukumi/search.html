@@ -21,15 +21,7 @@
   <form id="search-form" class="card stack gonen-search-card" autocomplete="off">
     {% csrf_token %}
     <h2>検索条件</h2>
-    <label>得意先コード
-      <div class="customer-combobox" id="customer-combobox">
-        <div class="customer-code-row">
-          <input name="custCode" required pattern="\d{3}" value="{{ initial.custCode }}" autocomplete="off" aria-controls="customers" aria-expanded="false">
-          <button id="customer-toggle" class="customer-toggle" type="button" aria-label="得意先候補を展開" aria-expanded="false">▼</button>
-        </div>
-        <div id="customers" class="customer-options" role="listbox" hidden></div>
-      </div>
-    </label>
+    {% include "includes/customer_select.html" with field_name="custCode" label="得意先" variant="gonen" customers_api="/api/gonenkukumi/customers" selected_value=initial.custCode required=True select_id="custCode" %}
     <label>得意先品目
       <input class="cust-item-input" name="custItem" value="{{ initial.custItem }}" list="cust-items" autocomplete="off">
       <datalist id="cust-items"></datalist>
@@ -56,7 +48,7 @@
       <table class="history-table">
         <thead>
           <tr>
-            <th>得意先コード</th>
+            <th>得意先</th>
             <th>得意先品目</th>
             <th>品目任意変換値</th>
             <th>検索年月</th>
@@ -70,6 +62,7 @@
     </div>
   </section>
 </div>
+<script src="/static/js/portal-customer-select.js"></script>
 <script src="/static/vendor/flatpickr/flatpickr.min.js"></script>
 <script src="/static/vendor/flatpickr/ja.js"></script>
 <script src="/static/vendor/flatpickr/plugins/monthSelect/index.js"></script>
@@ -77,17 +70,18 @@
 const form = document.querySelector('#search-form');
 const error = document.querySelector('#search-error');
 const csrfToken = document.querySelector('[name=csrfmiddlewaretoken]').value;
-const custCodeInput = form.elements.custCode;
+const custCodeSelect = form.elements.custCode;
 const custItemInput = form.elements.custItem;
 const yearMonthInput = form.elements.yearMonth;
-const customerCombobox = document.querySelector('#customer-combobox');
-const customerToggle = document.querySelector('#customer-toggle');
-const customersList = document.querySelector('#customers');
 const custItemsList = document.querySelector('#cust-items');
 const custItemEmpty = document.querySelector('#cust-item-empty');
-let customerOptions = [];
 let custItemOptions = [];
 let loadedCustItemKey = '';
+
+function customerDisplayLabel(code) {
+  return window.portalCustomerSelectLabel(custCodeSelect, code);
+}
+
 const yearMonthPicker = flatpickr(yearMonthInput, {
   locale: flatpickr.l10ns.ja,
   plugins: [
@@ -207,18 +201,17 @@ async function loadHistory() {
     const row = document.createElement('tr');
     row.tabIndex = 0;
     row.innerHTML = `
-      <td class="mono">${item.custCode}</td>
+      <td class="mono">${customerDisplayLabel(item.custCode)}</td>
       <td title="${item.custItem || ''}">${item.custItem || '-'}</td>
       <td>${formatHistoryOptionChange(item.optionChange)}</td>
       <td class="mono">${formatDateSlash(item.yearMonth)}</td>
       <td>${formatExecutedAt(item.executedAt)}</td>
     `;
     const apply = () => {
-      form.custCode.value = item.custCode;
+      custCodeSelect.value = item.custCode;
       form.custItem.value = item.custItem || '';
       setYearMonth(item.yearMonth);
       form.optionChange.value = formatHistoryOptionChange(item.optionChange) || '*';
-      renderCustomerOptions(filterCustomerOptions());
       loadCustItemsForCurrentCustomer();
     };
     row.addEventListener('click', apply);
@@ -260,91 +253,12 @@ function filterCustItemOptions() {
 
 function renderCustItemOptions(values) {
   setOptions(custItemsList, values, 'custItem');
-  const shouldShowEmpty = Boolean(custCodeInput.value && custItemInput.value && !values.length);
+  const shouldShowEmpty = Boolean(custCodeSelect.value && custItemInput.value && !values.length);
   custItemEmpty.hidden = !shouldShowEmpty;
 }
 
-function setCustomerOptions(values) {
-  customerOptions = values;
-  renderCustomerOptions(filterCustomerOptions());
-}
-
-function filterCustomerOptions() {
-  const query = String(custCodeInput.value || '').trim().toLowerCase();
-  if (!query) {
-    return customerOptions;
-  }
-  return customerOptions.filter((item) => {
-    const code = String(item.custCode || '').toLowerCase();
-    const name = String(item.custName || '').toLowerCase();
-    return code.startsWith(query) || name.includes(query);
-  });
-}
-
-function renderCustomerOptions(values) {
-  customersList.innerHTML = '';
-  if (!values.length) {
-    const empty = document.createElement('div');
-    empty.className = 'customer-option is-empty';
-    empty.textContent = '候補がありません';
-    customersList.append(empty);
-    return;
-  }
-  for (const item of values) {
-    const option = document.createElement('button');
-    option.type = 'button';
-    option.className = 'customer-option';
-    option.setAttribute('role', 'option');
-    option.dataset.value = item.custCode;
-    option.textContent = `${item.custCode} ${item.custName || ''}`.trim();
-    customersList.append(option);
-  }
-}
-
-function setCustomerOpen(isOpen) {
-  customersList.hidden = !isOpen;
-  custCodeInput.setAttribute('aria-expanded', String(isOpen));
-  customerToggle.setAttribute('aria-expanded', String(isOpen));
-}
-
-function openCustomerOptions() {
-  renderCustomerOptions(filterCustomerOptions());
-  setCustomerOpen(true);
-}
-
-function closeCustomerOptions() {
-  setCustomerOpen(false);
-}
-
-function selectCustomer(value) {
-  custCodeInput.value = value;
-  clearCustItemSelection();
-  closeCustomerOptions();
-  loadCustItemsForCurrentCustomer();
-}
-
-async function loadCustomers() {
-  const response = await fetch('/api/gonenkukumi/customers');
-  const payload = await response.json();
-  if (response.ok) {
-    setCustomerOptions(payload.customers || []);
-  }
-}
-
-function resetCustItems() {
-  custItemOptions = [];
-  loadedCustItemKey = '';
-  custItemsList.innerHTML = '';
-  custItemEmpty.hidden = true;
-}
-
-function clearCustItemSelection() {
-  custItemInput.value = '';
-  resetCustItems();
-}
-
 async function loadCustItemsForCurrentCustomer() {
-  const custCode = String(custCodeInput.value || '').trim();
+  const custCode = String(custCodeSelect.value || '').trim();
   const asOfDate = form.asOfDate.value || todayIsoDate();
   if (!custCode || !/^\d{3}$/.test(custCode)) {
     resetCustItems();
@@ -366,18 +280,20 @@ async function loadCustItemsForCurrentCustomer() {
   }
 }
 
-function handleCustomerCodeEditing() {
-  if (loadedCustItemKey && !loadedCustItemKey.startsWith(`${custCodeInput.value}|`)) {
-    resetCustItems();
-  }
+function resetCustItems() {
+  custItemOptions = [];
+  loadedCustItemKey = '';
+  custItemsList.innerHTML = '';
+  custItemEmpty.hidden = true;
 }
 
-async function loadCustItems() {
-  await loadCustItemsForCurrentCustomer();
+function clearCustItemSelection() {
+  custItemInput.value = '';
+  resetCustItems();
 }
 
 function filterLoadedCustItems() {
-  if (!custCodeInput.value) {
+  if (!custCodeSelect.value) {
     custItemsList.innerHTML = '';
     custItemEmpty.hidden = true;
     return;
@@ -385,38 +301,9 @@ function filterLoadedCustItems() {
   renderCustItemOptions(filterCustItemOptions());
 }
 
-custCodeInput.addEventListener('input', () => {
-  clearCustItemSelection();
-  handleCustomerCodeEditing();
-  renderCustomerOptions(filterCustomerOptions());
-  openCustomerOptions();
-  filterLoadedCustItems();
-});
-custCodeInput.addEventListener('focus', () => {
-  renderCustomerOptions(filterCustomerOptions());
-});
-custCodeInput.addEventListener('change', () => {
+custCodeSelect.addEventListener('change', () => {
   clearCustItemSelection();
   loadCustItemsForCurrentCustomer();
-});
-customerToggle.addEventListener('click', () => {
-  if (customersList.hidden) {
-    openCustomerOptions();
-  } else {
-    closeCustomerOptions();
-  }
-});
-customersList.addEventListener('click', (event) => {
-  const option = event.target.closest('.customer-option');
-  if (!option || !option.dataset.value) {
-    return;
-  }
-  selectCustomer(option.dataset.value);
-});
-document.addEventListener('click', (event) => {
-  if (!customerCombobox.contains(event.target)) {
-    closeCustomerOptions();
-  }
 });
 custItemInput.addEventListener('focus', loadCustItemsForCurrentCustomer);
 custItemInput.addEventListener('input', filterLoadedCustItems);
@@ -444,10 +331,14 @@ form.addEventListener('submit', async (event) => {
   window.open(resultUrl(params), '_blank');
 });
 
-loadHistory();
-loadCustomers();
-setYearMonth(yearMonthInput.value);
-form.asOfDate.value = todayIsoDate();
-loadCustItems();
+async function bootstrapSearchPage() {
+  await window.initPortalCustomerSelects();
+  await loadHistory();
+  setYearMonth(yearMonthInput.value);
+  form.asOfDate.value = todayIsoDate();
+  await loadCustItemsForCurrentCustomer();
+}
+
+bootstrapSearchPage();
 </script>
 {% endblock %}

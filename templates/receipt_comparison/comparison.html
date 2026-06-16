@@ -1,0 +1,179 @@
+{% extends "base.html" %}
+{% block title %}検収書比較（{{ comparison_type_page_label }}）{% endblock %}
+{% block body_class %}receipt-comparison-page{% endblock %}
+{% block content %}
+<section class="receipt-comparison{% if results_panel_active %} receipt-comparison--results-panel{% endif %}">
+  <div class="portal-section-head receipt-head">
+    <div>
+      <h1>検収書比較（{{ comparison_type_page_label }}）</h1>
+      <p>取引先受領書と MARI のデータを比較します。</p>
+    </div>
+    {% if show_settings %}
+      <a class="button secondary-button" href="{% url 'receipt_comparison:settings' %}?type={{ type_slug }}">設定</a>
+    {% endif %}
+  </div>
+
+  <form class="receipt-filter card" method="get">
+    <input type="hidden" name="type" value="{{ type_slug }}">
+    <input type="hidden" name="display" value="1">
+    <label>得意先
+      <select name="supplier_id" required>
+        <option value="">選択してください</option>
+        {% for item in suppliers %}
+          <option value="{{ item.id }}" {% if supplier and item.id == supplier.id %}selected{% endif %}>{{ item.primary_code }} - {{ item.name }}</option>
+        {% endfor %}
+      </select>
+    </label>
+    <label>開始日
+      <input type="date" name="start_date" value="{{ start_date }}" required>
+    </label>
+    <label>終了日
+      <input type="date" name="end_date" value="{{ end_date }}" required>
+    </label>
+    <button type="submit">表示</button>
+  </form>
+
+  {% if supplier and not results_panel_active %}
+    <form class="receipt-upload card" method="post" enctype="multipart/form-data">
+      {% csrf_token %}
+      <input type="hidden" name="type" value="{{ type_slug }}">
+      <input type="hidden" name="supplier_id" value="{{ supplier.id }}">
+      <input type="hidden" name="start_date" value="{{ start_date }}">
+      <input type="hidden" name="end_date" value="{{ end_date }}">
+      <input type="hidden" name="sort" value="{{ sort_key }}">
+      <input type="hidden" name="dir" value="{{ sort_direction }}">
+      <label>取引先受領書
+        <input type="file" name="receipt_file" accept="{{ receipt_file_accept }}" required>
+      </label>
+      <button type="submit" name="action" value="compare">比較</button>
+      <p class="muted">{% if comparison_type == "finished_product" %}完成品はCSVを指定してください。{% else %}支給品はTXTを指定してください。{% endif %}</p>
+    </form>
+  {% elif not supplier %}
+    <p class="favorite-empty">得意先を選択してください。{% if show_settings %}得意先が表示されない場合は、設定画面で登録してください。{% else %}得意先が表示されない場合は、管理者に得意先の登録を依頼してください。{% endif %}</p>
+  {% endif %}
+
+  {% if supplier and results_panel_active %}
+    <form id="receipt-results-compare-form" class="receipt-results-compare-form" method="post" enctype="multipart/form-data">
+      {% csrf_token %}
+      <input type="hidden" name="type" value="{{ type_slug }}">
+      <input type="hidden" name="supplier_id" value="{{ supplier.id }}">
+      <input type="hidden" name="start_date" value="{{ start_date }}">
+      <input type="hidden" name="end_date" value="{{ end_date }}">
+      <input type="hidden" name="sort" value="{{ sort_key }}">
+      <input type="hidden" name="dir" value="{{ sort_direction }}">
+      <input type="hidden" name="action" value="compare">
+    </form>
+  {% endif %}
+
+  <form method="post" class="receipt-results-card card receipt-results-main-form">
+    {% csrf_token %}
+    {% if supplier %}
+      <input type="hidden" name="type" value="{{ type_slug }}">
+      <input type="hidden" name="supplier_id" value="{{ supplier.id }}">
+      <input type="hidden" name="start_date" value="{{ start_date }}">
+      <input type="hidden" name="end_date" value="{{ end_date }}">
+      <input type="hidden" name="sort" value="{{ sort_key }}">
+      <input type="hidden" name="dir" value="{{ sort_direction }}">
+    {% endif %}
+    <div class="db-table-head receipt-results-head">
+      <div>
+        <h2>比較結果{% if has_pending %} <span class="muted">（未登録）</span>{% endif %}</h2>
+      </div>
+      {% if supplier and results_panel_active %}
+        <div class="receipt-results-head-actions">
+          <label class="button secondary-button receipt-results-file-button">
+            ファイル選択
+            <input
+              type="file"
+              name="receipt_file"
+              form="receipt-results-compare-form"
+              class="receipt-results-file-input"
+              accept="{{ receipt_file_accept }}"
+            >
+          </label>
+          {% if rows %}
+            <a class="button secondary-button" href="{% url 'receipt_comparison:export_csv' %}?{{ comparison_query }}">CSV</a>
+            {% if not has_pending %}
+              <button type="submit" name="action" value="update">結果・備考を更新</button>
+            {% endif %}
+          {% endif %}
+          {% if has_pending %}
+            <button type="submit" name="action" value="register">登録</button>
+          {% endif %}
+        </div>
+      {% endif %}
+    </div>
+    {% if rows %}
+      <div class="db-table-wrap">
+        <table class="db-table receipt-result-table">
+          <thead>
+            <tr>
+              <th>受領データID</th>
+              {% for column in sort_headers %}
+                {% if column.key != "supplier_cancel_qty" or show_cancel_qty %}
+                  {% if column.key != "supplier_name" or show_supplier_name %}
+                    <th>
+                      <a class="db-sort-link" href="{{ column.href }}">
+                        {{ column.label }}
+                        {% if column.is_sorted %}
+                          <span>{% if sort_direction == "asc" %}▲{% else %}▼{% endif %}</span>
+                        {% endif %}
+                      </a>
+                    </th>
+                  {% endif %}
+                {% endif %}
+              {% endfor %}
+            </tr>
+          </thead>
+          <tbody>
+            {% for row in rows %}
+              <tr>
+                <td>
+                  {% if row.is_pending %}-{% else %}{{ row.id }}{% endif %}
+                  {% if not row.is_pending %}<input type="hidden" name="result_id" value="{{ row.id }}">{% endif %}
+                </td>
+                <td>
+                  <select name="{% if row.is_pending %}receipt_flag_pending_{{ row.pending_index }}{% else %}receipt_flag_{{ row.id }}{% endif %}">
+                    {% for value, label in flag_choices %}
+                      <option value="{{ value }}" {% if value == row.receipt_flag %}selected{% endif %}>{{ label }}</option>
+                    {% endfor %}
+                  </select>
+                </td>
+                <td>{{ row.mari_item_cd }}</td>
+                <td>{{ row.mari_date }}</td>
+                <td class="mono">{{ row.mari_qty }}</td>
+                <td>{{ row.delivery_place }}</td>
+                <td>{{ row.supplier_item_cd }}</td>
+                <td>{{ row.supplier_delivery_month_day }}</td>
+                <td class="mono">{{ row.supplier_qty }}</td>
+                {% if show_cancel_qty %}<td class="mono">{{ row.supplier_cancel_qty }}</td>{% endif %}
+                {% if show_supplier_name %}<td>{{ row.supplier_name }}</td>{% endif %}
+                <td><input name="{% if row.is_pending %}remarks_pending_{{ row.pending_index }}{% else %}remarks_{{ row.id }}{% endif %}" value="{{ row.remarks }}"></td>
+              </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    {% elif supplier and results_panel_active %}
+      <p class="favorite-empty">比較結果はありません。</p>
+    {% elif supplier %}
+      <p class="favorite-empty">比較結果はありません。</p>
+    {% endif %}
+  </form>
+</section>
+{% if results_panel_active %}
+<script>
+document.querySelectorAll('.receipt-results-file-input').forEach((input) => {
+  input.addEventListener('change', () => {
+    if (!input.files?.length) {
+      return;
+    }
+    const form = document.getElementById('receipt-results-compare-form');
+    if (form) {
+      form.requestSubmit();
+    }
+  });
+});
+</script>
+{% endif %}
+{% endblock %}

@@ -3,13 +3,27 @@ from __future__ import annotations
 from django.http import HttpRequest, HttpResponse, JsonResponse
 from django.shortcuts import redirect
 
-from .favorites import can_access_menu_item, is_portal_admin
+from .favorites import can_access_menu_item, is_portal_admin, receipt_comparison_type_from_path
 from .models import UserAccessRequest
 
 
 ALLOWED_PATHS = {
     "/app/access-status",
 }
+
+
+def receipt_comparison_menu_key_for_request(request: HttpRequest) -> str | None:
+    path = request.path
+    if path.startswith("/app/production/receipt-comparison/supplied-parts"):
+        return "receipt-comparison-supplied-parts"
+    if path.startswith("/app/production/receipt-comparison/finished-product"):
+        return "receipt-comparison-finished-product"
+    if not path.startswith("/app/production/receipt-comparison"):
+        return None
+    type_param = request.GET.get("type") or receipt_comparison_type_from_path(path)
+    if type_param == "supplied-parts":
+        return "receipt-comparison-supplied-parts"
+    return "receipt-comparison-finished-product"
 
 
 class AccessApprovalMiddleware:
@@ -47,9 +61,18 @@ class AccessApprovalMiddleware:
         if request.path.startswith("/app/management/") and not is_portal_admin(request.user):
             return HttpResponse("権限がありません。", status=403)
 
+        if request.path.startswith("/app/production/receipt-comparison") and "/settings" in request.path and not is_portal_admin(
+            request.user
+        ):
+            return HttpResponse("権限がありません。", status=403)
+
         if request.path.startswith("/app/production/five-year-nine") and not can_access_menu_item(
             request.user, "five-year-nine"
         ):
+            return HttpResponse("権限がありません。", status=403)
+
+        receipt_comparison_menu_key = receipt_comparison_menu_key_for_request(request)
+        if receipt_comparison_menu_key and not can_access_menu_item(request.user, receipt_comparison_menu_key):
             return HttpResponse("権限がありません。", status=403)
 
         if request.path.startswith("/api/gonenkukumi/") and not can_access_menu_item(request.user, "five-year-nine"):

@@ -9,3 +9,4 @@ staticfiles/
 .env
 .env.local
 *.log
+var/

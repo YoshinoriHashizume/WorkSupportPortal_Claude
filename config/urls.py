@@ -8,4 +8,5 @@ urlpatterns = [
     path("", include("apps.identity.urls")),
     path("", include("apps.portal.urls")),
     path("", include("apps.gonenkukumi.urls")),
+    path("", include("apps.receipt_comparison.urls")),
 ]

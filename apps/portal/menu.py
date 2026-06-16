@@ -15,6 +15,7 @@ class PortalMenuItem:
     title: str
     href: str
     group_key: str
+    parent_key: str | None = None
 
 
 MENU_GROUPS = [
@@ -35,6 +36,26 @@ MENU_ITEMS = [
         title="5年9組",
         href="/app/production/five-year-nine",
         group_key="production",
+    ),
+    PortalMenuItem(
+        key="receipt-comparison",
+        title="検収書比較",
+        href="",
+        group_key="production",
+    ),
+    PortalMenuItem(
+        key="receipt-comparison-finished-product",
+        title="完成品",
+        href="/app/production/receipt-comparison?type=finished-product",
+        group_key="production",
+        parent_key="receipt-comparison",
+    ),
+    PortalMenuItem(
+        key="receipt-comparison-supplied-parts",
+        title="支給品",
+        href="/app/production/receipt-comparison?type=supplied-parts",
+        group_key="production",
+        parent_key="receipt-comparison",
     ),
     PortalMenuItem(
         key="notices",

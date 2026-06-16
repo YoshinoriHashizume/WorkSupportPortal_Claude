@@ -382,8 +382,11 @@ def favorite_menus(request: HttpRequest) -> JsonResponse:
         return JsonResponse({"success": False, "error": "JSON の形式が不正です。"}, status=400)
 
     menu_key = str(payload.get("menuKey") or "").strip()
-    if menu_key not in MENU_BY_KEY:
+    item = MENU_BY_KEY.get(menu_key)
+    if item is None:
         return JsonResponse({"success": False, "error": "メニューが見つかりません。"}, status=404)
+    if not item.href:
+        return JsonResponse({"success": False, "error": "このメニューはお気に入り登録できません。"}, status=400)
     if not can_access_menu_item(request.user, menu_key):
         return JsonResponse({"success": False, "error": "このメニューをお気に入り登録する権限がありません。"}, status=403)
 

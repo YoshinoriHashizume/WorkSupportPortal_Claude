@@ -162,77 +162,21 @@ def add_effective_range_conditions(conditions: list[str], params: dict[str, obje
 
 
 def mock_customers(keyword: str = "") -> list[dict[str, str]]:
-    samples = [
-        {"custCode": "101", "custName": "サンプル得意先A"},
-        {"custCode": "102", "custName": "サンプル得意先B"},
-        {"custCode": "119", "custName": "サンプル得意先D"},
-        {"custCode": "191", "custName": "サンプル得意先E"},
-        {"custCode": "201", "custName": "サンプル得意先C"},
-    ]
-    if not keyword:
-        return samples
-    normalized = keyword.upper()
-    return [
-        row
-        for row in samples
-        if row["custCode"].startswith(keyword) or normalized in row["custName"].upper()
-    ]
+    from .customers import list_customers
+
+    return list_customers(keyword)
 
 
 def list_customers(keyword: str = "") -> list[dict[str, str]]:
-    if use_mock():
-        return mock_customers(keyword)
+    from .customers import list_customers as list_customers_impl
 
-    config = oracle_config()
-    conditions = ["REGEXP_LIKE(TRIM(CUST_CD), '^\\d{3}$')"]
-    params: dict[str, object] = {}
-    if keyword:
-        conditions.append("(UPPER(TRIM(CUST_CD)) LIKE :code_keyword OR UPPER(TRIM(CUST_NAME)) LIKE :name_keyword)")
-        params["code_keyword"] = f"{keyword.upper()}%"
-        params["name_keyword"] = f"%{keyword.upper()}%"
-    if config["company_cd"]:
-        conditions.append("COMPANY_CD = :company_cd")
-        params["company_cd"] = config["company_cd"]
-
-    sql = f"""
-        SELECT CUST_CD, CUST_NAME
-          FROM M_CUST
-         WHERE {" AND ".join(conditions)}
-         ORDER BY CUST_CD
-    """
-    try:
-        with oracle_connection() as connection:
-            cursor = connection.cursor()
-            cursor.execute(sql, params)
-            rows = rows_as_dicts(cursor)
-    except Exception as exc:
-        if isinstance(exc, OracleNotConfiguredError):
-            raise
-        raise OracleQueryError("得意先候補の取得に失敗しました。") from exc
-
-    return [{"custCode": str(row["cust_cd"]).strip(), "custName": str(row["cust_name"]).strip()} for row in rows]
+    return list_customers_impl(keyword)
 
 
 def get_customer_name(cust_code: str) -> str:
-    if use_mock():
-        match = next((row for row in mock_customers(cust_code) if row["custCode"] == cust_code), None)
-        return match["custName"] if match else ""
+    from .customers import lookup_customer_name
 
-    config = oracle_config()
-    conditions = ["CUST_CD = :cust_code"]
-    params: dict[str, object] = {"cust_code": cust_code}
-    add_company_condition(config, conditions, params)
-    sql = f"""
-        SELECT CUST_NAME
-          FROM M_CUST
-         WHERE {" AND ".join(conditions)}
-           AND ROWNUM = 1
-    """
-    with oracle_connection() as connection:
-        cursor = connection.cursor()
-        cursor.execute(sql, params)
-        row = cursor.fetchone()
-    return str(row[0]).strip() if row else ""
+    return lookup_customer_name(cust_code) or ""
 
 
 def mock_cust_items(cust_code: str, keyword: str = "") -> list[dict[str, str]]:

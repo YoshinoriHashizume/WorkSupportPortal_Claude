@@ -94,7 +94,13 @@ def test_search_page_defaults_to_empty_and_current_month(client, user):
     html = response.content.decode("utf-8")
     current_month = timezone.localdate().strftime("%Y-%m")
     current_month_display = current_month.replace("-", "/")
-    assert 'name="custCode" required pattern="\\d{3}" value=""' in html
+    assert 'name="custCode"' in html
+    assert 'class="portal-customer-select portal-customer-select--gonen"' in html
+    assert 'data-customers-api="/api/gonenkukumi/customers"' in html
+    assert "/static/js/portal-customer-select.js" in html
+    assert 'id="customer-name-display"' not in html
+    assert ">得意先<" in html
+    assert "得意先コード" not in html.split("検索履歴")[0]
     assert 'name="custItem" value=""' in html
     assert f'name="yearMonth"' in html
     assert f'value="{current_month_display}"' in html
@@ -102,8 +108,6 @@ def test_search_page_defaults_to_empty_and_current_month(client, user):
     assert "品目任意変換値" in html
     assert "設変値" not in html
     assert html.index("得意先品目") < html.index("品目任意変換値") < html.index("検索年月")
-    assert 'id="customer-toggle" class="customer-toggle"' in html
-    assert 'id="customers" class="customer-options"' in html
     assert 'class="favorite-toggle gonen-title-favorite"' in html
     assert 'data-menu-key="five-year-nine"' in html
     assert "♡" in html
@@ -135,7 +139,8 @@ def test_search_page_defaults_to_latest_history(client, user):
     response = client.get("/app/production/five-year-nine")
     assert response.status_code == 200
     html = response.content.decode("utf-8")
-    assert 'name="custCode" required pattern="\\d{3}" value="191"' in html
+    assert 'name="custCode"' in html
+    assert 'data-selected="191"' in html
     assert 'name="custItem" value="235677-0050"' in html
     assert 'name="yearMonth"' in html
     assert 'value="2026/05"' in html

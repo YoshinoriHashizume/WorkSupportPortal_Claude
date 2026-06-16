@@ -1,0 +1,112 @@
+{% extends "base.html" %}
+{% block title %}検収書比較 設定（{{ comparison_type_page_label }}）{% endblock %}
+{% block body_class %}receipt-settings-page{% endblock %}
+{% block content %}
+<section class="receipt-settings">
+  <div class="portal-section-head receipt-head">
+    <div>
+      <h1>検収書比較 設定（{{ comparison_type_page_label }}）</h1>
+      <p>比較対象の得意先を Oracle マスタから選び、得意先一覧から{{ settings_target_label }}を管理します。比較画面にはここで登録した得意先のみ表示されます。</p>
+    </div>
+    <a class="button secondary-button" href="{% url 'receipt_comparison:comparison' %}?type={{ type_slug }}">比較画面へ戻る</a>
+  </div>
+
+  <div class="receipt-settings-body">
+    <aside class="receipt-settings-sidebar">
+      <form class="receipt-setting-form card receipt-supplier-add-card" method="post">
+        {% csrf_token %}
+        <input type="hidden" name="type" value="{{ type_slug }}">
+        <h2>得意先追加</h2>
+        {% if choice_error %}
+          <p class="error">{{ choice_error }}</p>
+        {% endif %}
+        <div class="receipt-setting-grid">
+          {% include "includes/customer_select.html" with field_name="customer_code" label="得意先" variant="receipt" customers=customer_choices required=True %}
+          {% if comparison_type == "finished_product" %}
+            {% include "includes/customer_select.html" with field_name="direct_delivery_customer_code" label="直送先得意先コード" variant="receipt" customers=customer_choices empty_label="なし" %}
+          {% endif %}
+          <label class="inline">
+            <input type="checkbox" name="exclusion">
+            {{ settings_exclusion_label }}
+          </label>
+        </div>
+        <button type="submit" name="action" value="add_supplier">保存</button>
+      </form>
+    </aside>
+
+    <div class="db-table-card receipt-settings-list-card">
+      <div class="db-table-head">
+        <h2>得意先一覧</h2>
+        <p>全 {{ supplier_rows|length }} 件{% if supplier_rows %}。行をクリックすると{{ settings_target_label }}の登録・編集画面が開きます。{% endif %}</p>
+      </div>
+      <div class="db-table-wrap">
+        <table class="db-table receipt-supplier-table receipt-supplier-table--{% if comparison_type == 'finished_product' %}finished{% else %}supplied{% endif %}">
+          <thead>
+            <tr>
+              <th>得意先コード</th>
+              <th>得意先名</th>
+              {% if comparison_type == "finished_product" %}
+                <th>直送先得意先コード</th>
+              {% else %}
+                <th>子取引先</th>
+              {% endif %}
+              <th>{{ settings_target_label }}</th>
+              <th>除外</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for row in supplier_rows %}
+              {% with supplier=row.supplier %}
+                <tr class="receipt-supplier-row" data-dialog-id="receipt-supplier-dialog-{{ supplier.id }}">
+                  <td class="mono">{{ supplier.customer_code }}</td>
+                  <td>{{ supplier.name }}</td>
+                  {% if comparison_type == "finished_product" %}
+                    <td class="mono">{{ supplier.direct_delivery_customer_code|default:"-" }}</td>
+                  {% else %}
+                    <td>
+                      {% for subcontractor in supplier.subcontractors.all %}
+                        {{ subcontractor.display_label }}{% if not forloop.last %}, {% endif %}
+                      {% empty %}
+                        -
+                      {% endfor %}
+                    </td>
+                  {% endif %}
+                  <td class="mono">{{ supplier.receiving_settings.all|length }}</td>
+                  <td>{% if supplier.exclusion %}する{% else %}しない{% endif %}</td>
+                </tr>
+              {% endwith %}
+            {% empty %}
+              <tr>
+                <td colspan="{% if comparison_type == 'finished_product' %}5{% else %}5{% endif %}">得意先は未登録です。</td>
+              </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  {% for row in supplier_rows %}
+    {% include "receipt_comparison/includes/supplier_settings_dialog.html" with supplier=row.supplier %}
+  {% endfor %}
+</section>
+<script>
+document.querySelectorAll('.receipt-supplier-row').forEach((row) => {
+  row.addEventListener('click', () => {
+    const dialog = document.getElementById(row.dataset.dialogId);
+    if (dialog) dialog.showModal();
+  });
+});
+document.querySelectorAll('[data-dialog-close]').forEach((button) => {
+  button.addEventListener('click', () => {
+    const dialog = button.closest('dialog');
+    if (dialog) dialog.close();
+  });
+});
+const openSupplierId = "{{ open_supplier_id|default:''|escapejs }}";
+if (openSupplierId) {
+  const dialog = document.getElementById(`receipt-supplier-dialog-${openSupplierId}`);
+  if (dialog) dialog.showModal();
+}
+</script>
+{% endblock %}

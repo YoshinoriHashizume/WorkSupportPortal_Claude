@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>{% block title %}基幹システム連携ポータル{% endblock %}</title>
   {% block extra_head %}{% endblock %}
-  <link rel="stylesheet" href="/static/css/app.css?v=20260604-1749">
+  <link rel="stylesheet" href="/static/css/app.css?v=20260616-1400">
 </head>
 <body class="{% block body_class %}{% endblock %}">
   {% if user.is_authenticated %}
@@ -18,21 +18,59 @@
         <nav class="sidebar-nav">
           <a class="sidebar-home-link" href="/app">メニュー</a>
           {% for group in portal_menu_groups %}
-            <div class="sidebar-menu-group">
-              <div class="sidebar-menu-group-title">{{ group.title }}</div>
-              {% for item in group.items %}
-                <div class="sidebar-menu-item">
-                  <button
-                    type="button"
-                    class="favorite-toggle{% if item.is_favorite %} is-favorite{% endif %}"
-                    data-menu-key="{{ item.key }}"
-                    data-menu-title="{{ item.title }}"
-                    aria-label="{{ item.title }}のお気に入りを切り替え"
-                  >{% if item.is_favorite %}♥{% else %}♡{% endif %}</button>
-                  <a href="{{ item.href }}">{{ item.title }}</a>
-                </div>
-              {% endfor %}
-            </div>
+            <details
+              class="sidebar-menu-group"
+              data-menu-group-key="{{ group.key }}"
+              {% if group.is_expanded %}open data-sidebar-force-open="true"{% endif %}
+            >
+              <summary class="sidebar-menu-group-toggle">
+                <span class="sidebar-menu-chevron" aria-hidden="true"></span>
+                <span class="sidebar-menu-group-label">{{ group.title }}</span>
+              </summary>
+              <div class="sidebar-menu-group-panel">
+                {% for item in group.items %}
+                  {% if item.children %}
+                    <details
+                      class="sidebar-menu-branch"
+                      data-menu-key="{{ item.key }}"
+                      {% if item.is_expanded %}open data-sidebar-force-open="true"{% endif %}
+                    >
+                      <summary class="sidebar-menu-branch-toggle">
+                        <span class="sidebar-menu-branch-icon" aria-hidden="true">
+                          <span class="sidebar-menu-chevron"></span>
+                        </span>
+                        <span class="sidebar-menu-branch-label">{{ item.title }}</span>
+                      </summary>
+                      <div class="sidebar-menu-branch-panel">
+                        {% for child in item.children %}
+                          <div class="sidebar-menu-item sidebar-menu-item-nested{% if child.is_active %} is-active{% endif %}">
+                            <button
+                              type="button"
+                              class="favorite-toggle{% if child.is_favorite %} is-favorite{% endif %}"
+                              data-menu-key="{{ child.key }}"
+                              data-menu-title="{{ child.title }}"
+                              aria-label="{{ child.title }}のお気に入りを切り替え"
+                            >{% if child.is_favorite %}♥{% else %}♡{% endif %}</button>
+                            <a href="{{ child.href }}"{% if child.is_active %} class="is-active" aria-current="page"{% endif %}>{{ child.title }}</a>
+                          </div>
+                        {% endfor %}
+                      </div>
+                    </details>
+                  {% else %}
+                    <div class="sidebar-menu-item{% if item.is_active %} is-active{% endif %}">
+                      <button
+                        type="button"
+                        class="favorite-toggle{% if item.is_favorite %} is-favorite{% endif %}"
+                        data-menu-key="{{ item.key }}"
+                        data-menu-title="{{ item.title }}"
+                        aria-label="{{ item.title }}のお気に入りを切り替え"
+                      >{% if item.is_favorite %}♥{% else %}♡{% endif %}</button>
+                      <a href="{{ item.href }}"{% if item.is_active %} class="is-active" aria-current="page"{% endif %}>{{ item.title }}</a>
+                    </div>
+                  {% endif %}
+                {% endfor %}
+              </div>
+            </details>
           {% endfor %}
         </nav>
       </aside>
@@ -48,14 +86,13 @@
   {% endif %}
             {% for message in messages %}<div class="message">{{ message }}</div>{% endfor %}
             {% block content %}{% endblock %}
-            {% if user.is_authenticated %}
-              <script src="/static/js/portal-favorites.js?v=20260604-1421"></script>
-            {% endif %}
   {% if user.is_authenticated %}
           </section>
         </main>
       </div>
     </div>
+    <script src="/static/js/portal-sidebar.js?v=20260615-1300" defer></script>
+    <script src="/static/js/portal-favorites.js?v=20260604-1421" defer></script>
   {% else %}
     </main>
   {% endif %}

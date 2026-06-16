@@ -1,0 +1,18 @@
+<label{% if label_id %} id="{{ label_id }}"{% endif %} class="portal-vendor-field{% if variant %} portal-vendor-field--{{ variant }}{% endif %}{% if label_class %} {{ label_class }}{% endif %}">{{ label|default:"取引先" }}
+  <select
+    name="{{ field_name }}"
+    {% if select_id %}id="{{ select_id }}"{% endif %}
+    class="portal-vendor-select{% if variant %} portal-vendor-select--{{ variant }}{% endif %}{% if select_class %} {{ select_class }}{% endif %}"
+    {% if selected_value %}data-selected="{{ selected_value }}"{% endif %}
+    {% if empty_label %}data-empty-label="{{ empty_label }}"{% endif %}
+    {% if required %}required{% endif %}
+    {% if disabled %}disabled{% endif %}
+  >
+    {% if empty_label != False %}
+      <option value="" {% if not selected_value %}selected{% endif %}>{{ empty_label|default:"選択してください" }}</option>
+    {% endif %}
+    {% for vendor in vendors %}
+      <option value="{{ vendor.vendorCode }}" {% if vendor.vendorCode == selected_value %}selected{% endif %}>{{ vendor.vendorCode }}{% if vendor.vendorName %} - {{ vendor.vendorName }}{% endif %}</option>
+    {% endfor %}
+  </select>
+</label>

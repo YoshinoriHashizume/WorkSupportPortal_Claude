@@ -36,6 +36,7 @@ INSTALLED_APPS = [
     "apps.identity",
     "apps.portal",
     "apps.gonenkukumi",
+    "apps.receipt_comparison",
 ]
 
 MIDDLEWARE = [
@@ -103,7 +104,7 @@ TIME_ZONE = "Asia/Tokyo"
 USE_I18N = True
 USE_TZ = True
 
-STATIC_URL = "static/"
+STATIC_URL = "/static/"
 STATIC_ROOT = BASE_DIR / "staticfiles"
 STATICFILES_DIRS = [BASE_DIR / "static"] if (BASE_DIR / "static").exists() else []
 
