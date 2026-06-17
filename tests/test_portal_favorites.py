@@ -27,7 +27,9 @@ def test_dashboard_shows_portal_title_and_favorite_controls(client, user):
     assert response.status_code == 200
     html = response.content.decode("utf-8")
     assert "ようこそ、橋爪 良典 さん" in html
-    assert "基幹システム連携ポータル" in html
+    assert "業務支援ポータル" in html
+    assert "基幹システム連携ポータル" not in html
+    assert "基幹データ連携ポータル" not in html
     assert "<p>メニュー</p>" not in html
     assert "全社" in html
     assert "人事" in html

@@ -3,13 +3,13 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
-    container_name: coredataintegrationportal-django-app
+    container_name: worksupportportal-django-app
     environment:
       DJANGO_DEBUG: "true"
       DJANGO_SECRET_KEY: "django-insecure-local-docker-development-key"
       DJANGO_ALLOWED_HOSTS: "localhost,127.0.0.1,0.0.0.0,192.168.3.180,django_app"
       DJANGO_CSRF_TRUSTED_ORIGINS: "http://localhost:3100,http://192.168.3.180:3100"
-      DATABASE_URL: "postgresql://coredataintegrationportal:coredataintegrationportal_local_dev@django_postgres:5432/coredataintegrationportal"
+      DATABASE_URL: "postgresql://worksupportportal:worksupportportal_local_dev@django_postgres:5432/worksupportportal"
       AUTH_URL: "http://localhost:3100"
       AUTH_DEV_MODE: "true"
       ORACLE_USE_MOCK: "${ORACLE_USE_MOCK:-false}"
@@ -31,17 +31,17 @@ services:
 
   django_postgres:
     image: postgres:16-alpine
-    container_name: coredataintegrationportal-django-postgres
+    container_name: worksupportportal-django-postgres
     environment:
-      POSTGRES_DB: coredataintegrationportal
-      POSTGRES_USER: coredataintegrationportal
-      POSTGRES_PASSWORD: coredataintegrationportal_local_dev
+      POSTGRES_DB: worksupportportal
+      POSTGRES_USER: worksupportportal
+      POSTGRES_PASSWORD: worksupportportal_local_dev
     ports:
       - "55432:5432"
     volumes:
       - django_postgres_data:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U coredataintegrationportal -d coredataintegrationportal"]
+      test: ["CMD-SHELL", "pg_isready -U worksupportportal -d worksupportportal"]
       interval: 10s
       timeout: 5s
       retries: 5
