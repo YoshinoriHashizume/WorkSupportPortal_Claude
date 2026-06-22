@@ -33,6 +33,11 @@ def test_start_production_app_ps1_uses_waitress_and_env_production():
     assert "DATABASE_URL" in source
 
 
+def test_start_production_app_ps1_is_ascii_only_for_windows_powershell():
+    source = read("scripts/windows/Start-ProductionApp.ps1")
+    source.encode("ascii")
+
+
 def test_start_production_app_cmd_launches_powershell_with_noexit():
     source = read("scripts/windows/Start-ProductionApp.cmd")
     assert "Start-ProductionApp.ps1" in source

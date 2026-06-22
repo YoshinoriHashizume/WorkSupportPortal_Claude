@@ -1,6 +1,7 @@
 #Requires -Version 5.1
 # Start WorkSupportPortal on Windows without Docker (waitress).
 # Usage: powershell -ExecutionPolicy Bypass -File scripts\windows\Start-ProductionApp.ps1
+# Note: Keep this file ASCII-only. Windows PowerShell 5.1 may fail to parse UTF-8 Japanese.
 $ErrorActionPreference = "Stop"
 
 function Write-Step([string]$Message) {
@@ -22,57 +23,57 @@ function Import-EnvFile([string]$Path) {
 
 $Root = Resolve-Path (Join-Path $PSScriptRoot "..\..")
 Set-Location $Root
-Write-Step "プロジェクト: $Root"
+Write-Step "Project: $Root"
 
 $EnvFile = Join-Path $Root ".env.production"
 if (-not (Test-Path $EnvFile)) {
     $txtFile = Join-Path $Root ".env.production.txt"
     if (Test-Path $txtFile) {
-        throw ".env.production がありません。`.env.production.txt` があります。拡張子 .txt を外して `.env.production` にリネームしてください。"
+        throw 'Missing .env.production. Found .env.production.txt - rename it to .env.production (remove .txt).'
     }
-    throw ".env.production が見つかりません。copy .env.production.example .env.production して編集してください。"
+    throw 'Missing .env.production. Run: copy .env.production.example .env.production'
 }
 
-Write-Step ".env.production を読み込み"
+Write-Step "Loading .env.production"
 Import-EnvFile $EnvFile
 
 if (-not $env:DATABASE_URL) {
-    throw "DATABASE_URL が未設定です。.env.production に postgresql://... を設定してください。"
+    throw 'DATABASE_URL is not set. Add postgresql://... to .env.production'
 }
 if ($env:AUTH_DEV_MODE -eq "true") {
-    throw "本番では AUTH_DEV_MODE=true は禁止です。.env.production を false にしてください。"
+    throw 'AUTH_DEV_MODE=true is not allowed in production. Set AUTH_DEV_MODE=false in .env.production'
 }
 
 $Python = Join-Path $Root ".venv\Scripts\python.exe"
 if (-not (Test-Path $Python)) {
-    throw ".venv がありません。python -m venv .venv のあと pip install -r requirements-windows-prod.txt を実行してください。"
+    throw 'Missing .venv. Run: python -m venv .venv then pip install -r requirements-windows-prod.txt'
 }
 
-Write-Step "DB 接続確認"
+Write-Step "Checking database configuration"
 & $Python manage.py check_production_env
 if ($LASTEXITCODE -ne 0) {
-    throw "check_production_env が失敗しました。上の表示を確認してください。"
+    throw 'check_production_env failed. See messages above.'
 }
 
-Write-Step "migrate"
+Write-Step "Running migrate"
 & $Python manage.py migrate --noinput
 if ($LASTEXITCODE -ne 0) {
-    throw "migrate が失敗しました。PostgreSQL の起動と DATABASE_URL を確認してください。"
+    throw 'migrate failed. Check PostgreSQL service and DATABASE_URL.'
 }
 
-Write-Step "collectstatic"
+Write-Step "Running collectstatic"
 & $Python manage.py collectstatic --noinput
 if ($LASTEXITCODE -ne 0) {
-    throw "collectstatic が失敗しました。"
+    throw 'collectstatic failed.'
 }
 
-Write-Step "waitress の確認"
+Write-Step "Checking waitress"
 & $Python -c "import waitress"
 if ($LASTEXITCODE -ne 0) {
-    throw "waitress が未インストールです。.venv\Scripts\pip install -r requirements-windows-prod.txt を実行してください。"
+    throw 'waitress is not installed. Run: .venv\Scripts\pip install -r requirements-windows-prod.txt'
 }
 
 $Port = if ($env:APP_PUBLISH_PORT) { $env:APP_PUBLISH_PORT } else { "3000" }
 $Listen = "0.0.0.0:${Port}"
-Write-Step "Starting waitress on ${Listen} (このウィンドウを閉じると停止します)"
+Write-Step "Starting waitress on ${Listen} (do not close this window)"
 & $Python -m waitress --listen=$Listen config.wsgi:application
