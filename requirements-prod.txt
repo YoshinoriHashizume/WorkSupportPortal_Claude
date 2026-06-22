@@ -1,0 +1,8 @@
+Django
+Authlib
+requests
+psycopg[binary]
+oracledb
+openpyxl
+gunicorn
+whitenoise

@@ -8,5 +8,6 @@ db.sqlite3
 staticfiles/
 .env
 .env.local
+.env.production
 *.log
 var/

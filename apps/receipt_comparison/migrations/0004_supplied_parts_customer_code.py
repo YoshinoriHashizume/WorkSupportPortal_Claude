@@ -13,6 +13,15 @@ def migrate_vendor_to_customer_code(apps, schema_editor):
             supplier.save(update_fields=["customer_code"])
 
 
+def drop_legacy_vendor_unique_constraint(apps, schema_editor):
+    if schema_editor.connection.vendor != "postgresql":
+        return
+    schema_editor.execute(
+        'ALTER TABLE "receipt_comparison_suppliedpartsreceiptsupplier" '
+        'DROP CONSTRAINT IF EXISTS "unique_sp_receipt_supplier_vendor_code"'
+    )
+
+
 class Migration(migrations.Migration):
     dependencies = [
         ("receipt_comparison", "0003_split_tables_by_comparison_type"),
@@ -25,13 +34,7 @@ class Migration(migrations.Migration):
             field=models.CharField(blank=True, default="", max_length=40),
         ),
         migrations.RunPython(migrate_vendor_to_customer_code, migrations.RunPython.noop),
-        migrations.RunSQL(
-            sql=(
-                'ALTER TABLE "receipt_comparison_suppliedpartsreceiptsupplier" '
-                'DROP CONSTRAINT IF EXISTS "unique_sp_receipt_supplier_vendor_code"'
-            ),
-            reverse_sql=migrations.RunSQL.noop,
-        ),
+        migrations.RunPython(drop_legacy_vendor_unique_constraint, migrations.RunPython.noop),
         migrations.RemoveField(
             model_name="suppliedpartsreceiptsupplier",
             name="vendor_code",

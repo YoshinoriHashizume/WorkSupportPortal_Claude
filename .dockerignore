@@ -9,6 +9,7 @@ db.sqlite3
 staticfiles
 .env
 .env.local
+.env.production
 node_modules
 .next
 *.log
