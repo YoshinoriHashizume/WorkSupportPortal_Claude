@@ -26,6 +26,20 @@ DEBUG = os.environ.get("DJANGO_DEBUG", "false").lower() == "true"
 ALLOWED_HOSTS = [host.strip() for host in os.environ.get("DJANGO_ALLOWED_HOSTS", "localhost,127.0.0.1").split(",") if host.strip()]
 CSRF_TRUSTED_ORIGINS = [origin.strip() for origin in os.environ.get("DJANGO_CSRF_TRUSTED_ORIGINS", "http://localhost:3000").split(",") if origin.strip()]
 
+AUTH_DEV_MODE = os.environ.get("AUTH_DEV_MODE", "false").lower() == "true"
+
+if DEBUG and AUTH_DEV_MODE:
+    _local_dev_origins = [
+        "http://localhost:3100",
+        "http://127.0.0.1:3100",
+        "http://localhost:3000",
+        "http://127.0.0.1:3000",
+        "http://192.168.3.180:3100",
+    ]
+    CSRF_TRUSTED_ORIGINS = list(dict.fromkeys(CSRF_TRUSTED_ORIGINS + _local_dev_origins))
+    CSRF_COOKIE_SECURE = False
+    SESSION_COOKIE_SECURE = False
+
 INSTALLED_APPS = [
     "django.contrib.admin",
     "django.contrib.auth",
@@ -37,6 +51,7 @@ INSTALLED_APPS = [
     "apps.portal",
     "apps.gonenkukumi",
     "apps.receipt_comparison",
+    "apps.inventory_order_alert",
 ]
 
 MIDDLEWARE = [
@@ -63,6 +78,7 @@ TEMPLATES = [
                 "django.template.context_processors.request",
                 "django.contrib.auth.context_processors.auth",
                 "django.contrib.messages.context_processors.messages",
+                "django.template.context_processors.csrf",
                 "apps.portal.context_processors.portal_menu",
             ],
         },
@@ -91,6 +107,8 @@ def database_config() -> dict[str, object]:
 
 
 DATABASES = {"default": database_config()}
+if DATABASES["default"].get("ENGINE", "").endswith("postgresql"):
+    DATABASES["default"].setdefault("TEST", {"NAME": "test_worksupportportal"})
 
 AUTH_PASSWORD_VALIDATORS = [
     {"NAME": "django.contrib.auth.password_validation.UserAttributeSimilarityValidator"},
@@ -114,5 +132,9 @@ LOGIN_REDIRECT_URL = "/app"
 LOGOUT_REDIRECT_URL = "/login"
 AUTH_URL = os.environ.get("AUTH_URL", "http://localhost:3000")
 AUTH_PROVIDER = os.environ.get("AUTH_PROVIDER", "desknet").strip().lower()
+AUTH_DEV_USERNAME = os.environ.get("AUTH_DEV_USERNAME", "10001")
+AUTH_DEV_PASSWORD = os.environ.get("AUTH_DEV_PASSWORD", "dev")
+AUTH_DEV_LAST_NAME = os.environ.get("AUTH_DEV_LAST_NAME", "開発")
+AUTH_DEV_FIRST_NAME = os.environ.get("AUTH_DEV_FIRST_NAME", "管理者")
 DESKNETS_LOGIN_URL = os.environ.get("DESKNETS_LOGIN_URL", "https://maruei01.dn-cloud.com/cgi-bin/dneo/dneo.cgi")
 DESKNETS_TIMEOUT_SECONDS = float(os.environ.get("DESKNETS_TIMEOUT_SECONDS", "10"))

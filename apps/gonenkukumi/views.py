@@ -25,6 +25,7 @@ from .infrastructure.oracle.client import (
     list_cust_items,
     list_customers,
     run_gonenkukumi_oracle_search,
+    use_mock,
 )
 from .models import GonenKukumiSearchHistory
 
@@ -222,11 +223,22 @@ def search_page(request: HttpRequest) -> HttpResponse:
         "optionChange": latest.option_change if latest else "*",
         "yearMonth": latest.year_month if latest else f"{today.year:04d}-{today.month:02d}",
     }
+    customers: list[dict[str, str]] = []
+    customer_load_error = ""
+    try:
+        customers = list_customers()
+    except OracleNotConfiguredError as exc:
+        customer_load_error = str(exc)
+    except OracleQueryError as exc:
+        customer_load_error = oracle_error_message(exc)
     return render(
         request,
         "gonenkukumi/search.html",
         {
             "initial": initial,
+            "customers": customers,
+            "customer_load_error": customer_load_error,
+            "oracle_use_mock": use_mock(),
             "is_five_year_nine_favorite": "five-year-nine" in favorite_keys_for_user(request.user),
         },
     )

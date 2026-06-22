@@ -9,20 +9,15 @@
     {% if required %}required{% endif %}
     {% if disabled %}disabled{% endif %}
   >
-    {% if customers_api %}
-      {% if empty_label != False %}
-        <option value="">{{ empty_label|default:"選択してください" }}</option>
-      {% endif %}
-      {% if selected_value %}
-        <option value="{{ selected_value }}" selected>{{ selected_value }}</option>
-      {% endif %}
-    {% else %}
-      {% if empty_label != False %}
-        <option value="" {% if not selected_value %}selected{% endif %}>{{ empty_label|default:"選択してください" }}</option>
-      {% endif %}
+    {% if empty_label != False %}
+      <option value="" {% if not selected_value and not customers %}selected{% endif %}>{{ empty_label|default:"選択してください" }}</option>
+    {% endif %}
+    {% if customers %}
       {% for customer in customers %}
         <option value="{{ customer.custCode }}" {% if customer.custCode == selected_value %}selected{% endif %}>{{ customer.custCode }} - {{ customer.custName }}</option>
       {% endfor %}
+    {% elif customers_api and selected_value %}
+      <option value="{{ selected_value }}" selected>{{ selected_value }}</option>
     {% endif %}
   </select>
 {% if not hide_label %}</label>{% endif %}

@@ -17,7 +17,7 @@ from django.urls import reverse
 from django.utils import timezone
 from django.views.decorators.http import require_http_methods
 
-from apps.portal.favorites import is_portal_admin
+from apps.portal.favorites import is_menu_favorited, is_portal_admin, menu_title, receipt_comparison_menu_key
 from apps.gonenkukumi.infrastructure.oracle.client import OracleNotConfiguredError, OracleQueryError
 
 from .domain.comparison import ComparisonRow, compare_receipts
@@ -427,6 +427,7 @@ def render_comparison_page(
     sort_key: str = "receipt_flag",
     sort_direction: str = "asc",
 ) -> HttpResponse:
+    favorite_menu_key = receipt_comparison_menu_key(comparison_type)
     return render(
         request,
         "receipt_comparison/comparison.html",
@@ -434,6 +435,9 @@ def render_comparison_page(
             "type_slug": type_slug,
             "comparison_type": comparison_type,
             "comparison_type_page_label": comparison_type_page_label(comparison_type),
+            "favorite_menu_key": favorite_menu_key,
+            "favorite_menu_title": menu_title(favorite_menu_key),
+            "is_comparison_favorite": is_menu_favorited(request.user, favorite_menu_key),
             "show_settings": is_portal_admin(request.user),
             "suppliers": list_suppliers(comparison_type),
             "supplier": supplier,

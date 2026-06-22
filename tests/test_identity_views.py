@@ -86,14 +86,71 @@ def test_desknet_login_rejects_invalid_credentials(client, monkeypatch):
     assert not get_user_model().objects.filter(username="10001").exists()
 
 
-def test_login_page_has_only_normal_login_form(client):
+def test_login_page_has_only_normal_login_form(client, settings):
+    settings.AUTH_DEV_MODE = False
     response = client.get("/login")
 
     assert response.status_code == 200
     html = response.content.decode("utf-8")
     assert 'action="/auth/desknet-login"' in html
     assert "/auth/dev-login" not in html
-    assert "専用ログイン" not in html
+    assert "ローカル開発ログイン" not in html
+
+
+@pytest.mark.django_db
+def test_login_page_shows_dev_login_when_auth_dev_mode(client, settings):
+    settings.AUTH_DEV_MODE = True
+    settings.AUTH_DEV_USERNAME = "10001"
+    from apps.portal.bootstrap_local_dev import BootstrapLocalDevConfig, bootstrap_local_dev
+
+    bootstrap_local_dev(
+        BootstrapLocalDevConfig(
+            username="10001",
+            password="dev",
+            last_name="開発",
+            first_name="管理者",
+        )
+    )
+    response = client.get("/login")
+
+    assert response.status_code == 200
+    html = response.content.decode("utf-8")
+    assert 'action="/auth/dev-login"' in html
+    assert "ローカル開発ログイン" in html
+    assert 'value="10001"' in html
+    assert "ローカル開発では画面下部" in html
+
+
+@pytest.mark.django_db
+def test_login_page_hides_dev_login_when_non_bootstrap_admin_exists(client, settings):
+    from django.contrib.auth.models import Group
+
+    from apps.portal.bootstrap_local_dev import BootstrapLocalDevConfig, bootstrap_local_dev
+    from apps.portal.favorites import ADMIN_GROUP_NAME
+
+    settings.AUTH_DEV_MODE = True
+    settings.AUTH_DEV_USERNAME = "10001"
+    bootstrap_local_dev(
+        BootstrapLocalDevConfig(
+            username="10001",
+            password="dev",
+            last_name="開発",
+            first_name="管理者",
+        )
+    )
+
+    User = get_user_model()
+    admin_group = Group.objects.get(name=ADMIN_GROUP_NAME)
+    other_admin = User.objects.create_user(username="20001", password="unused")
+    other_admin.groups.add(admin_group)
+
+    response = client.get("/login")
+
+    assert response.status_code == 200
+    html = response.content.decode("utf-8")
+    assert "/auth/dev-login" not in html
+    assert "ローカル開発ログイン" not in html
+    assert "desknet's NEO" in html
 
 
 @pytest.mark.django_db
@@ -123,7 +180,83 @@ def test_login_uses_desknet_authentication(client, monkeypatch):
     assert user.first_name == "通常認証ユーザー"
 
 
-def test_dev_login_endpoint_is_removed(client):
+@pytest.mark.django_db
+def test_dev_login_endpoint_disabled_when_auth_dev_mode_false(client, settings):
+    settings.AUTH_DEV_MODE = False
     response = client.post("/auth/dev-login")
 
     assert response.status_code == 404
+
+
+@pytest.mark.django_db
+def test_dev_login_endpoint_disabled_when_non_bootstrap_admin_exists(client, settings):
+    from django.contrib.auth.models import Group
+
+    from apps.portal.bootstrap_local_dev import BootstrapLocalDevConfig, bootstrap_local_dev
+    from apps.portal.favorites import ADMIN_GROUP_NAME
+
+    settings.AUTH_DEV_MODE = True
+    settings.AUTH_DEV_USERNAME = "10001"
+    bootstrap_local_dev(
+        BootstrapLocalDevConfig(
+            username="10001",
+            password="dev",
+            last_name="開発",
+            first_name="管理者",
+        )
+    )
+
+    User = get_user_model()
+    admin_group = Group.objects.get(name=ADMIN_GROUP_NAME)
+    other_admin = User.objects.create_user(username="20001", password="unused")
+    other_admin.groups.add(admin_group)
+
+    response = client.post("/auth/dev-login", {"employee_id": "10001", "password": "dev"})
+
+    assert response.status_code == 404
+
+
+@pytest.mark.django_db
+def test_dev_login_works_without_csrf_token_when_auth_dev_mode(client, settings):
+    from django.test import Client
+
+    from apps.portal.bootstrap_local_dev import BootstrapLocalDevConfig, bootstrap_local_dev
+
+    settings.AUTH_DEV_MODE = True
+    bootstrap_local_dev(
+        BootstrapLocalDevConfig(
+            username="10001",
+            password="dev",
+            last_name="開発",
+            first_name="管理者",
+        )
+    )
+
+    bare_client = Client(enforce_csrf_checks=True)
+    response = bare_client.post("/auth/dev-login", {"employee_id": "10001", "password": "dev"})
+
+    assert response.status_code == 302
+    assert response["Location"] == "/app"
+
+
+@pytest.mark.django_db
+def test_dev_login_authenticates_bootstrap_user(client, settings):
+    from apps.portal.bootstrap_local_dev import BootstrapLocalDevConfig, bootstrap_local_dev
+
+    settings.AUTH_DEV_MODE = True
+    bootstrap_local_dev(
+        BootstrapLocalDevConfig(
+            username="10001",
+            password="dev",
+            last_name="開発",
+            first_name="管理者",
+        )
+    )
+
+    response = client.post("/auth/dev-login", {"employee_id": "10001", "password": "dev"})
+
+    assert response.status_code == 302
+    assert response["Location"] == "/app"
+    session = client.session
+    user = get_user_model().objects.get(username="10001")
+    assert session["_auth_user_id"] == str(user.pk)

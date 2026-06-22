@@ -28,6 +28,7 @@ from django.template.loader import render_to_string
                 "label": "得意先",
                 "variant": "gonen",
                 "customers_api": "/api/gonenkukumi/customers",
+                "customers": [{"custCode": "191", "custName": "サンプル得意先E"}],
                 "selected_value": "191",
                 "select_id": "custCode",
             },
@@ -35,6 +36,7 @@ from django.template.loader import render_to_string
                 'class="portal-customer-field portal-customer-field--gonen"',
                 'class="portal-customer-select portal-customer-select--gonen"',
                 'id="custCode"',
+                "191 - サンプル得意先E",
             ],
         ),
         (

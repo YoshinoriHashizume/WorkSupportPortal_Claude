@@ -3,7 +3,11 @@
 {% block content %}
 <div class="card narrow">
   <h1>ログイン</h1>
+  {% if show_dev_login %}
+  <p class="muted">ローカル開発では画面下部の <strong>ローカル開発ログイン</strong> を使ってください（上のフォームは desknet's NEO 用です）。</p>
+  {% else %}
   <p>社員番号とdesknet's NEOのパスワードでログインします。</p>
+  {% endif %}
   <form method="post" action="/auth/desknet-login" class="stack">
     {% csrf_token %}
     <input type="hidden" name="next" value="{{ next }}">
@@ -16,5 +20,21 @@
     <button type="submit">ログイン</button>
   </form>
   <p class="muted">将来Microsoft Entra IDへ切り替える場合も、Djangoユーザーは社員番号で引き継ぎます。</p>
+  {% if show_dev_login %}
+  <hr>
+  <h2>ローカル開発ログイン</h2>
+  <p>Docker 初回起動時に作成される開発用アカウントです。desknet's NEO 不要。</p>
+  <p class="muted">既定: 社員番号 <strong>10001</strong> / パスワード <strong>dev</strong></p>
+  <form method="post" action="/auth/dev-login" class="stack">
+    <input type="hidden" name="next" value="{{ next }}">
+    <label>社員番号
+      <input name="employee_id" value="10001" autocomplete="username" inputmode="numeric" required>
+    </label>
+    <label>パスワード
+      <input name="password" type="password" value="dev" autocomplete="current-password" required>
+    </label>
+    <button type="submit">開発ログイン</button>
+  </form>
+  {% endif %}
 </div>
 {% endblock %}

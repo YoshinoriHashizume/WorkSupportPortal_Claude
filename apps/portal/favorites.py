@@ -52,6 +52,29 @@ def can_access_menu_item(user: object, menu_key: str) -> bool:
 
 RECEIPT_COMPARISON_PATH = "/app/production/receipt-comparison"
 
+RECEIPT_COMPARISON_MENU_KEYS = {
+    "finished-product": "receipt-comparison-finished-product",
+    "supplied-parts": "receipt-comparison-supplied-parts",
+    "finished_product": "receipt-comparison-finished-product",
+    "supplied_parts": "receipt-comparison-supplied-parts",
+}
+
+
+def receipt_comparison_menu_key(comparison_type: str) -> str:
+    return RECEIPT_COMPARISON_MENU_KEYS.get(
+        comparison_type,
+        RECEIPT_COMPARISON_MENU_KEYS["finished-product"],
+    )
+
+
+def is_menu_favorited(user: object, menu_key: str) -> bool:
+    return menu_key in set(favorite_keys_for_user(user))
+
+
+def menu_title(menu_key: str) -> str:
+    item = MENU_BY_KEY.get(menu_key)
+    return item.title if item else menu_key
+
 
 def receipt_comparison_type_from_path(path: str) -> str:
     if "/supplied-parts" in path:

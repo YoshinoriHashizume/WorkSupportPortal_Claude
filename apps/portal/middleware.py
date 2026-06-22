@@ -84,4 +84,20 @@ class AccessApprovalMiddleware:
                 status=403,
             )
 
+        if request.path.startswith("/app/production/inventory-order-alert") and not can_access_menu_item(
+            request.user, "inventory-order-alert"
+        ):
+            return HttpResponse("権限がありません。", status=403)
+
+        if request.path.startswith("/api/inventory-order-alert/") and not can_access_menu_item(
+            request.user, "inventory-order-alert"
+        ):
+            return JsonResponse(
+                {
+                    "success": False,
+                    "error": {"message": "権限がありません。"},
+                },
+                status=403,
+            )
+
         return None

@@ -88,9 +88,18 @@
             </label>
           {% endfor %}
         </fieldset>
-        <div class="access-request-actions">
-          <button type="submit">保存</button>
+        <div class="access-request-actions user-edit-actions">
+          <button type="submit" name="action" value="save">保存</button>
           <button type="button" class="button dialog-cancel-button" data-dialog-close>キャンセル</button>
+          {% if entry.user.id != user.id %}
+            <button
+              type="submit"
+              name="action"
+              value="delete"
+              class="danger-button user-edit-delete-button"
+              onclick="return confirm('{{ entry.full_name|escapejs }}（{{ entry.user.username|escapejs }}）を削除します。関連するお気に入り・申請情報も削除され、元に戻せません。よろしいですか？');"
+            >削除</button>
+          {% endif %}
         </div>
       </form>
     </dialog>

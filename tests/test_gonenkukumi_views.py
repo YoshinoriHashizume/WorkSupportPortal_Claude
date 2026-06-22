@@ -1,5 +1,6 @@
 ﻿import json
 import re
+from pathlib import Path
 
 import pytest
 from django.contrib.auth import get_user_model
@@ -144,6 +145,28 @@ def test_search_page_defaults_to_latest_history(client, user):
     assert 'name="custItem" value="235677-0050"' in html
     assert 'name="yearMonth"' in html
     assert 'value="2026/05"' in html
+
+
+@pytest.mark.django_db
+def test_search_page_shows_mock_notice_when_oracle_mock_enabled(client, user, monkeypatch):
+    monkeypatch.setenv("ORACLE_USE_MOCK", "true")
+    client.force_login(user)
+    response = client.get("/app/production/five-year-nine")
+    assert response.status_code == 200
+    html = response.content.decode("utf-8")
+    assert "Oracle モックモード" in html
+    assert "サンプル得意先A" in html
+
+
+@pytest.mark.django_db
+def test_search_page_renders_customer_options_server_side(client, user):
+    client.force_login(user)
+    response = client.get("/app/production/five-year-nine")
+    assert response.status_code == 200
+    html = response.content.decode("utf-8")
+    assert "101 - サンプル得意先A" in html
+    assert 'value="101"' in html
+    assert 'data-customers-api="/api/gonenkukumi/customers"' in html
 
 
 @pytest.mark.django_db
@@ -363,3 +386,34 @@ def test_export_uses_requested_months(client, user, monkeypatch):
 
     assert response.status_code == 200
     assert requested_months == ["2026-04", "2026-05", "2026-06"]
+
+
+def test_search_page_uses_viewport_fitted_layout():
+    css = (Path(__file__).resolve().parents[1] / "static" / "css" / "app.css").read_text(encoding="utf-8")
+    assert "body.gonen-search-page .portal-main" in css
+    assert "body.gonen-search-page .layout" in css
+    assert ".gonen-search-page .content" in css
+    assert ".gonen-search-shell" in css
+    assert "flex: 0 0 auto" in css.split(".gonen-search-shell {")[1].split("}")[0]
+    assert "min(560px, calc(100% - 3.5rem))" in css.split(".gonen-search-shell {")[1].split("}")[0]
+    assert "grid-template-rows: minmax(0, 1fr)" in css.split(".gonen-search-shell {")[1].split("}")[0]
+    assert "height: 100%" in css.split(".gonen-search-card {")[1].split("}")[0]
+    assert "height: 100%" in css.split(".gonen-history-card {")[1].split("}")[0]
+    assert "height: 440px" not in css.split(".gonen-search-card {")[1].split("}")[0]
+    assert "height: 440px" not in css.split(".gonen-history-card {")[1].split("}")[0]
+    assert "overflow: visible" in css.split(".gonen-search-card {")[1].split("}")[0]
+    assert "overflow-y: auto" not in css.split(".gonen-search-card {")[1].split("}")[0]
+    assert "overflow: auto" in css.split(".history-table-wrap {")[1].split("}")[0]
+
+
+@pytest.mark.django_db
+def test_search_page_uses_gonen_search_body_class(client, user):
+    client.force_login(user)
+    response = client.get("/app/production/five-year-nine")
+    assert response.status_code == 200
+    html = response.content.decode("utf-8")
+    assert "gonen-search-page" in html
+    assert 'class="gonen-search-shell"' in html
+    assert 'class="card stack gonen-search-card"' in html
+    assert 'class="card gonen-history-card"' in html
+    assert 'class="history-table-wrap"' in html
