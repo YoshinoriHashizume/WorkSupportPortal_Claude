@@ -124,6 +124,8 @@ def test_production_deploy_doc_has_beginner_guide_and_bootstrap_admin():
     assert "check_production_env" in doc
     assert "Start-ProductionApp.cmd" in doc
     assert "bootstrap_production_admin --username 51705" in doc
+    assert "DPY-3015" in doc
+    assert "ORACLE_THICK_MODE" in doc
 
 
 def test_production_deploy_doc_documents_git_clone_on_windows():
