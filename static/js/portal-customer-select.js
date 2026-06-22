@@ -32,13 +32,28 @@
     if (!api) {
       return;
     }
-    const response = await fetch(api);
-    const payload = await response.json();
-    if (!response.ok) {
-      return;
+    try {
+      const response = await fetch(api, { credentials: "same-origin" });
+      const payload = await response.json();
+      if (!response.ok) {
+        select.dispatchEvent(
+          new CustomEvent("portal-customer-select:error", {
+            bubbles: true,
+            detail: { message: payload?.error?.message || "得意先候補の取得に失敗しました。" },
+          })
+        );
+        return;
+      }
+      fillSelect(select, payload.customers || []);
+      select.dispatchEvent(new Event("portal-customer-select:loaded", { bubbles: true }));
+    } catch (error) {
+      select.dispatchEvent(
+        new CustomEvent("portal-customer-select:error", {
+          bubbles: true,
+          detail: { message: "得意先候補の取得に失敗しました。" },
+        })
+      );
     }
-    fillSelect(select, payload.customers || []);
-    select.dispatchEvent(new Event("portal-customer-select:loaded", { bubbles: true }));
   }
 
   window.portalCustomerSelectLabel = function portalCustomerSelectLabel(select, code) {

@@ -7,6 +7,8 @@ VALID_CUSTOMER_CODE_DIGIT_LENGTHS = {
     CUSTOMER_CODE_DIGIT_LENGTH_4,
 }
 
+CUSTOMER_NAME_SQL = "TRIM(NVL(CUST_ANAME, CUST_NAME))"
+
 
 def mock_customers_all() -> list[dict[str, str]]:
     return [
@@ -55,7 +57,9 @@ def list_customers_by_digit_length(*, digit_length: int, keyword: str = "") -> l
     conditions = [f"REGEXP_LIKE(TRIM(CUST_CD), '{customer_code_digit_pattern(digit_length)}')"]
     params: dict[str, object] = {}
     if keyword:
-        conditions.append("(UPPER(TRIM(CUST_CD)) LIKE :code_keyword OR UPPER(TRIM(CUST_NAME)) LIKE :name_keyword)")
+        conditions.append(
+            f"(UPPER(TRIM(CUST_CD)) LIKE :code_keyword OR UPPER({CUSTOMER_NAME_SQL}) LIKE :name_keyword)"
+        )
         params["code_keyword"] = f"{keyword.upper()}%"
         params["name_keyword"] = f"%{keyword.upper()}%"
     if config["company_cd"]:
@@ -63,7 +67,7 @@ def list_customers_by_digit_length(*, digit_length: int, keyword: str = "") -> l
         params["company_cd"] = config["company_cd"]
 
     sql = f"""
-        SELECT TRIM(CUST_CD) AS CUST_CD, TRIM(CUST_NAME) AS CUST_NAME
+        SELECT TRIM(CUST_CD) AS CUST_CD, {CUSTOMER_NAME_SQL} AS CUST_NAME
           FROM M_CUST
          WHERE {" AND ".join(conditions)}
          ORDER BY CUST_CD
@@ -124,7 +128,7 @@ def lookup_customer_name(customer_code: str) -> str | None:
         params["company_cd"] = config["company_cd"]
 
     sql = f"""
-        SELECT TRIM(CUST_NAME) AS CUST_NAME
+        SELECT {CUSTOMER_NAME_SQL} AS CUST_NAME
           FROM M_CUST
          WHERE {" AND ".join(conditions)}
            AND ROWNUM = 1

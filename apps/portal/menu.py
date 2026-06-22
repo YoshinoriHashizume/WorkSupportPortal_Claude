@@ -58,6 +58,12 @@ MENU_ITEMS = [
         parent_key="receipt-comparison",
     ),
     PortalMenuItem(
+        key="inventory-order-alert",
+        title="在庫発注アラート",
+        href="/app/production/inventory-order-alert",
+        group_key="production",
+    ),
+    PortalMenuItem(
         key="notices",
         title="お知らせ",
         href="/app/management/notices",

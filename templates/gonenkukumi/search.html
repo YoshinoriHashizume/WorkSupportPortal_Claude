@@ -18,10 +18,15 @@
   >{% if is_five_year_nine_favorite %}♥{% else %}♡{% endif %}</button>
 </div>
 <div class="gonen-search-shell">
+  {% if oracle_use_mock %}
+  <div class="message gonen-oracle-mock-notice" style="grid-column: 1 / -1;">
+    Oracle モックモードです。得意先候補はサンプルデータ（例: サンプル得意先A）です。実データを使う場合は <code>ORACLE_USE_MOCK=false</code> に設定してコンテナを再起動してください。
+  </div>
+  {% endif %}
   <form id="search-form" class="card stack gonen-search-card" autocomplete="off">
     {% csrf_token %}
     <h2>検索条件</h2>
-    {% include "includes/customer_select.html" with field_name="custCode" label="得意先" variant="gonen" customers_api="/api/gonenkukumi/customers" selected_value=initial.custCode required=True select_id="custCode" %}
+    {% include "includes/customer_select.html" with field_name="custCode" label="得意先" variant="gonen" customers=customers customers_api="/api/gonenkukumi/customers" selected_value=initial.custCode required=True select_id="custCode" %}
     <label>得意先品目
       <input class="cust-item-input" name="custItem" value="{{ initial.custItem }}" list="cust-items" autocomplete="off">
       <datalist id="cust-items"></datalist>
@@ -331,7 +336,16 @@ form.addEventListener('submit', async (event) => {
   window.open(resultUrl(params), '_blank');
 });
 
+custCodeSelect.addEventListener("portal-customer-select:error", (event) => {
+  if (custCodeSelect.options.length <= 1) {
+    error.textContent = event.detail?.message || "得意先候補の取得に失敗しました。";
+  }
+});
+
 async function bootstrapSearchPage() {
+  {% if customer_load_error %}
+  error.textContent = "{{ customer_load_error|escapejs }}";
+  {% endif %}
   await window.initPortalCustomerSelects();
   await loadHistory();
   setYearMonth(yearMonthInput.value);

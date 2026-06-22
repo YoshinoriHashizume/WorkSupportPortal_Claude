@@ -1,0 +1,7 @@
+<button
+  type="button"
+  class="favorite-toggle portal-title-favorite{% if is_favorite %} is-favorite{% endif %}"
+  data-menu-key="{{ menu_key }}"
+  data-menu-title="{{ menu_title }}"
+  aria-label="{{ menu_title }}のお気に入りを切り替え"
+>{% if is_favorite %}♥{% else %}♡{% endif %}</button>

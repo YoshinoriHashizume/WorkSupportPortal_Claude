@@ -1,13 +1,12 @@
 from __future__ import annotations
 
 from datetime import date
-from unittest.mock import MagicMock
 
-from scripts.verify_post_receipt_shipment_count import (
-    fetch_customer_shipment_stats,
-    parse_optional_ymd,
+from apps.inventory_order_alert.domain.dates import parse_optional_ymd
+from apps.inventory_order_alert.domain.export_csv import EXPORT_HEADER_LABELS as SUMMARY_HEADER_LABELS
+from apps.inventory_order_alert.domain.oracle_summary import (
+    aggregate_shipment_stats,
     resolve_last_incoming_for_finished,
-    SUMMARY_HEADER_LABELS,
 )
 
 
@@ -26,13 +25,13 @@ def test_summary_headers_are_japanese():
 
 
 def test_fetch_customer_shipment_stats_after_incoming_date():
-    cursor = MagicMock()
-    cursor.fetchone.return_value = (date(2026, 6, 15), 1, 250)
-    connection = MagicMock()
-    connection.cursor.return_value = cursor
+    shipments = [
+        ("112", "90249-10112", date(2026, 6, 10), 100),
+        ("112", "90249-10112", date(2026, 6, 15), 250),
+    ]
 
-    last_ship, count, total_qty = fetch_customer_shipment_stats(
-        connection,
+    last_ship, count, total_qty = aggregate_shipment_stats(
+        shipments,
         "112",
         "90249-10112",
         date(2026, 6, 11),
@@ -41,9 +40,18 @@ def test_fetch_customer_shipment_stats_after_incoming_date():
     assert last_ship == date(2026, 6, 15)
     assert count == 1
     assert total_qty == 250
-    executed_sql = cursor.execute.call_args[0][0]
-    assert "SHIP_DATE > :last_incoming_date" in executed_sql
-    assert "DEL_FLG != 1" in executed_sql
+
+
+def test_fetch_customer_shipment_stats_without_incoming_counts_all_shipments():
+    shipments = [
+        ("112", "90249-10112", date(2026, 6, 10), 1000),
+        ("112", "90249-10112", date(2026, 6, 15), 250),
+    ]
+
+    _, count, total_qty = aggregate_shipment_stats(shipments, "112", "90249-10112", None)
+
+    assert count == 2
+    assert total_qty == 1250
 
 
 def test_resolve_last_incoming_for_finished_picks_latest_level1_incoming():
@@ -75,17 +83,3 @@ def test_resolve_last_incoming_for_finished_shows_level1_without_incoming():
     assert l1 == "43522-D1020-9064"
     assert vend == "9064"
     assert vend_name == "伸光技研"
-
-
-def test_fetch_customer_shipment_stats_without_incoming_counts_all_shipments():
-    cursor = MagicMock()
-    cursor.fetchone.return_value = (date(2026, 6, 15), 7, 3250)
-    connection = MagicMock()
-    connection.cursor.return_value = cursor
-
-    _, count, total_qty = fetch_customer_shipment_stats(connection, "112", "90249-10112", None)
-
-    assert count == 7
-    assert total_qty == 3250
-    executed_sql = cursor.execute.call_args[0][0]
-    assert "SHIP_DATE >" not in executed_sql

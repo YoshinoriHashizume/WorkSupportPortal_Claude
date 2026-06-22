@@ -5,6 +5,7 @@ from django.contrib.auth import get_user_model
 from django.contrib.auth.models import Group
 
 from apps.portal.favorites import can_access_menu_item, is_menu_path_active, menu_groups_with_items
+from apps.portal.views import delete_portal_user
 from apps.portal.models import PortalMenuGroupAccess, PortalNotice, UserAccessRequest, UserFavoriteMenu
 
 
@@ -49,14 +50,10 @@ def test_dashboard_shows_portal_title_and_favorite_controls(client, user):
     assert "承認依頼" in html
     assert "ユーザー管理" in html
     assert "データベース" in html
-    assert 'data-menu-key="five-year-nine"' in html
-    assert 'data-menu-key="receipt-comparison-finished-product"' in html
-    assert 'data-menu-key="receipt-comparison-supplied-parts"' in html
-    assert 'data-menu-key="notices"' in html
-    assert 'data-menu-key="access-requests"' in html
-    assert 'data-menu-key="user-management"' in html
-    assert 'data-menu-key="database"' in html
-    assert "♡" in html
+    assert 'data-menu-key="inventory-order-alert"' not in html
+    assert 'class="sidebar-nav"' in html
+    assert "sidebar-nav" in html
+    assert "♡" not in html.split('class="sidebar-nav"')[1].split("</nav>")[0]
     assert "お気に入りはありません" in html
     assert "お知らせ" in html
     assert "現在、お知らせはありません。" in html
@@ -256,6 +253,16 @@ def test_menu_groups_expand_when_current_path_matches(client):
 
 
 @pytest.mark.django_db
+def test_is_menu_favorited(user):
+    from apps.portal.favorites import is_menu_favorited
+    from apps.portal.models import UserFavoriteMenu
+
+    assert is_menu_favorited(user, "five-year-nine") is False
+    UserFavoriteMenu.objects.create(user=user, menu_key="five-year-nine", sort_order=0)
+    assert is_menu_favorited(user, "five-year-nine") is True
+
+
+@pytest.mark.django_db
 def test_parent_menu_cannot_be_favorited(client, user):
     PortalMenuGroupAccess.objects.create(user=user, group_key="production")
     client.force_login(user)
@@ -378,6 +385,79 @@ def test_user_management_admin_role_ignores_menu_groups(client, user):
     user.refresh_from_db()
     assert set(user.groups.values_list("name", flat=True)) == {"管理者"}
     assert not user.portal_menu_group_accesses.exists()
+
+
+@pytest.mark.django_db
+def test_user_management_shows_delete_button_for_other_users(client, user):
+    PortalMenuGroupAccess.objects.create(user=user, group_key="management")
+    target_user = get_user_model().objects.create_user(username="10002", last_name="山田", first_name="花子")
+    client.force_login(user)
+
+    response = client.get("/app/management/users")
+
+    assert response.status_code == 200
+    html = response.content.decode("utf-8")
+    assert 'value="delete"' in html
+    assert "danger-button user-edit-delete-button" in html
+    assert f'user-edit-dialog-{target_user.id}' in html
+    assert html.count('value="delete"') == 1
+    self_dialog_html = html.split(f'user-edit-dialog-{user.id}"', 1)[1].split("</dialog>", 1)[0]
+    assert 'value="delete"' not in self_dialog_html
+
+
+@pytest.mark.django_db
+def test_user_management_deletes_user(client, user):
+    PortalMenuGroupAccess.objects.create(user=user, group_key="management")
+    target_user = get_user_model().objects.create_user(username="10002", last_name="山田", first_name="花子")
+    UserAccessRequest.objects.create(user=target_user)
+    UserFavoriteMenu.objects.create(user=target_user, menu_key="five-year-nine", sort_order=0)
+    PortalMenuGroupAccess.objects.create(user=target_user, group_key="production")
+    client.force_login(user)
+
+    response = client.post(
+        "/app/management/users",
+        {
+            "user_id": str(target_user.id),
+            "action": "delete",
+        },
+    )
+
+    assert response.status_code == 302
+    assert not get_user_model().objects.filter(id=target_user.id).exists()
+    assert not UserAccessRequest.objects.filter(user_id=target_user.id).exists()
+    assert not UserFavoriteMenu.objects.filter(user_id=target_user.id).exists()
+    assert not PortalMenuGroupAccess.objects.filter(user_id=target_user.id).exists()
+
+
+@pytest.mark.django_db
+def test_user_management_cannot_delete_self(client, user):
+    PortalMenuGroupAccess.objects.create(user=user, group_key="management")
+    client.force_login(user)
+
+    response = client.post(
+        "/app/management/users",
+        {
+            "user_id": str(user.id),
+            "action": "delete",
+        },
+    )
+
+    assert response.status_code == 302
+    assert get_user_model().objects.filter(id=user.id).exists()
+
+
+@pytest.mark.django_db
+def test_delete_portal_user_returns_false_for_self(user):
+    assert delete_portal_user(actor=user, target_user=user) is False
+    assert get_user_model().objects.filter(id=user.id).exists()
+
+
+@pytest.mark.django_db
+def test_delete_portal_user_deletes_other_user(user):
+    target_user = get_user_model().objects.create_user(username="10002", last_name="山田", first_name="花子")
+
+    assert delete_portal_user(actor=user, target_user=target_user) is True
+    assert not get_user_model().objects.filter(id=target_user.id).exists()
 
 
 @pytest.mark.django_db
@@ -572,3 +652,29 @@ def test_approved_user_can_operate(client):
 
     assert response.status_code == 200
     assert "お気に入り" in response.content.decode("utf-8")
+
+
+def test_sidebar_nav_scrolls_when_menu_overflows_viewport():
+    from pathlib import Path
+
+    css = (Path(__file__).resolve().parents[1] / "static" / "css" / "app.css").read_text(encoding="utf-8")
+    sidebar_rule = css.split(".sidebar {")[1].split("}")[0]
+    assert "height: 100dvh" in sidebar_rule
+    assert "max-height: 100dvh" in sidebar_rule
+    assert "align-self: flex-start" in sidebar_rule
+    assert "align-self: stretch" not in sidebar_rule
+    assert "background: #0f172a" in css.split(".sidebar-nav {")[1].split("}")[0]
+    nav_rule = css.split(".sidebar-nav {")[1].split("}")[0]
+    assert "display: grid" in nav_rule
+    assert "flex: 1 1 auto" in nav_rule
+    assert "overflow-y: auto" in nav_rule
+    assert "align-content: start" in nav_rule
+    assert ".sidebar-nav::-webkit-scrollbar-thumb" in css
+    assert "scrollbar-color: #475569 #0f172a" in css
+    branch_panel_rule = css.split(".sidebar-menu-branch-panel {")[1].split("}")[0]
+    assert "border-left" not in branch_panel_rule
+    group_panel_rule = css.split(".sidebar-menu-group-panel {")[1].split("}")[0]
+    assert "--sidebar-level1-gutter: 16px" in group_panel_rule
+    assert "padding: 2px 0 0 20px" in group_panel_rule
+    assert ".sidebar-menu-branch > summary {\n  display: grid;\n  grid-template-columns: var(--sidebar-level1-gutter) minmax(0, 1fr);" in css
+    assert "padding-left: calc(var(--sidebar-level1-gutter) + var(--sidebar-level1-gap))" in css.split(".sidebar-menu-group-panel > .sidebar-menu-item > a {")[1].split("}")[0]

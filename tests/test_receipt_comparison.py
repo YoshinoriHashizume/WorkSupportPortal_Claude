@@ -8,7 +8,11 @@ from django.contrib.auth.models import Group
 from django.core.files.uploadedfile import SimpleUploadedFile
 from django.http import Http404
 
-from apps.portal.favorites import is_menu_path_active, receipt_comparison_type_from_path
+from apps.portal.favorites import (
+    is_menu_path_active,
+    receipt_comparison_menu_key,
+    receipt_comparison_type_from_path,
+)
 from apps.portal.middleware import receipt_comparison_menu_key_for_request
 from apps.portal.models import PortalMenuGroupAccess
 from apps.receipt_comparison.domain.comparison import compare_receipts, normalize_qty
@@ -80,6 +84,27 @@ def supplier(db):
         customer_code="001",
         name="テスト取引先",
     )
+
+
+def test_receipt_comparison_menu_key_maps_type_to_menu_key():
+    assert receipt_comparison_menu_key("finished-product") == "receipt-comparison-finished-product"
+    assert receipt_comparison_menu_key("supplied-parts") == "receipt-comparison-supplied-parts"
+    assert receipt_comparison_menu_key("finished_product") == "receipt-comparison-finished-product"
+    assert receipt_comparison_menu_key("supplied_parts") == "receipt-comparison-supplied-parts"
+
+
+@pytest.mark.django_db
+def test_receipt_comparison_page_shows_favorite_toggle(client, production_user):
+    client.force_login(production_user)
+
+    finished_html = client.get("/app/production/receipt-comparison?type=finished-product").content.decode("utf-8")
+    supplied_html = client.get("/app/production/receipt-comparison?type=supplied-parts").content.decode("utf-8")
+
+    assert 'data-menu-key="receipt-comparison-finished-product"' in finished_html
+    assert 'data-menu-key="receipt-comparison-supplied-parts"' in supplied_html
+    assert 'class="favorite-toggle portal-title-favorite"' in finished_html
+    assert "完成品のお気に入りを切り替え" in finished_html
+    assert "支給品のお気に入りを切り替え" in supplied_html
 
 
 def test_receipt_comparison_type_from_path():
@@ -575,9 +600,14 @@ def test_receipt_comparison_page_fixes_table_header_and_scroll_area():
     css_path = Path(__file__).resolve().parents[1] / "static" / "css" / "app.css"
     css = css_path.read_text(encoding="utf-8")
     assert ".receipt-comparison-page .content" in css
+    assert "body.receipt-comparison-page { overflow: hidden; height: 100dvh; }" in css
+    assert "body.receipt-comparison-page .portal-main { height: 100dvh; max-height: 100dvh; overflow: hidden; }" in css
     assert ".receipt-comparison-page .receipt-results-card .db-table-wrap" in css
     assert ".receipt-comparison-page .receipt-results-card .db-table th" in css
     assert "position: sticky" in css
+    receipt_comparison_rule = css.split(".receipt-comparison-page .receipt-comparison {")[1].split("}")[0]
+    assert "align-content: stretch" in receipt_comparison_rule
+    assert "minmax(0, 1fr)" in receipt_comparison_rule
 
 
 @pytest.mark.django_db

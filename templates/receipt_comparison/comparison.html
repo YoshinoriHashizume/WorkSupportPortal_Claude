@@ -5,7 +5,10 @@
 <section class="receipt-comparison{% if results_panel_active %} receipt-comparison--results-panel{% endif %}">
   <div class="portal-section-head receipt-head">
     <div>
-      <h1>検収書比較（{{ comparison_type_page_label }}）</h1>
+      <div class="portal-page-title-row">
+        <h1>検収書比較（{{ comparison_type_page_label }}）</h1>
+        {% include "includes/page_favorite_toggle.html" with menu_key=favorite_menu_key menu_title=favorite_menu_title is_favorite=is_comparison_favorite %}
+      </div>
       <p>取引先受領書と MARI のデータを比較します。</p>
     </div>
     {% if show_settings %}

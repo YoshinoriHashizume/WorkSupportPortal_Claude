@@ -209,6 +209,12 @@ def user_management_column_headers(sort_key: str, sort_direction: str) -> list[d
 
 @login_required
 def dashboard(request: HttpRequest) -> HttpResponse:
+    inventory_order_alert_banner = None
+    if can_access_menu_item(request.user, "inventory-order-alert"):
+        from apps.inventory_order_alert.application.portal_dashboard import load_dashboard_banner_context
+
+        inventory_order_alert_banner = load_dashboard_banner_context()
+
     return render(
         request,
         "portal/dashboard.html",
@@ -216,6 +222,7 @@ def dashboard(request: HttpRequest) -> HttpResponse:
             "menu_items": MENU_ITEMS,
             "favorite_items": favorite_items_for_user(request.user),
             "notices": PortalNotice.objects.filter(is_published=True).order_by("-created_at")[:10],
+            "inventory_order_alert_banner": inventory_order_alert_banner,
         },
     )
 
@@ -275,12 +282,29 @@ def access_requests(request: HttpRequest) -> HttpResponse:
     )
 
 
+def delete_portal_user(*, actor: object, target_user: object) -> bool:
+    if target_user.id == getattr(actor, "id", None):
+        return False
+    target_user.delete()
+    return True
+
+
 @login_required
 @require_http_methods(["GET", "POST"])
 def user_management(request: HttpRequest) -> HttpResponse:
     if request.method == "POST":
         User = get_user_model()
-        target_user = User.objects.get(id=request.POST.get("user_id"))
+        user_id = request.POST.get("user_id")
+        try:
+            target_user = User.objects.get(id=user_id)
+        except (User.DoesNotExist, ValueError, TypeError):
+            return redirect("portal:user_management")
+
+        action = request.POST.get("action", "save")
+        if action == "delete":
+            delete_portal_user(actor=request.user, target_user=target_user)
+            return redirect("portal:user_management")
+
         target_user.last_name = (request.POST.get("last_name") or "").strip()
         target_user.first_name = (request.POST.get("first_name") or "").strip()
         target_user.email = (request.POST.get("email") or "").strip()

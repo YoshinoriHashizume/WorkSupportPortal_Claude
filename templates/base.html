@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>{% block title %}業務支援ポータル{% endblock %}</title>
   {% block extra_head %}{% endblock %}
-  <link rel="stylesheet" href="/static/css/app.css?v=20260616-1400">
+  <link rel="stylesheet" href="/static/css/app.css?v=20260619-1710">
 </head>
 <body class="{% block body_class %}{% endblock %}">
   {% if user.is_authenticated %}
@@ -44,13 +44,6 @@
                       <div class="sidebar-menu-branch-panel">
                         {% for child in item.children %}
                           <div class="sidebar-menu-item sidebar-menu-item-nested{% if child.is_active %} is-active{% endif %}">
-                            <button
-                              type="button"
-                              class="favorite-toggle{% if child.is_favorite %} is-favorite{% endif %}"
-                              data-menu-key="{{ child.key }}"
-                              data-menu-title="{{ child.title }}"
-                              aria-label="{{ child.title }}のお気に入りを切り替え"
-                            >{% if child.is_favorite %}♥{% else %}♡{% endif %}</button>
                             <a href="{{ child.href }}"{% if child.is_active %} class="is-active" aria-current="page"{% endif %}>{{ child.title }}</a>
                           </div>
                         {% endfor %}
@@ -58,13 +51,6 @@
                     </details>
                   {% else %}
                     <div class="sidebar-menu-item{% if item.is_active %} is-active{% endif %}">
-                      <button
-                        type="button"
-                        class="favorite-toggle{% if item.is_favorite %} is-favorite{% endif %}"
-                        data-menu-key="{{ item.key }}"
-                        data-menu-title="{{ item.title }}"
-                        aria-label="{{ item.title }}のお気に入りを切り替え"
-                      >{% if item.is_favorite %}♥{% else %}♡{% endif %}</button>
                       <a href="{{ item.href }}"{% if item.is_active %} class="is-active" aria-current="page"{% endif %}>{{ item.title }}</a>
                     </div>
                   {% endif %}

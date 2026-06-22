@@ -26,9 +26,38 @@
         {% endfor %}
       </div>
     {% else %}
-      <p class="favorite-empty">お気に入りはありません。左メニューのハートから追加できます。</p>
+      <p class="favorite-empty">お気に入りはありません。各アプリ画面のハートから追加できます。</p>
     {% endif %}
   </section>
+
+  {% if inventory_order_alert_banner %}
+  <section class="inventory-order-alert-banner inventory-order-alert-banner--{{ inventory_order_alert_banner.tone }}">
+    <div class="inventory-order-alert-banner-body">
+      <h2>在庫発注アラート</h2>
+      {% if inventory_order_alert_banner.error_message %}
+        <p>{{ inventory_order_alert_banner.error_message }}</p>
+      {% elif inventory_order_alert_banner.has_alerts %}
+        <p>
+          重点 <strong>{{ inventory_order_alert_banner.critical }}</strong> 件 /
+          警告（出荷あり） <strong>{{ inventory_order_alert_banner.warning_ship }}</strong> 件 /
+          警告（出荷なし） <strong>{{ inventory_order_alert_banner.warning_incoming }}</strong> 件 /
+          未確認 <strong>{{ inventory_order_alert_banner.unconfirmed }}</strong> 件
+        </p>
+      {% else %}
+        <p>現在、アラート対象はありません。</p>
+      {% endif %}
+      {% if inventory_order_alert_banner.stock_as_of_label %}
+        <p class="inventory-order-alert-banner-stock">{{ inventory_order_alert_banner.stock_as_of_label }}</p>
+      {% elif not inventory_order_alert_banner.has_stock_data %}
+        <p class="inventory-order-alert-banner-stock">在庫 CSV 未取込 — 在庫発注アラート画面から SLIMS CSV を取り込んでください</p>
+      {% endif %}
+      {% if inventory_order_alert_banner.stock_stale %}
+        <p class="inventory-order-alert-banner-stale">SLIMS 在庫データが古い可能性があります</p>
+      {% endif %}
+    </div>
+    <a class="button-link" href="/app/production/inventory-order-alert">詳細を見る</a>
+  </section>
+  {% endif %}
 
   <section class="notice-section">
     <div class="portal-section-head">

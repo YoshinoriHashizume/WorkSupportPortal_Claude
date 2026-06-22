@@ -2,14 +2,16 @@
 
 from django.conf import settings
 from django.contrib import messages
-from django.contrib.auth import get_user_model, login, logout
+from django.contrib.auth import get_user_model, login, logout, authenticate
 from django.http import HttpRequest, HttpResponse
 from django.shortcuts import redirect, render
 from django.utils.http import url_has_allowed_host_and_scheme
+from django.views.decorators.csrf import csrf_exempt, ensure_csrf_cookie
 from django.views.decorators.http import require_GET, require_http_methods, require_POST
 
 from apps.portal.models import UserAccessRequest
 
+from .dev_login import is_dev_login_available
 from .desknet import DesknetAuthError, DesknetUserInfo, authenticate_desknet_user
 
 
@@ -42,6 +44,7 @@ def upsert_django_user_from_desknet(user_info: DesknetUserInfo):
     return user
 
 
+@ensure_csrf_cookie
 @require_GET
 def login_page(request: HttpRequest) -> HttpResponse:
     if request.user.is_authenticated:
@@ -51,6 +54,7 @@ def login_page(request: HttpRequest) -> HttpResponse:
         "identity/login.html",
         {
             "auth_provider": settings.AUTH_PROVIDER,
+            "show_dev_login": is_dev_login_available(),
             "next": safe_next_url(request),
         },
     )
@@ -82,6 +86,27 @@ def desknet_login(request: HttpRequest) -> HttpResponse:
     access_request = getattr(user, "access_request", None)
     if access_request and access_request.status != UserAccessRequest.Status.APPROVED:
         return redirect("portal:access_status")
+    return redirect(safe_next_url(request))
+
+
+@csrf_exempt
+@require_POST
+def dev_login(request: HttpRequest) -> HttpResponse:
+    if not is_dev_login_available():
+        return HttpResponse("Not Found", status=404)
+
+    employee_id = (request.POST.get("employee_id") or "").strip()
+    password = request.POST.get("password") or ""
+    if not employee_id or not password:
+        messages.error(request, "社員番号とパスワードを入力してください。")
+        return redirect("identity:login")
+
+    user = authenticate(request, username=employee_id, password=password)
+    if user is None:
+        messages.error(request, "社員番号またはパスワードが正しくありません。")
+        return redirect("identity:login")
+
+    login(request, user)
     return redirect(safe_next_url(request))
 
 

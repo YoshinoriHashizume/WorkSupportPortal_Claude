@@ -23,4 +23,4 @@ COPY . .
 
 EXPOSE 3000
 
-CMD ["sh", "-c", "python manage.py migrate && python manage.py runserver 0.0.0.0:3000"]
+CMD ["sh", "-c", "python manage.py migrate --noinput && if [ \"$AUTH_DEV_MODE\" = \"true\" ]; then python manage.py bootstrap_local_dev; fi && exec python manage.py runserver 0.0.0.0:3000"]

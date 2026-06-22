@@ -1,4 +1,4 @@
-﻿from __future__ import annotations
+from __future__ import annotations
 
 import logging
 import os
@@ -25,7 +25,16 @@ class OracleQueryError(RuntimeError):
 
 
 def use_mock() -> bool:
-    return os.environ.get("ORACLE_USE_MOCK", "true").lower() != "false"
+    return os.environ.get("ORACLE_USE_MOCK", "false").lower() != "false"
+
+
+def oracle_connect_timeout_seconds() -> float:
+    raw = os.environ.get("ORACLE_CONNECT_TIMEOUT_SECONDS", "5")
+    try:
+        timeout = float(raw)
+    except ValueError:
+        return 5.0
+    return max(0.0, timeout)
 
 
 def oracle_config() -> dict[str, str]:
@@ -69,7 +78,16 @@ def oracle_connection() -> Iterator[object]:
     else:
         dsn = oracledb.makedsn(config["host"], int(config["port"]), sid=config["sid"])
 
-    connection = oracledb.connect(user=config["user"], password=config["password"], dsn=dsn)
+    connect_kwargs: dict[str, object] = {
+        "user": config["user"],
+        "password": config["password"],
+        "dsn": dsn,
+    }
+    timeout_seconds = oracle_connect_timeout_seconds()
+    if timeout_seconds > 0:
+        connect_kwargs["tcp_connect_timeout"] = timeout_seconds
+
+    connection = oracledb.connect(**connect_kwargs)
     try:
         yield connection
     finally:
