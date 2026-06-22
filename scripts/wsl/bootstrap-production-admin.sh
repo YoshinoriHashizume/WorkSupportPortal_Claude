@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Create first production admin user inside django_app container.
-# Example: bash scripts/wsl/bootstrap-production-admin.sh 10001 橋爪 良典
+# Example: bash scripts/wsl/bootstrap-production-admin.sh 51705 橋爪 良典
 set -euo pipefail
 
 if [ "$#" -lt 3 ]; then
