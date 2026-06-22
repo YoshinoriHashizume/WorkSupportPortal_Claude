@@ -45,7 +45,7 @@ def oracle_config() -> dict[str, str]:
         "service_name": os.environ.get("ORACLE_SERVICE_NAME", ""),
         "user": os.environ.get("ORACLE_USER", ""),
         "password": os.environ.get("ORACLE_PASSWORD", ""),
-        "company_cd": os.environ.get("GONENKUKUMI_COMPANY_CD") or os.environ.get("MARI_COMPANY_CD", ""),
+        "company_cd": os.environ.get("MARI_COMPANY_CD", ""),
         "thick_mode": os.environ.get("ORACLE_THICK_MODE", "false"),
         "client_lib_dir": os.environ.get("ORACLE_CLIENT_LIB_DIR", ""),
     }

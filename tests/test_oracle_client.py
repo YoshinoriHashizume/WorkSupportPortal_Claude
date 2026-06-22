@@ -26,6 +26,30 @@ def test_oracle_connect_timeout_seconds_negative_becomes_zero(monkeypatch):
     assert oracle_connect_timeout_seconds() == 0.0
 
 
+def test_oracle_config_ignores_gonenkukumi_company_cd(monkeypatch):
+    monkeypatch.setenv("GONENKUKUMI_COMPANY_CD", "99")
+    monkeypatch.delenv("MARI_COMPANY_CD", raising=False)
+    monkeypatch.setenv("ORACLE_HOST", "192.168.3.204")
+    monkeypatch.setenv("ORACLE_PORT", "1521")
+    monkeypatch.setenv("ORACLE_SID", "EXPJ")
+    monkeypatch.setenv("ORACLE_USER", "EXPJ")
+    monkeypatch.setenv("ORACLE_PASSWORD", "secret")
+
+    assert oracle_config()["company_cd"] == ""
+
+
+def test_oracle_config_uses_mari_company_cd_when_set(monkeypatch):
+    monkeypatch.delenv("GONENKUKUMI_COMPANY_CD", raising=False)
+    monkeypatch.setenv("MARI_COMPANY_CD", "01")
+    monkeypatch.setenv("ORACLE_HOST", "192.168.3.204")
+    monkeypatch.setenv("ORACLE_PORT", "1521")
+    monkeypatch.setenv("ORACLE_SID", "EXPJ")
+    monkeypatch.setenv("ORACLE_USER", "EXPJ")
+    monkeypatch.setenv("ORACLE_PASSWORD", "secret")
+
+    assert oracle_config()["company_cd"] == "01"
+
+
 @patch("apps.gonenkukumi.infrastructure.oracle.client.oracle_config")
 def test_oracle_connection_passes_tcp_connect_timeout(mock_config, monkeypatch):
     monkeypatch.setenv("ORACLE_CONNECT_TIMEOUT_SECONDS", "7")

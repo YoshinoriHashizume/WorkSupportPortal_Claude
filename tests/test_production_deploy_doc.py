@@ -41,9 +41,9 @@ def test_production_deploy_doc_lists_oracle_environment_variables():
         "ORACLE_USE_MOCK",
         "ORACLE_THICK_MODE",
         "ORACLE_CONNECT_TIMEOUT_SECONDS",
-        "GONENKUKUMI_COMPANY_CD",
     ):
         assert name in doc
+    assert "GONENKUKUMI_COMPANY_CD" not in doc
 
 
 def test_production_deploy_doc_microsoft_callback_path_matches_implementation():

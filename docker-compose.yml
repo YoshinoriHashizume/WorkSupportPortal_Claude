@@ -26,7 +26,6 @@ services:
       ORACLE_PASSWORD: "${ORACLE_PASSWORD:-EXPJ}"
       ORACLE_THICK_MODE: "${ORACLE_THICK_MODE:-true}"
       ORACLE_CLIENT_LIB_DIR: "${ORACLE_CLIENT_LIB_DIR:-/opt/oracle/instantclient_21_13}"
-      GONENKUKUMI_COMPANY_CD: "${GONENKUKUMI_COMPANY_CD:-}"
     ports:
       - "3100:3000"
     volumes:
