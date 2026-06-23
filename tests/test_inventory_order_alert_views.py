@@ -152,9 +152,9 @@ def test_list_page_places_slims_import_before_csv_export(client, production_user
 def test_inventory_order_alert_page_uses_viewport_fitted_table_layout():
     css_path = Path(__file__).resolve().parents[1] / "static" / "css" / "app.css"
     css = css_path.read_text(encoding="utf-8")
-    assert "body.inventory-order-alert-page .portal-main" in css
-    assert "body.inventory-order-alert-page .layout" in css
-    assert ".inventory-order-alert-page .content" in css
+    assert "body.portal-app-page .portal-main" in css
+    assert "body.portal-app-page .layout" in css
+    assert "body.portal-app-page.inventory-order-alert-page .content > .ioa-table-card" in css
     assert ".inventory-order-alert-page .ioa-table-card" in css
     assert "body.inventory-order-alert-page .ioa-alert-rules-dialog" in css
     assert ".inventory-order-alert-page .ioa-table th {\n  position: sticky;" in css

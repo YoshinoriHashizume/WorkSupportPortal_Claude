@@ -7,66 +7,80 @@
   <link rel="stylesheet" href="/static/vendor/flatpickr/plugins/monthSelect/style.css">
 {% endblock %}
 {% block content %}
-<div class="gonen-search-title-row">
-  <h1 class="gonen-search-title">5年9組</h1>
-  <button
-    type="button"
-    class="favorite-toggle gonen-title-favorite{% if is_five_year_nine_favorite %} is-favorite{% endif %}"
-    data-menu-key="five-year-nine"
-    data-menu-title="5年9組"
-    aria-label="5年9組のお気に入りを切り替え"
-  >{% if is_five_year_nine_favorite %}♥{% else %}♡{% endif %}</button>
-</div>
-<div class="gonen-search-shell">
+<section class="gonen-search">
+  <div class="portal-section-head gonen-search-head">
+    <div>
+      <div class="portal-page-title-row">
+        <h1>5年9組</h1>
+        <button
+          type="button"
+          class="favorite-toggle portal-title-favorite{% if is_five_year_nine_favorite %} is-favorite{% endif %}"
+          data-menu-key="five-year-nine"
+          data-menu-title="5年9組"
+          aria-label="5年9組のお気に入りを切り替え"
+        >{% if is_five_year_nine_favorite %}♥{% else %}♡{% endif %}</button>
+      </div>
+      <p>検索条件を入力して結果を表示します。右の履歴から過去の条件を再利用できます。</p>
+    </div>
+  </div>
+
   {% if oracle_use_mock %}
-  <div class="message gonen-oracle-mock-notice" style="grid-column: 1 / -1;">
+  <div class="message gonen-oracle-mock-notice">
     Oracle モックモードです。得意先候補はサンプルデータ（例: サンプル得意先A）です。実データを使う場合は <code>ORACLE_USE_MOCK=false</code> に設定してコンテナを再起動してください。
   </div>
   {% endif %}
-  <form id="search-form" class="card stack gonen-search-card" autocomplete="off">
-    {% csrf_token %}
-    <h2>検索条件</h2>
-    {% include "includes/customer_select.html" with field_name="custCode" label="得意先" variant="gonen" customers=customers customers_api="/api/gonenkukumi/customers" selected_value=initial.custCode required=True select_id="custCode" %}
-    <label>得意先品目
-      <input class="cust-item-input" name="custItem" value="{{ initial.custItem }}" list="cust-items" autocomplete="off">
-      <datalist id="cust-items"></datalist>
-      <div id="cust-item-empty" class="cust-item-empty" hidden>候補がありません</div>
-    </label>
-    <label>品目任意変換値
-      <input name="optionChange" value="{{ initial.optionChange }}" maxlength="20">
-    </label>
-    <div class="date-row">
-      <label>検索年月
-        <input id="year-month-picker" class="month-picker-input" name="yearMonth" type="text" required value="{{ initial.yearMonth|date_slash }}" readonly autocomplete="off">
-      </label>
-      <label>対象日付
-        <input name="asOfDate" type="date" required>
-      </label>
+
+  <div class="gonen-search-body">
+    <aside class="gonen-search-sidebar">
+      <form id="search-form" class="gonen-setting-form card gonen-search-card" autocomplete="off">
+        {% csrf_token %}
+        <h2>検索条件</h2>
+        {% include "includes/customer_select.html" with field_name="custCode" label="得意先" variant="gonen" customers=customers customers_api="/api/gonenkukumi/customers" selected_value=initial.custCode required=True select_id="custCode" %}
+        <label>得意先品目
+          <input class="cust-item-input" name="custItem" value="{{ initial.custItem }}" list="cust-items" autocomplete="off">
+          <datalist id="cust-items"></datalist>
+          <div id="cust-item-empty" class="cust-item-empty" hidden>候補がありません</div>
+        </label>
+        <label>品目任意変換値
+          <input name="optionChange" value="{{ initial.optionChange }}" maxlength="20">
+        </label>
+        <div class="date-row">
+          <label>検索年月
+            <input id="year-month-picker" class="month-picker-input" name="yearMonth" type="text" required value="{{ initial.yearMonth|date_slash }}" readonly autocomplete="off">
+          </label>
+          <label>対象日付
+            <input name="asOfDate" type="date" required>
+          </label>
+        </div>
+        <button type="submit">検索</button>
+        <div id="search-error" class="error"></div>
+      </form>
+    </aside>
+
+    <div class="db-table-card gonen-history-list-card">
+      <div class="db-table-head">
+        <h2>検索履歴</h2>
+        <p>履歴をクリックすると、検索条件にその内容を反映します。</p>
+      </div>
+      <div class="db-table-wrap">
+        <table class="db-table gonen-history-table">
+          <thead>
+            <tr>
+              <th>得意先</th>
+              <th>得意先品目</th>
+              <th>品目任意変換値</th>
+              <th>検索年月</th>
+              <th>検索日時</th>
+            </tr>
+          </thead>
+          <tbody id="history-list">
+            <tr><td colspan="5">履歴を読み込み中...</td></tr>
+          </tbody>
+        </table>
+      </div>
     </div>
-    <button type="submit">検索</button>
-    <div id="search-error" class="error"></div>
-  </form>
-  <section class="card gonen-history-card">
-    <h2>検索履歴</h2>
-    <p>履歴をクリックすると、検索条件にその内容を反映します。</p>
-    <div class="history-table-wrap">
-      <table class="history-table">
-        <thead>
-          <tr>
-            <th>得意先</th>
-            <th>得意先品目</th>
-            <th>品目任意変換値</th>
-            <th>検索年月</th>
-            <th>検索日時</th>
-          </tr>
-        </thead>
-        <tbody id="history-list">
-          <tr><td colspan="5">履歴を読み込み中...</td></tr>
-        </tbody>
-      </table>
-    </div>
-  </section>
-</div>
+  </div>
+</section>
 <script src="/static/js/portal-customer-select.js"></script>
 <script src="/static/vendor/flatpickr/flatpickr.min.js"></script>
 <script src="/static/vendor/flatpickr/ja.js"></script>

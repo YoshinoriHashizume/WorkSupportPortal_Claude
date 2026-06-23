@@ -1,4 +1,4 @@
-<label{% if label_id %} id="{{ label_id }}"{% endif %} class="portal-vendor-field{% if variant %} portal-vendor-field--{{ variant }}{% endif %}{% if label_class %} {{ label_class }}{% endif %}">{{ label|default:"取引先" }}
+{% if not hide_label %}<label{% if label_id %} id="{{ label_id }}"{% endif %} class="portal-vendor-field{% if variant %} portal-vendor-field--{{ variant }}{% endif %}{% if label_class %} {{ label_class }}{% endif %}">{{ label|default:"取引先" }}{% endif %}
   <select
     name="{{ field_name }}"
     {% if select_id %}id="{{ select_id }}"{% endif %}
@@ -15,4 +15,4 @@
       <option value="{{ vendor.vendorCode }}" {% if vendor.vendorCode == selected_value %}selected{% endif %}>{{ vendor.vendorCode }}{% if vendor.vendorName %} - {{ vendor.vendorName }}{% endif %}</option>
     {% endfor %}
   </select>
-</label>
+{% if not hide_label %}</label>{% endif %}

@@ -50,8 +50,8 @@
               {% else %}
                 <th>子取引先</th>
               {% endif %}
-              <th>{{ settings_target_label }}</th>
               <th>除外</th>
+              <th>{{ settings_target_label }}</th>
             </tr>
           </thead>
           <tbody>
@@ -71,8 +71,8 @@
                       {% endfor %}
                     </td>
                   {% endif %}
-                  <td class="mono">{{ supplier.receiving_settings.all|length }}</td>
                   <td>{% if supplier.exclusion %}する{% else %}しない{% endif %}</td>
+                  <td class="mono">{{ supplier.receiving_settings.all|length }}</td>
                 </tr>
               {% endwith %}
             {% empty %}

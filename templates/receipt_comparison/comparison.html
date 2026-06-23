@@ -36,25 +36,6 @@
     <button type="submit">表示</button>
   </form>
 
-  {% if supplier and not results_panel_active %}
-    <form class="receipt-upload card" method="post" enctype="multipart/form-data">
-      {% csrf_token %}
-      <input type="hidden" name="type" value="{{ type_slug }}">
-      <input type="hidden" name="supplier_id" value="{{ supplier.id }}">
-      <input type="hidden" name="start_date" value="{{ start_date }}">
-      <input type="hidden" name="end_date" value="{{ end_date }}">
-      <input type="hidden" name="sort" value="{{ sort_key }}">
-      <input type="hidden" name="dir" value="{{ sort_direction }}">
-      <label>取引先受領書
-        <input type="file" name="receipt_file" accept="{{ receipt_file_accept }}" required>
-      </label>
-      <button type="submit" name="action" value="compare">比較</button>
-      <p class="muted">{% if comparison_type == "finished_product" %}完成品はCSVを指定してください。{% else %}支給品はTXTを指定してください。{% endif %}</p>
-    </form>
-  {% elif not supplier %}
-    <p class="favorite-empty">得意先を選択してください。{% if show_settings %}得意先が表示されない場合は、設定画面で登録してください。{% else %}得意先が表示されない場合は、管理者に得意先の登録を依頼してください。{% endif %}</p>
-  {% endif %}
-
   {% if supplier and results_panel_active %}
     <form id="receipt-results-compare-form" class="receipt-results-compare-form" method="post" enctype="multipart/form-data">
       {% csrf_token %}
@@ -97,7 +78,7 @@
           {% if rows %}
             <a class="button secondary-button" href="{% url 'receipt_comparison:export_csv' %}?{{ comparison_query }}">CSV</a>
             {% if not has_pending %}
-              <button type="submit" name="action" value="update">結果・備考を更新</button>
+              <button type="submit" name="action" value="update">更新</button>
             {% endif %}
           {% endif %}
           {% if has_pending %}
@@ -157,6 +138,8 @@
           </tbody>
         </table>
       </div>
+    {% elif not supplier %}
+      <p class="favorite-empty">得意先を選択してください。{% if show_settings %}得意先が表示されない場合は、設定画面で登録してください。{% else %}得意先が表示されない場合は、管理者に得意先の登録を依頼してください。{% endif %}</p>
     {% elif supplier and results_panel_active %}
       <p class="favorite-empty">比較結果はありません。</p>
     {% elif supplier %}

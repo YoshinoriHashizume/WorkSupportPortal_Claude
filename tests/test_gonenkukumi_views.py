@@ -388,22 +388,60 @@ def test_export_uses_requested_months(client, user, monkeypatch):
     assert requested_months == ["2026-04", "2026-05", "2026-06"]
 
 
+def test_result_page_table_row_height_css():
+    css = (Path(__file__).resolve().parents[1] / "static" / "css" / "app.css").read_text(encoding="utf-8")
+    assert "--gonen-result-row-height: 26px" in css
+    assert "--gonen-result-font-size: 13px" in css
+    assert "--gonen-result-qty-font-size: 12px" in css
+    grid_rule = css.split(".next-report-grid th,\n.next-report-grid td {")[1].split("}")[0]
+    assert "min-height: var(--gonen-result-row-height)" in grid_rule
+    assert "font-size: var(--gonen-result-font-size)" in css.split(".next-report-grid {")[1].split("}")[0]
+    assert "font-size: var(--gonen-result-qty-font-size)" in css.split(".next-report-grid .qty {")[1].split("}")[0]
+    bare_content_rule = css.split(".bare-result-page .content {")[1].split("}")[0]
+    assert "overflow: visible" in bare_content_rule
+    assert "max-height: none" in bare_content_rule
+    portal_bare_rule = css.split("body.portal-app-page.bare-result-page {")[1].split("}")[0]
+    assert "overflow-y: auto" in portal_bare_rule
+    portal_bare_content_rule = css.split("body.portal-app-page.bare-result-page .content {")[1].split("}")[0]
+    assert "display: block" in portal_bare_content_rule
+    assert "max-height: none" in portal_bare_content_rule
+    assert "overflow: visible" in portal_bare_content_rule
+    segment_rule = css.split(".next-segment {")[1].split("}")[0]
+    assert "overflow: visible" in segment_rule
+    assert "clamp(8px" not in css.split(".next-report-grid {")[1].split("}")[0]
+
+
+@pytest.mark.django_db
 def test_search_page_uses_viewport_fitted_layout():
     css = (Path(__file__).resolve().parents[1] / "static" / "css" / "app.css").read_text(encoding="utf-8")
-    assert "body.gonen-search-page .portal-main" in css
-    assert "body.gonen-search-page .layout" in css
-    assert ".gonen-search-page .content" in css
-    assert ".gonen-search-shell" in css
-    assert "flex: 0 0 auto" in css.split(".gonen-search-shell {")[1].split("}")[0]
-    assert "min(560px, calc(100% - 3.5rem))" in css.split(".gonen-search-shell {")[1].split("}")[0]
-    assert "grid-template-rows: minmax(0, 1fr)" in css.split(".gonen-search-shell {")[1].split("}")[0]
-    assert "height: 100%" in css.split(".gonen-search-card {")[1].split("}")[0]
-    assert "height: 100%" in css.split(".gonen-history-card {")[1].split("}")[0]
-    assert "height: 440px" not in css.split(".gonen-search-card {")[1].split("}")[0]
-    assert "height: 440px" not in css.split(".gonen-history-card {")[1].split("}")[0]
-    assert "overflow: visible" in css.split(".gonen-search-card {")[1].split("}")[0]
-    assert "overflow-y: auto" not in css.split(".gonen-search-card {")[1].split("}")[0]
-    assert "overflow: auto" in css.split(".history-table-wrap {")[1].split("}")[0]
+    assert "body.portal-app-page .portal-main" in css
+    assert "body.portal-app-page .layout" in css
+    assert "body.portal-app-page .content > .gonen-search" in css
+    assert ".gonen-search" in css
+    assert ".gonen-search-body" in css
+    body_rule = css.split(".receipt-settings-body,\n.gonen-search-body {")[1].split("}")[0]
+    assert "grid-template-columns: minmax(280px, 380px) minmax(0, 1fr)" in body_rule
+    assert "gap: 24px" in body_rule
+    assert "height: 100%" in body_rule
+    gonen_search_rule = css.split(".gonen-search-page .gonen-search {")[1].split("}")[0]
+    assert "grid-template-rows: auto minmax(0, 1fr)" in gonen_search_rule
+    assert "padding-bottom: var(--gonen-history-bottom-gap)" in gonen_search_rule
+    assert "--gonen-history-bottom-gap: 16px" in css
+    history_card_rule = css.split(".gonen-history-list-card {")[1].split("}")[0]
+    assert "height: 100%" in history_card_rule
+    assert "overflow: hidden" in history_card_rule
+    search_card_rule = css.split(".gonen-search-card {")[1].split("}")[0]
+    assert "padding: 16px 18px" in search_card_rule
+    assert "overflow: visible" in search_card_rule
+    assert "var(--portal-control-height)" in css.split(".gonen-search-page .gonen-search-card input:not([type=\"hidden\"]),")[1].split("}")[0]
+    assert ".gonen-search-shell" not in css
+    assert ".gonen-history-card" not in css
+    assert ".history-table-wrap" not in css
+    history_th_rule = css.split(".gonen-history-list-card .db-table th {")[1].split("}")[0]
+    assert "position: sticky" in history_th_rule
+    assert "top: 0" in history_th_rule
+    gonen_content_rule = css.split("body.portal-app-page.gonen-search-page .content {")[1].split("}")[0]
+    assert "overflow: hidden" in gonen_content_rule
 
 
 @pytest.mark.django_db
@@ -412,8 +450,13 @@ def test_search_page_uses_gonen_search_body_class(client, user):
     response = client.get("/app/production/five-year-nine")
     assert response.status_code == 200
     html = response.content.decode("utf-8")
+    assert "portal-app-page" in html
     assert "gonen-search-page" in html
-    assert 'class="gonen-search-shell"' in html
-    assert 'class="card stack gonen-search-card"' in html
-    assert 'class="card gonen-history-card"' in html
-    assert 'class="history-table-wrap"' in html
+    assert 'class="gonen-search"' in html
+    assert 'class="portal-section-head gonen-search-head"' in html
+    assert 'class="gonen-search-body"' in html
+    assert 'class="gonen-search-sidebar"' in html
+    assert 'class="gonen-setting-form card gonen-search-card"' in html
+    assert 'class="db-table-card gonen-history-list-card"' in html
+    assert 'class="db-table-wrap"' in html
+    assert 'class="db-table gonen-history-table"' in html

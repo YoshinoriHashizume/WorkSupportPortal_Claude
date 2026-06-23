@@ -5,7 +5,7 @@
         <h2>{{ supplier.customer_code }} - {{ supplier.name }}</h2>
         <p class="muted">
           {% if comparison_type == "supplied_parts" %}
-            子取引先（購買取引先コード）と{{ settings_target_label }}を登録します。
+            子取引先と{{ settings_target_label }}を登録します。
           {% else %}
             {{ settings_target_label }}を登録します。
           {% endif %}
@@ -18,41 +18,62 @@
       {% csrf_token %}
       <input type="hidden" name="type" value="{{ type_slug }}">
       <input type="hidden" name="supplier_id" value="{{ supplier.id }}">
-      {% if comparison_type == "finished_product" %}
-        {% include "includes/customer_select.html" with field_name="direct_delivery_customer_code" label="直送先得意先コード" variant="receipt" customers=customer_choices selected_value=supplier.direct_delivery_customer_code empty_label="なし" label_class="receipt-supplier-direct-delivery-field" %}
-      {% endif %}
-      <label class="inline receipt-supplier-exclusion-field">
-        <input type="checkbox" name="exclusion" {% if supplier.exclusion %}checked{% endif %}>
-        {{ settings_exclusion_label }}
-      </label>
-      <div class="receipt-supplier-dialog-actions">
-        <button type="submit" name="action" value="update_supplier">設定を更新</button>
-        <button
-          type="submit"
-          name="action"
-          value="delete_supplier"
-          class="danger-button"
-          onclick="return confirm('得意先と関連する比較結果・取込履歴を削除します。よろしいですか？');"
-        >得意先を削除</button>
+      <div class="receipt-supplier-dialog-settings-toolbar">
+        <div class="receipt-supplier-dialog-settings-panel">
+          {% if comparison_type == "finished_product" %}
+            <div class="receipt-supplier-direct-delivery-label">直送先得意先コード</div>
+            <div class="receipt-supplier-direct-delivery-row">
+              <div class="receipt-supplier-direct-delivery-field">
+                {% include "includes/customer_select.html" with field_name="direct_delivery_customer_code" label="直送先得意先コード" variant="receipt" customers=customer_choices selected_value=supplier.direct_delivery_customer_code empty_label="なし" hide_label=True %}
+              </div>
+              <div class="receipt-supplier-dialog-actions">
+                <button type="submit" name="action" value="update_supplier">更新</button>
+                <button
+                  type="submit"
+                  name="action"
+                  value="delete_supplier"
+                  class="danger-button"
+                  onclick="return confirm('得意先と関連する比較結果・取込履歴を削除します。よろしいですか？');"
+                >削除</button>
+              </div>
+            </div>
+          {% else %}
+            <div class="receipt-supplier-direct-delivery-row">
+              <div class="receipt-supplier-dialog-actions">
+                <button type="submit" name="action" value="update_supplier">更新</button>
+                <button
+                  type="submit"
+                  name="action"
+                  value="delete_supplier"
+                  class="danger-button"
+                  onclick="return confirm('得意先と関連する比較結果・取込履歴を削除します。よろしいですか？');"
+                >削除</button>
+              </div>
+            </div>
+          {% endif %}
+          <label class="inline receipt-supplier-exclusion-field">
+            <input type="checkbox" name="exclusion" {% if supplier.exclusion %}checked{% endif %}>
+            {{ settings_exclusion_label }}
+          </label>
+        </div>
       </div>
     </form>
 
     {% if comparison_type == "supplied_parts" %}
       <section class="receipt-supplier-dialog-section">
-        <h3>子取引先（購買取引先コード）</h3>
-        <p class="muted">MARI取得・受領TXTの2列目照合に使用します。</p>
+        <h3>子取引先</h3>
         <form class="receipt-inline-form receipt-subcontractor-add-form" method="post">
           {% csrf_token %}
           <input type="hidden" name="type" value="{{ type_slug }}">
           <input type="hidden" name="supplier_id" value="{{ supplier.id }}">
-          {% include "includes/vendor_select.html" with field_name="vendor_code" label="購買取引先コード" variant="receipt" vendors=vendor_choices required=True label_class="receipt-subcontractor-vendor-field" %}
+          {% include "includes/vendor_select.html" with field_name="vendor_code" variant="receipt" vendors=vendor_choices required=True select_class="receipt-subcontractor-vendor-field" hide_label=True %}
           <button type="submit" name="action" value="add_subcontractor">追加</button>
         </form>
-        <div class="db-table-wrap receipt-subcontractor-table-wrap">
+        <div class="db-table-wrap receipt-supplier-dialog-table-wrap receipt-subcontractor-table-wrap">
           <table class="db-table receipt-subcontractor-table">
             <thead>
               <tr>
-                <th>購買取引先コード</th>
+                <th>コード</th>
                 <th>購買取引先名</th>
                 <th>操作</th>
               </tr>
@@ -98,10 +119,11 @@
         <input name="delivery_place" placeholder="{% if comparison_type == 'supplied_parts' %}品番{% else %}コード{% endif %}" required>
         <button type="submit" name="action" value="add_receiving">追加</button>
       </form>
-      <div class="db-table-wrap receipt-receiving-table-wrap">
+      <div class="db-table-wrap receipt-supplier-dialog-table-wrap receipt-receiving-table-wrap">
         <table class="db-table receipt-receiving-table">
           <thead>
             <tr>
+              <th>No.</th>
               <th>{{ settings_target_label }}</th>
               <th>操作</th>
             </tr>
@@ -109,6 +131,7 @@
           <tbody>
             {% for setting in supplier.receiving_settings.all %}
               <tr>
+                <td class="receipt-table-row-no">{{ forloop.counter }}</td>
                 <td class="mono">{{ setting.delivery_place }}</td>
                 <td class="receipt-table-actions">
                   <form method="post">
@@ -128,7 +151,7 @@
               </tr>
             {% empty %}
               <tr>
-                <td colspan="2" class="muted">登録はありません。</td>
+                <td colspan="3" class="muted">登録はありません。</td>
               </tr>
             {% endfor %}
           </tbody>

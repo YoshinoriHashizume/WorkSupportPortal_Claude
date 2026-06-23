@@ -15,6 +15,7 @@ from django.http import Http404, HttpRequest, HttpResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
 from django.utils import timezone
+from django.utils.http import content_disposition_header
 from django.views.decorators.http import require_http_methods
 
 from apps.portal.favorites import is_menu_favorited, is_portal_admin, menu_title, receipt_comparison_menu_key
@@ -97,6 +98,12 @@ def comparison_type_page_label(comparison_type: str) -> str:
     return COMPARISON_TYPE_PAGE_LABELS[comparison_type]
 
 
+def comparison_export_filename(comparison_type: str, at: datetime | None = None) -> str:
+    label = comparison_type_page_label(comparison_type)
+    moment = timezone.localtime(at) if at is not None else timezone.localtime()
+    return f"検収書比較結果({label})_{moment:%Y%m%d%H%M%S}.csv"
+
+
 def comparison_type_from_slug(slug: str) -> str:
     comparison_type = COMPARISON_TYPE_SLUGS.get(slug)
     if comparison_type is None:
@@ -147,6 +154,7 @@ def comparison_page(request: HttpRequest) -> HttpResponse:
                     supplier.id,
                     start_date,
                     end_date,
+                    display=1,
                     sort_key=request.POST.get("sort"),
                     sort_direction=request.POST.get("dir"),
                 )
@@ -492,7 +500,10 @@ def export_csv(request: HttpRequest) -> HttpResponse:
     )
 
     response = HttpResponse(content_type="text/csv; charset=cp932")
-    response["Content-Disposition"] = f'attachment; filename="receipt_comparison_{timezone.localtime():%Y%m%d%H%M%S}.csv"'
+    response["Content-Disposition"] = content_disposition_header(
+        as_attachment=True,
+        filename=comparison_export_filename(comparison_type),
+    )
     writer = csv.writer(response)
     writer.writerow(RESULT_COLUMNS)
     for row in rows:

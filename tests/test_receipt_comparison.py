@@ -1,6 +1,11 @@
 from __future__ import annotations
 
+import re
+from datetime import datetime
+from email.header import decode_header
 from pathlib import Path
+from urllib.parse import unquote
+from zoneinfo import ZoneInfo
 
 import pytest
 from django.contrib.auth import get_user_model
@@ -34,11 +39,30 @@ from apps.receipt_comparison.type_registry import (
     supplier_model,
 )
 from apps.receipt_comparison.views import (
+    comparison_export_filename,
     comparison_type_from_slug,
     is_results_panel_active,
     receiving_places_for_supplier,
     settings_redirect_url,
 )
+
+
+def attachment_filename_from_response(response) -> str:
+    header = response["Content-Disposition"]
+    if header.startswith("=?"):
+        decoded_parts = []
+        for part, charset in decode_header(header):
+            if isinstance(part, bytes):
+                decoded_parts.append(part.decode(charset or "utf-8"))
+            else:
+                decoded_parts.append(part)
+        header = "".join(decoded_parts)
+    filename_star = re.search(r"filename\*=utf-8''([^;]+)", header, re.IGNORECASE)
+    if filename_star:
+        return unquote(filename_star.group(1))
+    match = re.search(r'filename="([^"]+)"', header)
+    assert match is not None
+    return match.group(1)
 
 
 def assert_results_head_button_order(
@@ -58,6 +82,15 @@ def assert_results_head_button_order(
     if has_update:
         update_pos = actions_html.index('name="action" value="update"')
         assert csv_pos < update_pos
+
+
+def test_comparison_export_filename_uses_type_label_and_timestamp():
+    at = datetime(2026, 6, 23, 13, 45, 6, tzinfo=ZoneInfo("Asia/Tokyo"))
+    finished = comparison_export_filename(ReceiptComparisonType.FINISHED_PRODUCT, at=at)
+    supplied = comparison_export_filename(ReceiptComparisonType.SUPPLIED_PARTS, at=at)
+
+    assert finished == "検収書比較結果(完成品)_20260623134506.csv"
+    assert supplied == "検収書比較結果(支給品)_20260623134506.csv"
 
 
 @pytest.fixture
@@ -444,6 +477,57 @@ def test_receipt_comparison_sort_header_link(client, production_user, supplier):
 
 
 @pytest.mark.django_db
+def test_receipt_comparison_update_keeps_results_panel_actions(client, production_user, supplier):
+    file_import = FinishedProductFileImport.objects.create(
+        supplier=supplier,
+        original_file_name="receipt.csv",
+        stored_file_name="receipt.csv",
+        receipt_date="2026-06-30",
+    )
+    result = FinishedProductComparisonResult.objects.create(
+        supplier=supplier,
+        file_import=file_import,
+        receipt_flag=ReceiptFlag.NG,
+        mari_item_cd="Z-999",
+        remarks="",
+    )
+    client.force_login(production_user)
+    client.get(
+        "/app/production/receipt-comparison"
+        f"?type=finished-product&supplier_id={supplier.id}&start_date=2026-06-01&end_date=2026-06-30&display=1"
+    )
+
+    update_response = client.post(
+        "/app/production/receipt-comparison?type=finished-product",
+        {
+            "type": "finished-product",
+            "supplier_id": str(supplier.id),
+            "start_date": "2026-06-01",
+            "end_date": "2026-06-30",
+            "action": "update",
+            "result_id": str(result.id),
+            f"receipt_flag_{result.id}": str(ReceiptFlag.OK),
+            f"remarks_{result.id}": "確認済み",
+        },
+    )
+
+    assert update_response.status_code == 302
+    assert "display=1" in update_response["Location"]
+
+    html = client.get(update_response["Location"]).content.decode("utf-8")
+    assert "receipt-comparison--results-panel" in html
+    assert 'class="receipt-results-file-input"' in html
+    assert "CSV</a>" in html
+    assert '>更新</button>' in html
+    assert 'name="action" value="update"' in html
+    assert_results_head_button_order(html, has_update=True)
+
+    result.refresh_from_db()
+    assert result.receipt_flag == ReceiptFlag.OK
+    assert result.remarks == "確認済み"
+
+
+@pytest.mark.django_db
 def test_receipt_comparison_can_export_pending_without_register(client, production_user, supplier, monkeypatch):
     def fake_fetch_mari_rows(**kwargs):
         return [MariReceiptRow(item_cd="AB-001", ship_date="2026/06/01", ship_qty="10", delivery_place="A1")]
@@ -474,6 +558,9 @@ def test_receipt_comparison_can_export_pending_without_register(client, producti
 
     assert compare_response.status_code == 302
     assert export.status_code == 200
+    assert "filename*=utf-8''" in export["Content-Disposition"].lower()
+    assert attachment_filename_from_response(export).startswith("検収書比較結果(完成品)_")
+    assert attachment_filename_from_response(export).endswith(".csv")
     assert "AB-001" in export.content.decode("cp932")
     assert FinishedProductComparisonResult.objects.filter(supplier=supplier).count() == 0
 
@@ -523,6 +610,7 @@ def test_receipt_comparison_can_register_and_export(client, production_user, sup
 
     assert export.status_code == 200
     assert "text/csv" in export["Content-Type"]
+    assert attachment_filename_from_response(export).startswith("検収書比較結果(完成品)_")
     assert "AB-001" in export.content.decode("cp932")
 
 
@@ -562,9 +650,22 @@ def test_finished_product_settings_get_with_registered_supplier(client, admin_us
     assert "設定した受入/納品場所を除外する" in html
     assert ">受入/納品場所</th>" in html
     assert 'receipt-supplier-dialog-settings' in html
+    assert 'receipt-supplier-dialog-settings-toolbar' in html
+    assert 'receipt-supplier-dialog-settings-panel' in html
+    assert 'receipt-supplier-direct-delivery-label' in html
+    assert 'receipt-supplier-direct-delivery-row' in html
     assert '直送先得意先コード' in html
+    label_index = html.index('receipt-supplier-direct-delivery-label')
+    row_index = html.index('receipt-supplier-direct-delivery-row', label_index)
+    exclusion_index = html.index('receipt-supplier-exclusion-field', row_index)
+    row_section = html[row_index:exclusion_index]
+    assert 'name="direct_delivery_customer_code"' in row_section
+    assert 'value="update_supplier">更新</button>' in row_section
+    assert 'value="delete_supplier">削除</button>' in row_section
     assert 'receipt-supplier-direct-delivery-field' in html
-    assert 'portal-customer-field--receipt' in html
+    assert 'portal-customer-select--receipt' in html
+    assert '設定を更新' not in html
+    assert '得意先を削除' not in html
     assert '<th scope="row">直送先得意先コード</th>' not in html
     assert 'value="update_receiving"' not in html
 
@@ -589,25 +690,148 @@ def test_receipt_settings_receiving_table_is_delete_only(client, admin_user, sup
     assert 'name="delivery_place"' not in tbody
 
 
+def test_receipt_supplier_dialog_settings_toolbar_layout_css():
+    css_path = Path(__file__).resolve().parents[1] / "static" / "css" / "app.css"
+    css = css_path.read_text(encoding="utf-8")
+    assert ".receipt-supplier-dialog-settings-toolbar" in css
+    assert ".receipt-supplier-direct-delivery-row" in css
+    direct_delivery_row_rule = css.split(".receipt-supplier-direct-delivery-row {")[1].split("}")[0]
+    assert "display: flex" in direct_delivery_row_rule
+    assert "justify-content: flex-start" in direct_delivery_row_rule
+    panel_rule = css.split(".receipt-supplier-dialog-settings-panel {")[1].split("}")[0]
+    assert "justify-items: start" in panel_rule
+
+
 def test_receipt_supplier_dialog_tables_use_full_width_columns():
     css_path = Path(__file__).resolve().parents[1] / "static" / "css" / "app.css"
     css = css_path.read_text(encoding="utf-8")
-    assert ".receipt-supplier-dialog .db-table th," in css
-    assert ".receipt-supplier-dialog .db-table td { max-width: none; }" in css
+    assert ".receipt-supplier-dialog-table-wrap" in css
+    assert "overflow-x: hidden" in css.split(".receipt-supplier-dialog .receipt-supplier-dialog-table-wrap {")[1].split("}")[0]
+    assert ".receipt-supplier-dialog .receipt-supplier-dialog-table-wrap .db-table th {" in css
+    assert "position: sticky" in css.split(".receipt-supplier-dialog .receipt-supplier-dialog-table-wrap .db-table th {")[1]
+
+
+def test_receipt_receiving_table_column_widths():
+    css_path = Path(__file__).resolve().parents[1] / "static" / "css" / "app.css"
+    css = css_path.read_text(encoding="utf-8")
+    no_col_rule = css.split(
+        ".receipt-supplier-dialog .receipt-receiving-table th:nth-child(1),\n"
+        ".receipt-supplier-dialog .receipt-receiving-table td:nth-child(1) {"
+    )[1].split("}")[0]
+    place_col_rule = css.split(
+        ".receipt-supplier-dialog .receipt-receiving-table th:nth-child(2),\n"
+        ".receipt-supplier-dialog .receipt-receiving-table td:nth-child(2) {"
+    )[1].split("}")[0]
+    action_col_rule = css.split(
+        ".receipt-supplier-dialog .receipt-receiving-table th:last-child,\n"
+        ".receipt-supplier-dialog .receipt-receiving-table td:last-child {"
+    )[1].split("}")[0]
+    assert "width: 3rem" in no_col_rule
+    assert "width: auto" in place_col_rule
+    assert "width: 120px" in action_col_rule
+    actions_button_rule = css.split(".receipt-receiving-table .receipt-table-actions button {")[1].split("}")[0]
+    assert "width: 100%" not in actions_button_rule
+
+
+def test_receipt_supplier_dialog_table_actions_are_centered():
+    css_path = Path(__file__).resolve().parents[1] / "static" / "css" / "app.css"
+    css = css_path.read_text(encoding="utf-8")
+    actions_rule = css.split(
+        ".receipt-supplier-dialog .receipt-supplier-dialog-table-wrap .receipt-table-actions {"
+    )[1].split("}")[0]
+    assert "text-align: center" in actions_rule
+    receiving_actions_rule = css.split(".receipt-receiving-table .receipt-table-actions {")[1].split("}")[0]
+    assert "justify-content: center" in receiving_actions_rule
+
+
+@pytest.mark.django_db
+def test_receipt_settings_receiving_table_shows_row_numbers(client, admin_user, supplier, monkeypatch):
+    monkeypatch.setenv("ORACLE_USE_MOCK", "true")
+    FinishedProductReceivingSetting.objects.create(supplier=supplier, delivery_place="B2")
+    FinishedProductReceivingSetting.objects.create(supplier=supplier, delivery_place="A1")
+    client.force_login(admin_user)
+
+    response = client.get(
+        f"/app/production/receipt-comparison/settings?type=finished-product&supplier_id={supplier.id}"
+    )
+
+    html = response.content.decode("utf-8")
+    assert response.status_code == 200
+    assert ">No.</th>" in html
+    receiving_section = html.split("receipt-receiving-table", 1)[1].split("</table>", 1)[0]
+    tbody = receiving_section.split("<tbody>", 1)[1].split("</tbody>", 1)[0]
+    assert 'class="receipt-table-row-no">1</td>' in tbody
+    assert 'class="mono">A1</td>' in tbody
+    assert 'class="receipt-table-row-no">2</td>' in tbody
+    assert 'class="mono">B2</td>' in tbody
+    assert tbody.index('class="receipt-table-row-no">1</td>') < tbody.index('class="mono">A1</td>')
+    assert tbody.index('class="receipt-table-row-no">2</td>') < tbody.index('class="mono">B2</td>')
+
+
+def _supplier_list_table_head(html: str, table_class: str) -> str:
+    return html.split(table_class, 1)[1].split("</thead>", 1)[0]
+
+
+@pytest.mark.django_db
+def test_finished_product_supplier_list_table_column_order(client, admin_user, supplier, monkeypatch):
+    monkeypatch.setenv("ORACLE_USE_MOCK", "true")
+    client.force_login(admin_user)
+
+    response = client.get("/app/production/receipt-comparison/settings?type=finished-product")
+
+    assert response.status_code == 200
+    thead = _supplier_list_table_head(response.content.decode("utf-8"), "receipt-supplier-table--finished")
+    assert thead.index(">除外</th>") < thead.index(">受入/納品場所</th>")
+
+
+@pytest.mark.django_db
+def test_supplied_parts_supplier_list_table_column_order(client, admin_user, db, monkeypatch):
+    monkeypatch.setenv("ORACLE_USE_MOCK", "true")
+    SuppliedPartsReceiptSupplier.objects.create(customer_code="191", name="支給品取引先")
+    client.force_login(admin_user)
+
+    response = client.get("/app/production/receipt-comparison/settings?type=supplied-parts")
+
+    assert response.status_code == 200
+    thead = _supplier_list_table_head(response.content.decode("utf-8"), "receipt-supplier-table--supplied")
+    assert thead.index(">除外</th>") < thead.index(">品番</th>")
+
+
+@pytest.mark.django_db
+def test_receipt_settings_dialog_includes_scrollable_table_wrap(client, admin_user, supplier, monkeypatch):
+    monkeypatch.setenv("ORACLE_USE_MOCK", "true")
+    client.force_login(admin_user)
+
+    response = client.get("/app/production/receipt-comparison/settings?type=finished-product")
+
+    html = response.content.decode("utf-8")
+    assert response.status_code == 200
+    assert 'class="db-table-wrap receipt-supplier-dialog-table-wrap receipt-receiving-table-wrap"' in html
 
 
 def test_receipt_comparison_page_fixes_table_header_and_scroll_area():
     css_path = Path(__file__).resolve().parents[1] / "static" / "css" / "app.css"
     css = css_path.read_text(encoding="utf-8")
-    assert ".receipt-comparison-page .content" in css
-    assert "body.receipt-comparison-page { overflow: hidden; height: 100dvh; }" in css
-    assert "body.receipt-comparison-page .portal-main { height: 100dvh; max-height: 100dvh; overflow: hidden; }" in css
+    assert "body.portal-app-page { overflow: hidden; height: 100dvh; }" in css
+    assert "body.portal-app-page .portal-shell { height: 100dvh; max-height: 100dvh; overflow: hidden; }" in css
+    assert "body.portal-app-page .portal-main { height: 100dvh; max-height: 100dvh; overflow: hidden; min-height: 0; }" in css
+    assert "body.portal-app-page .content > .receipt-comparison" in css
     assert ".receipt-comparison-page .receipt-results-card .db-table-wrap" in css
+    table_wrap_rule = css.split(".receipt-comparison-page .receipt-results-card .db-table-wrap {")[1].split("}")[0]
+    assert "overflow: auto" in table_wrap_rule
+    assert "min-height: 0" in table_wrap_rule
+    assert "flex: 1" not in table_wrap_rule
     assert ".receipt-comparison-page .receipt-results-card .db-table th" in css
     assert "position: sticky" in css
     receipt_comparison_rule = css.split(".receipt-comparison-page .receipt-comparison {")[1].split("}")[0]
     assert "align-content: stretch" in receipt_comparison_rule
     assert "minmax(0, 1fr)" in receipt_comparison_rule
+    assert "height: 100%" not in receipt_comparison_rule
+    results_card_rule = css.split(".receipt-comparison-page .receipt-results-card {")[1].split("}")[0]
+    assert "height: 100%" not in results_card_rule
+    filter_field_rule = css.split("body.portal-app-page .receipt-filter select,")[1].split("}")[0]
+    assert "var(--portal-control-height)" in filter_field_rule
+    assert 'input[type="date"]' in filter_field_rule
 
 
 @pytest.mark.django_db
@@ -615,7 +839,8 @@ def test_comparison_page_uses_fixed_layout_body_class(client, production_user):
     client.force_login(production_user)
     response = client.get("/app/production/receipt-comparison?type=finished-product")
     assert response.status_code == 200
-    assert 'class="receipt-comparison-page"' in response.content.decode("utf-8")
+    html = response.content.decode("utf-8")
+    assert 'class="portal-app-page receipt-comparison-page"' in html
 
 
 @pytest.mark.django_db
@@ -690,7 +915,7 @@ def test_display_file_select_runs_compare(client, production_user, supplier, mon
 
 
 @pytest.mark.django_db
-def test_supplier_without_display_keeps_upload_form(client, production_user, supplier):
+def test_supplier_without_display_does_not_show_upload_form(client, production_user, supplier):
     client.force_login(production_user)
     response = client.get(
         "/app/production/receipt-comparison?type=finished-product"
@@ -698,8 +923,32 @@ def test_supplier_without_display_keeps_upload_form(client, production_user, sup
     )
 
     html = response.content.decode("utf-8")
-    assert 'class="receipt-upload card"' in html
+    assert 'class="receipt-upload card"' not in html
     assert 'class="receipt-results-file-input"' not in html
+    assert "比較結果はありません。" in html
+
+
+@pytest.mark.django_db
+def test_no_supplier_shows_message_in_results_card_without_file_select(client, production_user):
+    client.force_login(production_user)
+    html = client.get("/app/production/receipt-comparison?type=finished-product").content.decode("utf-8")
+
+    assert "得意先を選択してください" in html
+    assert "管理者に得意先の登録を依頼してください" in html
+    assert 'class="receipt-results-head-actions"' not in html
+    assert 'class="receipt-results-file-input"' not in html
+    message_pos = html.index("得意先を選択してください")
+    results_card_pos = html.index('class="receipt-results-card card receipt-results-main-form"')
+    assert results_card_pos < message_pos
+
+
+@pytest.mark.django_db
+def test_no_supplier_admin_sees_settings_hint_in_results_card(client, admin_user):
+    client.force_login(admin_user)
+    html = client.get("/app/production/receipt-comparison?type=finished-product").content.decode("utf-8")
+
+    assert "得意先が表示されない場合は、設定画面で登録してください。" in html
+    assert 'class="receipt-results-head-actions"' not in html
 
 
 @pytest.mark.django_db

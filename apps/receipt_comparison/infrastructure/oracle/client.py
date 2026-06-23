@@ -48,7 +48,7 @@ def fetch_finished_product_rows(
         SELECT
             T_SHIP1.CUST_ITEM_CD AS ITEM_CD,
             TO_CHAR(T_SHIP1.SHIP_DATE, 'yyyy/mm/dd') AS SHIP_DATE,
-            SUM(T_SHIP1.SHIP_QTY) AS SHIP_QTY,
+            T_SHIP1.SHIP_QTY AS SHIP_QTY,
             T_SHIP1.CUST_DESINATED_DLV_LOC_CD AS DELIVERY_PLACE
         FROM T_SHIP T_SHIP1, T_SHIP_ODR T_SHIP_ODR1
         WHERE T_SHIP1.COMPANY_CD = T_SHIP_ODR1.COMPANY_CD
@@ -56,21 +56,19 @@ def fetch_finished_product_rows(
           AND T_SHIP1.CUST_CD = T_SHIP_ODR1.CUST_CD
           AND T_SHIP1.CUST_CD = :supplier_code
           AND T_SHIP1.SHIP_DATE BETWEEN TO_DATE(:start_date, 'YYYY/MM/DD') AND TO_DATE(:end_date, 'YYYY/MM/DD')
-        GROUP BY T_SHIP1.CUST_ITEM_CD, T_SHIP1.SHIP_DATE, T_SHIP1.CUST_DESINATED_DLV_LOC_CD
-        HAVING SUM(T_SHIP1.SHIP_QTY) > 0
+          AND T_SHIP1.SHIP_QTY > 0
     """
     query2 = """
         SELECT
             ITEM_CD,
             TO_CHAR(SALES_DATE, 'yyyy/mm/dd') AS SHIP_DATE,
-            SUM(SALES_QTY) AS SHIP_QTY,
+            SALES_QTY AS SHIP_QTY,
             CUST_DESINATED_DLV_LOC_CD AS DELIVERY_PLACE
         FROM T_SALES_TEMP
         WHERE CUST_CD = :supplier_code
           AND SALES_DATE BETWEEN TO_DATE(:start_date, 'YYYY/MM/DD') AND TO_DATE(:end_date, 'YYYY/MM/DD')
           AND SHIP_SEQ_NO IS NULL
-        GROUP BY ITEM_CD, SALES_DATE, CUST_DESINATED_DLV_LOC_CD
-        HAVING SUM(SALES_QTY) > 0
+          AND SALES_QTY > 0
     """
     query = f"SELECT * FROM ({query1} UNION ALL {query2})"
     params = {

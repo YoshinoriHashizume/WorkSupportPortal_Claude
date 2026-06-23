@@ -744,7 +744,10 @@ def test_supplied_parts_settings_list_shows_subcontractor_column(
     assert "設定した品番を除外する" in html
     assert "設定した受入/納品場所を除外する" not in html
     assert ">品番</th>" in html
-    assert "子取引先（購買取引先コード）" in html
+    assert "子取引先" in html
+    assert "購買取引先コード" not in html
+    assert ">コード</th>" in html
+    assert "MARI取得・受領TXTの2列目照合に使用します。" not in html
     assert "portal-vendor-select--receipt" in html
 
 
