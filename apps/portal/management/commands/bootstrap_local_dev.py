@@ -3,7 +3,8 @@ from __future__ import annotations
 from django.conf import settings
 from django.core.management.base import BaseCommand, CommandError
 
-from apps.portal.bootstrap_local_dev import BootstrapLocalDevConfig, bootstrap_local_dev
+from apps.portal.composition import bootstrap_local_dev_usecase
+from apps.portal.domain.bootstrap import BootstrapLocalDevConfig
 
 
 class Command(BaseCommand):
@@ -30,7 +31,7 @@ class Command(BaseCommand):
             last_name=settings.AUTH_DEV_LAST_NAME,
             first_name=settings.AUTH_DEV_FIRST_NAME,
         )
-        result = bootstrap_local_dev(config)
+        result = bootstrap_local_dev_usecase().execute(config)
         action = "作成" if result.created else "更新"
         self.stdout.write(
             self.style.SUCCESS(

@@ -24,6 +24,13 @@ def format_stock_as_of_label(stock_date: date) -> str:
     return f"{stock_date.year}年{stock_date.month}月{stock_date.day}日時点の在庫"
 
 
+def format_display_datetime(value: datetime | None) -> str:
+    if value is None:
+        return ""
+    localized = value.astimezone() if value.tzinfo is not None else value
+    return localized.strftime("%Y/%m/%d %H:%M")
+
+
 def add_calendar_months(base: date, months: int) -> date:
     """base の暦上 N か月後の同日（末日は対象月の末日に合わせる）。"""
     month_index = base.month - 1 + months

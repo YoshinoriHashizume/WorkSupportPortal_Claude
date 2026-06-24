@@ -5,12 +5,11 @@ from datetime import date
 import pytest
 from django.utils import timezone
 
-from apps.inventory_order_alert.application.snapshot_patch import (
-    parse_patch_date,
-    patch_snapshot_row,
-)
-from apps.inventory_order_alert.application.summary_storage import store_summary_snapshot
+from apps.inventory_order_alert.composition import patch_snapshot_row_usecase
 from apps.inventory_order_alert.domain.alert_level import ALERT_NONE, ALERT_WARNING_SHIP
+from apps.inventory_order_alert.domain.app_settings import AppSettings
+from apps.inventory_order_alert.domain.snapshot_patch import parse_patch_date
+from apps.inventory_order_alert.infrastructure.persistence.summary_snapshot_repository import store_summary_snapshot
 from apps.inventory_order_alert.models import ConfirmationStatus, InventoryOrderAlertConfirmation
 from apps.inventory_order_alert.models import SlimsStockImport
 
@@ -48,11 +47,12 @@ def test_patch_snapshot_row_updates_last_ship_date_and_alert_level(monkeypatch):
     import_record = SlimsStockImport.objects.create(file_name="sample.csv", row_count=1)
     store_summary_snapshot(import_record, [_sample_row()], as_of_date=date(2026, 6, 19))
 
-    result = patch_snapshot_row(
+    result = patch_snapshot_row_usecase().execute(
         cust_code="100",
         item_cd="90249-14011",
         last_ship_date=date(2026, 6, 19),
         post_shipment_count=2,
+        app_settings=AppSettings(),
     )
 
     assert result.previous_last_ship_date == "2024/06/01"
@@ -74,12 +74,13 @@ def test_patch_snapshot_row_can_run_reconcile(monkeypatch):
         confirmed_by="10001",
     )
 
-    result = patch_snapshot_row(
+    result = patch_snapshot_row_usecase().execute(
         cust_code="100",
         item_cd="90249-14011",
         last_ship_date=date(2026, 6, 19),
         post_shipment_count=2,
         run_reconcile=True,
+        app_settings=AppSettings(),
     )
 
     confirmation = InventoryOrderAlertConfirmation.objects.get(cust_code="100", item_cd="90249-14011")

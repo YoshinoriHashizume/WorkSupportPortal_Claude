@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from apps.inventory_order_alert.application.dashboard_summary import count_rows
+from apps.inventory_order_alert.domain.row_counts import count_rows
 from apps.inventory_order_alert.domain.row_display import (
     display_alert_level,
     row_alert_class,

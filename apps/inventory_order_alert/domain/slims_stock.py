@@ -53,6 +53,15 @@ def read_csv_text(path: Path, encoding: str | None = None) -> str:
     return path.read_text(encoding="cp932", errors="replace")
 
 
+def decode_slims_csv_bytes(raw: bytes) -> str:
+    for encoding in ("utf-8-sig", "utf-8", "cp932"):
+        try:
+            return raw.decode(encoding)
+        except UnicodeDecodeError:
+            continue
+    return raw.decode("cp932", errors="replace")
+
+
 def format_stock_qty_value(qty: Decimal) -> str:
     if qty == qty.to_integral_value():
         return str(int(qty))

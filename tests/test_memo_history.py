@@ -7,16 +7,18 @@ from django.contrib.auth import get_user_model
 from django.contrib.auth.models import Group
 from django.utils import timezone
 
-from apps.inventory_order_alert.application.memo_history import (
-    add_confirmation_memo,
+from apps.inventory_order_alert.domain.confirmation import (
     format_memo_history_csv,
-    list_confirmation_memos,
     parse_memo_entry_payload,
+)
+from apps.inventory_order_alert.domain.confirmation import MemoEntryRecord
+from apps.inventory_order_alert.infrastructure.persistence.confirmation_repository import (
+    add_confirmation_memo,
+    list_confirmation_memos,
 )
 from apps.inventory_order_alert.models import (
     ConfirmationStatus,
     InventoryOrderAlertConfirmation,
-    InventoryOrderAlertConfirmationMemoEntry,
 )
 from apps.portal.models import PortalMenuGroupAccess
 
@@ -38,15 +40,15 @@ def test_parse_memo_entry_payload_requires_content():
 @pytest.mark.django_db
 def test_add_confirmation_memo_appends_history_and_syncs_latest(production_user):
     first = add_confirmation_memo(
-        parse_memo_entry_payload(
-            {"custCode": "112", "itemCd": "ITEM-A", "content": "1件目"},
-        ),
+        cust_code="112",
+        item_cd="ITEM-A",
+        content="1件目",
         created_by=production_user.username,
     )
     second = add_confirmation_memo(
-        parse_memo_entry_payload(
-            {"custCode": "112", "itemCd": "ITEM-A", "content": "2件目"},
-        ),
+        cust_code="112",
+        item_cd="ITEM-A",
+        content="2件目",
         created_by=production_user.username,
     )
 
@@ -64,30 +66,19 @@ def test_add_confirmation_memo_appends_history_and_syncs_latest(production_user)
 
 @pytest.mark.django_db
 def test_format_memo_history_csv_joins_entries_newest_first():
-    confirmation = InventoryOrderAlertConfirmation.objects.create(
-        cust_code="112",
-        item_cd="ITEM-A",
-        status=ConfirmationStatus.UNCONFIRMED,
-    )
-    entry1 = InventoryOrderAlertConfirmationMemoEntry.objects.create(
-        confirmation=confirmation,
-        content="回答待ち",
-        created_by="10001",
-    )
-    entry2 = InventoryOrderAlertConfirmationMemoEntry.objects.create(
-        confirmation=confirmation,
-        content="発注可",
-        created_by="10002",
-    )
-    InventoryOrderAlertConfirmationMemoEntry.objects.filter(pk=entry1.pk).update(
+    entry1 = MemoEntryRecord(
         created_at=timezone.make_aware(datetime(2026, 6, 19, 10, 30)),
+        created_by="10001",
+        content="回答待ち",
     )
-    InventoryOrderAlertConfirmationMemoEntry.objects.filter(pk=entry2.pk).update(
+    entry2 = MemoEntryRecord(
         created_at=timezone.make_aware(datetime(2026, 6, 19, 11, 0)),
+        created_by="10002",
+        content="発注可",
     )
 
     history = format_memo_history_csv(
-        list(confirmation.memo_entries.all()),
+        [entry2, entry1],
         author_names={"10001": "確認担当", "10002": "登録担当"},
     )
     assert history.startswith("2026/06/19 11:00 登録担当: 発注可")

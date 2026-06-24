@@ -4,11 +4,9 @@ import pytest
 from django.contrib.auth import get_user_model
 from django.contrib.auth.models import Group
 
-from apps.inventory_order_alert.application.save_alert_settings import (
-    parse_alert_settings_payload,
-    save_alert_settings,
-)
-from apps.inventory_order_alert.application.settings_service import get_app_settings
+from apps.inventory_order_alert.composition import save_alert_settings_usecase
+from apps.inventory_order_alert.domain.app_settings import parse_alert_settings_payload
+from apps.inventory_order_alert.infrastructure.persistence.settings_repository import load_app_settings
 from apps.inventory_order_alert.models import InventoryOrderAlertSettings
 from apps.portal.models import PortalMenuGroupAccess
 
@@ -39,11 +37,11 @@ def test_parse_alert_settings_payload_rejects_out_of_range():
 
 @pytest.mark.django_db
 def test_save_alert_settings_persists_values(production_user):
-    save_alert_settings(
-        parse_alert_settings_payload({"warningShipmentMonths": 24, "warningIncomingMonths": 9}),
+    save_alert_settings_usecase().execute(
+        {"warningShipmentMonths": 24, "warningIncomingMonths": 9},
         updated_by=production_user,
     )
-    settings = get_app_settings()
+    settings = load_app_settings()
     assert settings.warning_shipment_months == 24
     assert settings.warning_incoming_months == 9
     row = InventoryOrderAlertSettings.objects.get(pk=1)

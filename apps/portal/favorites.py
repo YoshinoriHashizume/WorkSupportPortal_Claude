@@ -1,223 +1,85 @@
 from __future__ import annotations
 
-from collections.abc import Iterable
-
-from urllib.parse import parse_qs, urlparse
-
-from .menu import MENU_BY_KEY, MENU_GROUPS, MENU_GROUP_BY_KEY, MENU_ITEMS, PortalMenuItem
-from .models import PortalMenuGroupAccess, UserFavoriteMenu
-
-
-ADMIN_GROUP_NAME = "管理者"
-MANAGEMENT_GROUP_KEY = "management"
+from apps.portal.composition import favorites_usecase, menu_access_usecase
+from apps.portal.domain.menu_access import (
+    is_menu_path_active,
+    menu_title,
+    receipt_comparison_menu_key,
+    receipt_comparison_type_from_path,
+)
+from apps.portal.domain.constants import ADMIN_GROUP_NAME, MANAGEMENT_GROUP_KEY, RECEIPT_COMPARISON_MENU_KEYS
 
 
 def user_group_names(user: object) -> set[str]:
-    if not getattr(user, "is_authenticated", False):
-        return set()
-    return set(user.groups.values_list("name", flat=True))
+    from apps.portal.composition import get_menu_access_repository
+
+    return get_menu_access_repository().user_group_names(user)
 
 
 def accessible_menu_group_keys(user: object) -> set[str]:
-    if not getattr(user, "is_authenticated", False):
-        return set()
-    return set(PortalMenuGroupAccess.objects.filter(user=user).values_list("group_key", flat=True))
+    from apps.portal.composition import get_menu_access_repository
+
+    return get_menu_access_repository().accessible_menu_group_keys(user)
 
 
 def is_portal_admin(user: object) -> bool:
-    return bool(getattr(user, "is_superuser", False) or ADMIN_GROUP_NAME in user_group_names(user))
+    return menu_access_usecase().is_portal_admin(user)
 
 
 def can_access_menu_group(user: object, group_key: str) -> bool:
-    if is_portal_admin(user):
-        return True
-    if group_key == MANAGEMENT_GROUP_KEY:
-        return False
-
-    return group_key in accessible_menu_group_keys(user)
+    return menu_access_usecase().can_access_menu_group(user, group_key)
 
 
 def can_access_menu_item(user: object, menu_key: str) -> bool:
-    item = MENU_BY_KEY.get(menu_key)
-    if item is None:
-        return False
-    if not item.href:
-        return any(
-            can_access_menu_item(user, child.key)
-            for child in MENU_ITEMS
-            if child.parent_key == menu_key
-        )
-    return bool(can_access_menu_group(user, item.group_key))
-
-
-RECEIPT_COMPARISON_PATH = "/app/production/receipt-comparison"
-
-RECEIPT_COMPARISON_MENU_KEYS = {
-    "finished-product": "receipt-comparison-finished-product",
-    "supplied-parts": "receipt-comparison-supplied-parts",
-    "finished_product": "receipt-comparison-finished-product",
-    "supplied_parts": "receipt-comparison-supplied-parts",
-}
-
-
-def receipt_comparison_menu_key(comparison_type: str) -> str:
-    return RECEIPT_COMPARISON_MENU_KEYS.get(
-        comparison_type,
-        RECEIPT_COMPARISON_MENU_KEYS["finished-product"],
-    )
+    return menu_access_usecase().can_access_menu_item(user, menu_key)
 
 
 def is_menu_favorited(user: object, menu_key: str) -> bool:
-    return menu_key in set(favorite_keys_for_user(user))
-
-
-def menu_title(menu_key: str) -> str:
-    item = MENU_BY_KEY.get(menu_key)
-    return item.title if item else menu_key
-
-
-def receipt_comparison_type_from_path(path: str) -> str:
-    if "/supplied-parts" in path:
-        return "supplied-parts"
-    return "finished-product"
-
-
-def is_menu_path_active(current_path: str, href: str, current_type: str = "") -> bool:
-    if not href:
-        return False
-    parsed = urlparse(href)
-    href_path = parsed.path.rstrip("/")
-    normalized_path = current_path.rstrip("/")
-    if href_path == RECEIPT_COMPARISON_PATH:
-        if not normalized_path.startswith(RECEIPT_COMPARISON_PATH):
-            return False
-        href_type = parse_qs(parsed.query).get("type", ["finished-product"])[0]
-        active_type = current_type or receipt_comparison_type_from_path(normalized_path)
-        return href_type == active_type
-    return normalized_path == href_path or normalized_path.startswith(f"{href_path}/")
-
-
-def menu_item_payload(
-    item: PortalMenuItem,
-    favorite_keys: set[str],
-    current_path: str = "",
-    current_type: str = "",
-) -> dict[str, object]:
-    return {
-        "key": item.key,
-        "title": item.title,
-        "href": item.href,
-        "is_favorite": item.key in favorite_keys,
-        "is_active": is_menu_path_active(current_path, item.href, current_type),
-    }
+    return favorites_usecase().is_menu_favorited(user, menu_key)
 
 
 def favorite_keys_for_user(user: object) -> list[str]:
-    if not getattr(user, "is_authenticated", False):
-        return []
-    return list(
-        UserFavoriteMenu.objects.filter(user=user, menu_key__in=MENU_BY_KEY.keys())
-        .order_by("sort_order", "created_at")
-        .values_list("menu_key", flat=True)
-    )
+    return favorites_usecase().favorite_keys_for_user(user)
 
 
 def favorite_items_for_user(user: object) -> list[dict[str, object]]:
-    items = []
-    for key in favorite_keys_for_user(user):
-        item = MENU_BY_KEY.get(key)
-        if item is None:
-            continue
-        if not can_access_menu_item(user, item.key):
-            continue
-        group = MENU_GROUP_BY_KEY.get(item.group_key)
-        items.append(
-            {
-                "key": item.key,
-                "title": item.title,
-                "href": item.href,
-                "group_title": group.title if group else "",
-            }
-        )
-    return items
+    return favorites_usecase().favorite_items_for_user(user)
 
 
 def next_sort_order(user: object) -> int:
-    latest = UserFavoriteMenu.objects.filter(user=user).order_by("-sort_order").first()
-    return 0 if latest is None else latest.sort_order + 1
+    return favorites_usecase().next_sort_order(user)
 
 
-def reorder_favorites(user: object, menu_keys: Iterable[str]) -> None:
-    allowed_keys = [key for key in menu_keys if can_access_menu_item(user, key)]
-    favorites = {favorite.menu_key: favorite for favorite in UserFavoriteMenu.objects.filter(user=user)}
-    for index, key in enumerate(allowed_keys):
-        favorite = favorites.get(key)
-        if favorite is None:
-            continue
-        favorite.sort_order = index
-        favorite.save(update_fields=["sort_order"])
+def reorder_favorites(user: object, menu_keys) -> None:
+    return favorites_usecase().reorder_favorites(user, menu_keys)
 
 
 def menu_items_with_favorite_state(user: object, current_path: str = "", current_type: str = "") -> list[dict[str, object]]:
-    favorite_keys = set(favorite_keys_for_user(user))
-    return [
-        menu_item_payload(item, favorite_keys, current_path, current_type)
-        for item in MENU_ITEMS
-        if item.href and can_access_menu_item(user, item.key)
-    ]
+    return favorites_usecase().menu_items_with_favorite_state(user, current_path, current_type)
 
 
 def menu_groups_with_items(user: object, current_path: str = "", current_type: str = "") -> list[dict[str, object]]:
-    favorite_keys = set(favorite_keys_for_user(user))
-    children_by_parent: dict[str, list[PortalMenuItem]] = {}
-    for item in MENU_ITEMS:
-        if item.parent_key:
-            children_by_parent.setdefault(item.parent_key, []).append(item)
+    return favorites_usecase().menu_groups_with_items(user, current_path, current_type)
 
-    items_by_group = {group.key: [] for group in MENU_GROUPS}
-    for item in MENU_ITEMS:
-        if item.parent_key:
-            continue
-        if not can_access_menu_item(user, item.key):
-            continue
-        if item.href:
-            items_by_group.setdefault(item.group_key, []).append(
-                menu_item_payload(item, favorite_keys, current_path, current_type)
-            )
-            continue
 
-        children = [
-            menu_item_payload(child, favorite_keys, current_path, current_type)
-            for child in children_by_parent.get(item.key, [])
-            if can_access_menu_item(user, child.key)
-        ]
-        if not children:
-            continue
-        is_branch_expanded = any(child["is_active"] for child in children)
-        items_by_group.setdefault(item.group_key, []).append(
-            {
-                **menu_item_payload(item, favorite_keys, current_path, current_type),
-                "children": children,
-                "is_expanded": is_branch_expanded,
-            }
-        )
-
-    groups = []
-    for group in MENU_GROUPS:
-        if not can_access_menu_group(user, group.key):
-            continue
-        items = items_by_group.get(group.key, [])
-        is_group_expanded = any(item.get("is_active") for item in items) or any(
-            child.get("is_active")
-            for item in items
-            for child in item.get("children", [])
-        )
-        groups.append(
-            {
-                "key": group.key,
-                "title": group.title,
-                "items": items,
-                "is_expanded": is_group_expanded,
-            }
-        )
-    return groups
+__all__ = [
+    "ADMIN_GROUP_NAME",
+    "MANAGEMENT_GROUP_KEY",
+    "RECEIPT_COMPARISON_MENU_KEYS",
+    "accessible_menu_group_keys",
+    "can_access_menu_group",
+    "can_access_menu_item",
+    "favorite_items_for_user",
+    "favorite_keys_for_user",
+    "is_menu_favorited",
+    "is_menu_path_active",
+    "is_portal_admin",
+    "menu_groups_with_items",
+    "menu_items_with_favorite_state",
+    "menu_title",
+    "next_sort_order",
+    "receipt_comparison_menu_key",
+    "receipt_comparison_type_from_path",
+    "reorder_favorites",
+    "user_group_names",
+]

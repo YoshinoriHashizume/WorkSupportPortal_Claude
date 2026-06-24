@@ -1,4 +1,4 @@
-﻿# Generated for initial Django implementation.
+# Generated for initial Django implementation.
 
 import uuid
 

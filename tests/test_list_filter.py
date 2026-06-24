@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from apps.inventory_order_alert.application.list_filter import (
+from apps.inventory_order_alert.domain.list_filter import (
     FilterOption,
     ListFilterOptions,
     apply_list_filters,
@@ -8,7 +8,7 @@ from apps.inventory_order_alert.application.list_filter import (
     build_filter_options,
     parse_list_filter_params,
 )
-from apps.inventory_order_alert.application.table_display import SortSpec, TableDisplayParams
+from apps.inventory_order_alert.domain.table_display import SortSpec, TableDisplayParams
 
 
 def _row(**kwargs) -> dict[str, object]:

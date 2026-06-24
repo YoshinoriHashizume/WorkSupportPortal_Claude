@@ -3,7 +3,7 @@ from __future__ import annotations
 import pytest
 
 from apps.receipt_comparison.models import SuppliedPartsReceiptSupplier, SuppliedPartsSubcontractor
-from apps.receipt_comparison.services.supplier_codes import (
+from apps.receipt_comparison.infrastructure.persistence.supplier_repository import (
     mari_vendor_codes_for_supplier,
     vendor_match_codes_for_supplier,
 )

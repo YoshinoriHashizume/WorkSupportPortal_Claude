@@ -27,7 +27,7 @@ from apps.receipt_comparison.models import (
     SuppliedPartsReceivingSetting,
     SuppliedPartsSubcontractor,
 )
-from apps.receipt_comparison.type_registry import customer_digit_length
+from apps.receipt_comparison.domain.settings_labels import customer_digit_length
 from tests.test_receipt_comparison import assert_results_head_button_order
 
 
@@ -318,7 +318,7 @@ def test_supplied_parts_compare_fills_file_values_when_mari_matches(
             MariReceiptRow(item_cd="2305231010", ship_date="2026/05/19", ship_qty="1800", delivery_place="WH1"),
         ]
 
-    monkeypatch.setattr("apps.receipt_comparison.views.fetch_mari_rows", fake_fetch_mari_rows)
+    monkeypatch.setattr("apps.receipt_comparison.infrastructure.oracle.client.fetch_mari_rows", fake_fetch_mari_rows)
     client.force_login(production_user)
     sample = (
         Path(__file__).resolve().parent / "fixtures" / "supplied_parts_material_sample.txt"
@@ -431,7 +431,7 @@ def test_supplied_parts_txt_uses_right_four_digits_for_short_date():
 def test_supplied_parts_compare_warns_when_file_has_no_matching_rows(
     client, production_user, supplied_parts_supplier, monkeypatch
 ):
-    monkeypatch.setattr("apps.receipt_comparison.views.fetch_mari_rows", lambda **kwargs: [])
+    monkeypatch.setattr("apps.receipt_comparison.infrastructure.oracle.client.fetch_mari_rows", lambda **kwargs: [])
     client.force_login(production_user)
     upload = SimpleUploadedFile(
         "receipt.txt",
@@ -460,7 +460,7 @@ def test_supplied_parts_compare_warns_when_file_has_no_matching_rows(
 def test_supplied_parts_compare_shows_receipt_only_row_when_mari_empty(
     client, production_user, supplied_parts_supplier, monkeypatch
 ):
-    monkeypatch.setattr("apps.receipt_comparison.views.fetch_mari_rows", lambda **kwargs: [])
+    monkeypatch.setattr("apps.receipt_comparison.infrastructure.oracle.client.fetch_mari_rows", lambda **kwargs: [])
     client.force_login(production_user)
     upload = SimpleUploadedFile(
         "receipt.txt",
@@ -493,7 +493,7 @@ def test_supplied_parts_compare_does_not_save_until_register(
     def fake_fetch_mari_rows(**kwargs):
         return [MariReceiptRow(item_cd="1234567890", ship_date="2026/06/01", ship_qty="10", delivery_place="WH1")]
 
-    monkeypatch.setattr("apps.receipt_comparison.views.fetch_mari_rows", fake_fetch_mari_rows)
+    monkeypatch.setattr("apps.receipt_comparison.infrastructure.oracle.client.fetch_mari_rows", fake_fetch_mari_rows)
     client.force_login(production_user)
     upload = SimpleUploadedFile(
         "receipt.txt",
@@ -576,7 +576,7 @@ def test_supplied_parts_can_register_and_export(client, production_user, supplie
     def fake_fetch_mari_rows(**kwargs):
         return [MariReceiptRow(item_cd="1234567890", ship_date="2026/06/01", ship_qty="10", delivery_place="WH1")]
 
-    monkeypatch.setattr("apps.receipt_comparison.views.fetch_mari_rows", fake_fetch_mari_rows)
+    monkeypatch.setattr("apps.receipt_comparison.infrastructure.oracle.client.fetch_mari_rows", fake_fetch_mari_rows)
     client.force_login(production_user)
     upload = SimpleUploadedFile(
         "receipt.txt",

@@ -7,8 +7,9 @@ from unittest.mock import MagicMock, patch
 import pytest
 from django.utils import timezone
 
-from apps.inventory_order_alert.application.portal_dashboard import load_dashboard_banner_context
-from apps.inventory_order_alert.application.summary_storage import store_summary_snapshot
+from apps.inventory_order_alert.usecase.usecase_portal_dashboard import DashboardBannerContext
+from apps.inventory_order_alert.composition import portal_dashboard_usecase
+from apps.inventory_order_alert.infrastructure.persistence.summary_snapshot_repository import store_summary_snapshot
 from apps.inventory_order_alert.models import SlimsStockImport
 
 
@@ -48,7 +49,7 @@ def test_load_dashboard_banner_context_from_summary_snapshot():
         as_of_date=date(2026, 6, 17),
     )
 
-    banner = load_dashboard_banner_context()
+    banner = portal_dashboard_usecase().execute()
 
     assert banner.critical == 1
     assert banner.warning_ship == 1
@@ -61,7 +62,7 @@ def test_load_dashboard_banner_context_from_summary_snapshot():
 
 @pytest.mark.django_db
 def test_load_dashboard_banner_context_without_import():
-    banner = load_dashboard_banner_context()
+    banner = portal_dashboard_usecase().execute()
 
     assert banner.critical == 0
     assert banner.warning == 0
@@ -73,7 +74,7 @@ def test_load_dashboard_banner_context_shows_error_when_aggregation_failed():
     import_record = SlimsStockImport.objects.create(file_name="sample.csv", row_count=1)
     store_summary_snapshot(import_record, [], as_of_date=date(2026, 6, 17), aggregation_error="Oracle 未設定")
 
-    banner = load_dashboard_banner_context()
+    banner = portal_dashboard_usecase().execute()
 
     assert banner.error_message
     assert banner.has_stock_data is True

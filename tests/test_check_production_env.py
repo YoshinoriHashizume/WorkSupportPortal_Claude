@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import importlib
 import os
 from pathlib import Path
 
@@ -7,10 +8,11 @@ import pytest
 from django.core.management import call_command
 
 from apps.portal.management.commands.check_production_env import mask_database_url
-from apps.receipt_comparison.migrations import (
-    supplied_parts_customer_code as migration_module,
-)
 from config.settings import load_dotenv
+
+migration_module = importlib.import_module(
+    "apps.receipt_comparison.migrations.0004_supplied_parts_customer_code"
+)
 
 
 def test_mask_database_url_hides_password():

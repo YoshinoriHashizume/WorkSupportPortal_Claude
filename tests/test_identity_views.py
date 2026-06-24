@@ -1,7 +1,9 @@
 import pytest
 from django.contrib.auth import get_user_model
 
-from apps.identity.desknet import DesknetAuthError, DesknetUserInfo, desknet_login_api_url
+from apps.identity.domain.errors import DesknetAuthError
+from apps.identity.domain.user_info import DesknetUserInfo
+from apps.identity.infrastructure.desknet.client import desknet_login_api_url
 from apps.portal.models import UserAccessRequest
 
 
@@ -28,7 +30,7 @@ def test_desknet_login_creates_user_bound_by_employee_id(client, monkeypatch, se
             access_key="access-token",
         )
 
-    monkeypatch.setattr("apps.identity.views.authenticate_desknet_user", fake_authenticate)
+    monkeypatch.setattr("apps.identity.infrastructure.desknet.client.authenticate_desknet_user", fake_authenticate)
 
     response = client.post("/auth/desknet-login", {"employee_id": "10001", "password": "secret"})
 
@@ -60,7 +62,7 @@ def test_desknet_login_reuses_existing_employee_user(client, monkeypatch):
             access_key="access-token",
         )
 
-    monkeypatch.setattr("apps.identity.views.authenticate_desknet_user", fake_authenticate)
+    monkeypatch.setattr("apps.identity.infrastructure.desknet.client.authenticate_desknet_user", fake_authenticate)
 
     response = client.post("/auth/desknet-login", {"employee_id": "10001", "password": "secret"})
 
@@ -77,7 +79,7 @@ def test_desknet_login_rejects_invalid_credentials(client, monkeypatch):
     def fake_authenticate(login_url, employee_id, password, timeout=10):
         raise DesknetAuthError("社員番号またはパスワードが正しくありません。")
 
-    monkeypatch.setattr("apps.identity.views.authenticate_desknet_user", fake_authenticate)
+    monkeypatch.setattr("apps.identity.infrastructure.desknet.client.authenticate_desknet_user", fake_authenticate)
 
     response = client.post("/auth/desknet-login", {"employee_id": "10001", "password": "wrong"})
 
@@ -101,9 +103,10 @@ def test_login_page_has_only_normal_login_form(client, settings):
 def test_login_page_shows_dev_login_when_auth_dev_mode(client, settings):
     settings.AUTH_DEV_MODE = True
     settings.AUTH_DEV_USERNAME = "10001"
-    from apps.portal.bootstrap_local_dev import BootstrapLocalDevConfig, bootstrap_local_dev
+    from apps.portal.composition import bootstrap_local_dev_usecase
+    from apps.portal.domain.bootstrap import BootstrapLocalDevConfig
 
-    bootstrap_local_dev(
+    bootstrap_local_dev_usecase().execute(
         BootstrapLocalDevConfig(
             username="10001",
             password="dev",
@@ -125,12 +128,13 @@ def test_login_page_shows_dev_login_when_auth_dev_mode(client, settings):
 def test_login_page_hides_dev_login_when_non_bootstrap_admin_exists(client, settings):
     from django.contrib.auth.models import Group
 
-    from apps.portal.bootstrap_local_dev import BootstrapLocalDevConfig, bootstrap_local_dev
+    from apps.portal.composition import bootstrap_local_dev_usecase
+    from apps.portal.domain.bootstrap import BootstrapLocalDevConfig
     from apps.portal.favorites import ADMIN_GROUP_NAME
 
     settings.AUTH_DEV_MODE = True
     settings.AUTH_DEV_USERNAME = "10001"
-    bootstrap_local_dev(
+    bootstrap_local_dev_usecase().execute(
         BootstrapLocalDevConfig(
             username="10001",
             password="dev",
@@ -168,7 +172,7 @@ def test_login_uses_desknet_authentication(client, monkeypatch):
             access_key="access-token",
         )
 
-    monkeypatch.setattr("apps.identity.views.authenticate_desknet_user", fake_authenticate)
+    monkeypatch.setattr("apps.identity.infrastructure.desknet.client.authenticate_desknet_user", fake_authenticate)
 
     response = client.post("/auth/desknet-login", {"employee_id": "10002", "password": "secret"})
 
@@ -192,12 +196,13 @@ def test_dev_login_endpoint_disabled_when_auth_dev_mode_false(client, settings):
 def test_dev_login_endpoint_disabled_when_non_bootstrap_admin_exists(client, settings):
     from django.contrib.auth.models import Group
 
-    from apps.portal.bootstrap_local_dev import BootstrapLocalDevConfig, bootstrap_local_dev
+    from apps.portal.composition import bootstrap_local_dev_usecase
+    from apps.portal.domain.bootstrap import BootstrapLocalDevConfig
     from apps.portal.favorites import ADMIN_GROUP_NAME
 
     settings.AUTH_DEV_MODE = True
     settings.AUTH_DEV_USERNAME = "10001"
-    bootstrap_local_dev(
+    bootstrap_local_dev_usecase().execute(
         BootstrapLocalDevConfig(
             username="10001",
             password="dev",
@@ -220,10 +225,11 @@ def test_dev_login_endpoint_disabled_when_non_bootstrap_admin_exists(client, set
 def test_dev_login_works_without_csrf_token_when_auth_dev_mode(client, settings):
     from django.test import Client
 
-    from apps.portal.bootstrap_local_dev import BootstrapLocalDevConfig, bootstrap_local_dev
+    from apps.portal.composition import bootstrap_local_dev_usecase
+    from apps.portal.domain.bootstrap import BootstrapLocalDevConfig
 
     settings.AUTH_DEV_MODE = True
-    bootstrap_local_dev(
+    bootstrap_local_dev_usecase().execute(
         BootstrapLocalDevConfig(
             username="10001",
             password="dev",
@@ -241,10 +247,11 @@ def test_dev_login_works_without_csrf_token_when_auth_dev_mode(client, settings)
 
 @pytest.mark.django_db
 def test_dev_login_authenticates_bootstrap_user(client, settings):
-    from apps.portal.bootstrap_local_dev import BootstrapLocalDevConfig, bootstrap_local_dev
+    from apps.portal.composition import bootstrap_local_dev_usecase
+    from apps.portal.domain.bootstrap import BootstrapLocalDevConfig
 
     settings.AUTH_DEV_MODE = True
-    bootstrap_local_dev(
+    bootstrap_local_dev_usecase().execute(
         BootstrapLocalDevConfig(
             username="10001",
             password="dev",

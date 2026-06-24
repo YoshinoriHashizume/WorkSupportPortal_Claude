@@ -14,7 +14,7 @@ FIXTURE = Path("tests/fixtures/slims_stock_sample.csv")
 
 
 @pytest.mark.django_db
-@patch("apps.inventory_order_alert.application.summary_storage.run_summary_aggregation")
+@patch("apps.inventory_order_alert.infrastructure.persistence.slims_stock_repository.run_summary_aggregation")
 def test_import_slims_stock_csv_command(mock_aggregate):
     mock_aggregate.return_value = ("", 0)
     before = SlimsStockImport.objects.count()

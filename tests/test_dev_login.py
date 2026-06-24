@@ -4,8 +4,9 @@ import pytest
 from django.contrib.auth import get_user_model
 from django.contrib.auth.models import Group
 
-from apps.identity.dev_login import is_dev_login_available
-from apps.portal.bootstrap_local_dev import BootstrapLocalDevConfig, bootstrap_local_dev
+from apps.identity.infrastructure.dev_login import is_dev_login_available
+from apps.portal.composition import bootstrap_local_dev_usecase
+from apps.portal.domain.bootstrap import BootstrapLocalDevConfig
 from apps.portal.favorites import ADMIN_GROUP_NAME
 
 
@@ -19,7 +20,7 @@ def test_is_dev_login_available_false_when_auth_dev_mode_disabled(settings):
 def test_is_dev_login_available_true_when_only_bootstrap_admin_exists(settings):
     settings.AUTH_DEV_MODE = True
     settings.AUTH_DEV_USERNAME = "10001"
-    bootstrap_local_dev(
+    bootstrap_local_dev_usecase().execute(
         BootstrapLocalDevConfig(
             username="10001",
             password="dev",
@@ -35,7 +36,7 @@ def test_is_dev_login_available_true_when_only_bootstrap_admin_exists(settings):
 def test_is_dev_login_available_false_when_non_bootstrap_admin_exists(settings):
     settings.AUTH_DEV_MODE = True
     settings.AUTH_DEV_USERNAME = "10001"
-    bootstrap_local_dev(
+    bootstrap_local_dev_usecase().execute(
         BootstrapLocalDevConfig(
             username="10001",
             password="dev",

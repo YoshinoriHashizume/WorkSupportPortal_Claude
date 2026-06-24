@@ -6,10 +6,13 @@ import pytest
 from django.contrib.auth import get_user_model
 from django.contrib.auth.models import Group
 
-from apps.inventory_order_alert.application.memo_history import add_confirmation_memo, parse_memo_entry_payload
-from apps.inventory_order_alert.application.save_confirmation import (
+from apps.inventory_order_alert.domain.confirmation import parse_memo_entry_payload
+from apps.inventory_order_alert.domain.confirmation import (
     ConfirmationInput,
     parse_confirmation_payload,
+)
+from apps.inventory_order_alert.infrastructure.persistence.confirmation_repository import (
+    add_confirmation_memo,
     save_confirmation,
 )
 from apps.inventory_order_alert.models import ConfirmationStatus, InventoryOrderAlertConfirmation
@@ -80,7 +83,9 @@ def test_save_confirmation_preserves_existing_memo(production_user):
         memo="旧メモ",
     )
     add_confirmation_memo(
-        parse_memo_entry_payload({"custCode": "112", "itemCd": "ITEM-A", "content": "旧メモ"}),
+        cust_code="112",
+        item_cd="ITEM-A",
+        content="旧メモ",
         created_by="10001",
     )
 
@@ -135,7 +140,9 @@ def test_api_reset_confirmations_resets_all_active_statuses(client, production_u
         confirmed_by="10001",
     )
     add_confirmation_memo(
-        parse_memo_entry_payload({"custCode": "112", "itemCd": "ITEM-A", "content": "回答あり"}),
+        cust_code="112",
+        item_cd="ITEM-A",
+        content="回答あり",
         created_by="10001",
     )
     InventoryOrderAlertConfirmation.objects.create(

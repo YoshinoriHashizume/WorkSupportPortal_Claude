@@ -2,13 +2,14 @@ from __future__ import annotations
 
 import pytest
 
-from apps.inventory_order_alert.application.settings_service import AppSettings, get_app_settings
+from apps.inventory_order_alert.domain.app_settings import AppSettings
+from apps.inventory_order_alert.infrastructure.persistence.settings_repository import load_app_settings
 from apps.inventory_order_alert.models import InventoryOrderAlertSettings
 
 
 @pytest.mark.django_db
-def test_get_app_settings_returns_defaults():
-    settings = get_app_settings()
+def test_load_app_settings_returns_defaults():
+    settings = load_app_settings()
     assert settings == AppSettings(
         warning_days=365,
         warning_shipment_months=12,
@@ -20,7 +21,7 @@ def test_get_app_settings_returns_defaults():
 
 
 @pytest.mark.django_db
-def test_get_app_settings_reads_saved_values():
+def test_load_app_settings_reads_saved_values():
     InventoryOrderAlertSettings.objects.update_or_create(
         pk=1,
         defaults={
@@ -31,7 +32,7 @@ def test_get_app_settings_reads_saved_values():
             "stock_stale_days": 3,
         },
     )
-    settings = get_app_settings()
+    settings = load_app_settings()
     assert settings.warning_days == 730
     assert settings.warning_shipment_months == 18
     assert settings.warning_incoming_months == 9

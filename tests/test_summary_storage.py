@@ -5,11 +5,11 @@ from decimal import Decimal
 
 import pytest
 
-from apps.inventory_order_alert.application.summary_storage import (
-    load_latest_summary,
+from apps.inventory_order_alert.infrastructure.persistence.summary_repository import load_latest_summary
+from apps.inventory_order_alert.infrastructure.persistence.summary_row_codec import (
     row_to_storable,
-    store_summary_snapshot,
 )
+from apps.inventory_order_alert.infrastructure.persistence.summary_snapshot_repository import store_summary_snapshot
 from apps.inventory_order_alert.models import ConfirmationStatus, InventoryOrderAlertConfirmation
 from apps.inventory_order_alert.models import InventoryOrderAlertSummarySnapshot, SlimsStockImport
 

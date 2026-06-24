@@ -2,7 +2,10 @@ from __future__ import annotations
 
 import pytest
 
-from apps.inventory_order_alert.application.reconcile_confirmations import reconcile_confirmations_after_import, reset_all_confirmations
+from apps.inventory_order_alert.infrastructure.persistence.confirmation_repository import (
+    reconcile_confirmations_after_import,
+    reset_all_confirmations,
+)
 from apps.inventory_order_alert.domain.alert_level import (
     ALERT_CRITICAL,
     ALERT_NONE,

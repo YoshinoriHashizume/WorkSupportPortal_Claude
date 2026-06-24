@@ -7,7 +7,7 @@ from unittest.mock import patch
 import pytest
 from django.contrib.auth import get_user_model
 
-from apps.inventory_order_alert.application.stock_storage import (
+from apps.inventory_order_alert.infrastructure.persistence.slims_stock_repository import (
     import_slims_csv_text,
     load_latest_stock_lines,
 )
@@ -23,7 +23,7 @@ def user(db):
 
 
 @pytest.mark.django_db
-@patch("apps.inventory_order_alert.application.summary_storage.run_summary_aggregation")
+@patch("apps.inventory_order_alert.infrastructure.persistence.slims_stock_repository.run_summary_aggregation")
 def test_import_slims_csv_text_replaces_snapshot(mock_aggregate, user):
     mock_aggregate.return_value = ("", 0)
     text = read_csv_text(FIXTURE)
@@ -42,7 +42,7 @@ def test_import_slims_csv_text_replaces_snapshot(mock_aggregate, user):
 
 
 @pytest.mark.django_db
-@patch("apps.inventory_order_alert.application.summary_storage.run_summary_aggregation")
+@patch("apps.inventory_order_alert.infrastructure.persistence.slims_stock_repository.run_summary_aggregation")
 def test_import_slims_csv_text_replaces_previous_snapshot(mock_aggregate, user):
     mock_aggregate.return_value = ("", 0)
     text = read_csv_text(FIXTURE)

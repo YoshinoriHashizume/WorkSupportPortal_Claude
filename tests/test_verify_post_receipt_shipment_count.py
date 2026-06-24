@@ -4,7 +4,7 @@ from datetime import date
 
 from apps.inventory_order_alert.domain.dates import parse_optional_ymd
 from apps.inventory_order_alert.domain.export_csv import EXPORT_HEADER_LABELS as SUMMARY_HEADER_LABELS
-from apps.inventory_order_alert.domain.oracle_summary import (
+from apps.inventory_order_alert.infrastructure.oracle.summary_queries import (
     aggregate_shipment_stats,
     resolve_last_incoming_for_finished,
 )

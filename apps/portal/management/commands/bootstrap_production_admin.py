@@ -2,7 +2,8 @@ from __future__ import annotations
 
 from django.core.management.base import BaseCommand
 
-from apps.portal.bootstrap_production_admin import BootstrapProductionAdminConfig, bootstrap_production_admin
+from apps.portal.composition import bootstrap_production_admin_usecase
+from apps.portal.domain.bootstrap import BootstrapProductionAdminConfig
 
 
 class Command(BaseCommand):
@@ -19,7 +20,7 @@ class Command(BaseCommand):
             last_name=options["last_name"].strip(),
             first_name=options["first_name"].strip(),
         )
-        result = bootstrap_production_admin(config)
+        result = bootstrap_production_admin_usecase().execute(config)
         action = "作成" if result.created else "更新"
         self.stdout.write(
             self.style.SUCCESS(

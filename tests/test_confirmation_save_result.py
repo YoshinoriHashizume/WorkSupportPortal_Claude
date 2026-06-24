@@ -6,11 +6,8 @@ import pytest
 from django.contrib.auth import get_user_model
 from django.contrib.auth.models import Group
 
-from apps.inventory_order_alert.application.confirmation_save_result import build_confirmation_save_result
-from apps.inventory_order_alert.application.list_filter import ListFilterParams
-from apps.inventory_order_alert.application.memo_history import add_confirmation_memo, parse_memo_entry_payload
-from apps.inventory_order_alert.application.save_confirmation import ConfirmationInput, save_confirmation
-from apps.inventory_order_alert.application.summary_storage import store_summary_snapshot
+from apps.inventory_order_alert.composition import save_confirmation_usecase
+from apps.inventory_order_alert.infrastructure.persistence.summary_snapshot_repository import store_summary_snapshot
 from apps.inventory_order_alert.models import ConfirmationStatus, SlimsStockImport
 from apps.portal.models import PortalMenuGroupAccess
 
@@ -39,24 +36,30 @@ def _sample_row(**overrides):
 
 
 @pytest.mark.django_db
-def test_build_confirmation_save_result_returns_row_class_and_counts(production_user):
+def test_save_confirmation_usecase_returns_row_class_and_counts(production_user):
     import_record = SlimsStockImport.objects.create(file_name="sample.csv", row_count=2)
     store_summary_snapshot(
         import_record,
         [
             _sample_row(),
-            _sample_row(cust_code="112", item_cd="ITEM-B", last_incoming_date="2024/05/01", last_ship_date="", post_shipment_count=0),
+            _sample_row(
+                cust_code="112",
+                item_cd="ITEM-B",
+                last_incoming_date="2024/05/01",
+                last_ship_date="",
+                post_shipment_count=0,
+            ),
         ],
         as_of_date=date(2026, 6, 17),
     )
-    input_data = ConfirmationInput(
-        cust_code="112",
-        item_cd="ITEM-A",
-        status=ConfirmationStatus.CONFIRMED,
+    result = save_confirmation_usecase().execute(
+        {
+            "custCode": "112",
+            "itemCd": "ITEM-A",
+            "status": "confirmed",
+        },
+        confirmed_by=production_user.username,
     )
-    save_confirmation(input_data, confirmed_by=production_user.username)
-
-    result = build_confirmation_save_result(input_data, filter_params=ListFilterParams())
 
     assert result["ok"] is True
     assert result["confirmationStatusKey"] == ConfirmationStatus.CONFIRMED

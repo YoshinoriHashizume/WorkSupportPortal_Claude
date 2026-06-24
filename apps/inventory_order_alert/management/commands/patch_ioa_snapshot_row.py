@@ -4,8 +4,10 @@ import os
 
 from django.conf import settings
 from django.core.management.base import BaseCommand, CommandError
+from django.utils import timezone
 
-from apps.inventory_order_alert.application.snapshot_patch import parse_patch_date, patch_snapshot_row
+from apps.inventory_order_alert.composition import patch_snapshot_row_usecase
+from apps.inventory_order_alert.domain.snapshot_patch import parse_patch_date
 
 
 class Command(BaseCommand):
@@ -39,16 +41,17 @@ class Command(BaseCommand):
                 "本コマンドは DEBUG=true または IOA_ALLOW_SNAPSHOT_PATCH=1 のときのみ実行できます。"
             )
 
+        today = timezone.localdate()
         last_ship_date = None
         if options.get("last_ship_date"):
-            last_ship_date = parse_patch_date(options["last_ship_date"])
+            last_ship_date = parse_patch_date(options["last_ship_date"], today=today)
 
         last_incoming_date = None
         if options.get("last_incoming_date"):
-            last_incoming_date = parse_patch_date(options["last_incoming_date"])
+            last_incoming_date = parse_patch_date(options["last_incoming_date"], today=today)
 
         try:
-            result = patch_snapshot_row(
+            result = patch_snapshot_row_usecase().execute(
                 cust_code=str(options["cust_code"]).strip(),
                 item_cd=str(options["item_cd"]).strip(),
                 last_ship_date=last_ship_date,

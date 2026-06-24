@@ -1,47 +1,23 @@
-﻿from __future__ import annotations
+from __future__ import annotations
 
 from django.conf import settings
 from django.contrib import messages
-from django.contrib.auth import get_user_model, login, logout, authenticate
+from django.contrib.auth import login, logout
 from django.http import HttpRequest, HttpResponse
 from django.shortcuts import redirect, render
 from django.utils.http import url_has_allowed_host_and_scheme
 from django.views.decorators.csrf import csrf_exempt, ensure_csrf_cookie
 from django.views.decorators.http import require_GET, require_http_methods, require_POST
 
-from apps.portal.models import UserAccessRequest
-
-from .dev_login import is_dev_login_available
-from .desknet import DesknetAuthError, DesknetUserInfo, authenticate_desknet_user
+from apps.identity.composition import desknet_login_usecase, dev_login_usecase, login_page_usecase
+from apps.identity.domain.errors import DesknetAuthError
 
 
-def safe_next_url(request: HttpRequest) -> str:
+def _safe_next_url(request: HttpRequest) -> str:
     next_url = request.POST.get("next") or request.GET.get("next") or settings.LOGIN_REDIRECT_URL
     if url_has_allowed_host_and_scheme(next_url, allowed_hosts={request.get_host()}, require_https=request.is_secure()):
         return next_url
     return settings.LOGIN_REDIRECT_URL
-
-
-def split_desknet_name(name: str) -> tuple[str, str]:
-    parts = (name or "").replace("\u3000", " ").split()
-    if len(parts) >= 2:
-        return parts[0], " ".join(parts[1:])
-    return "", name.strip()
-
-
-def upsert_django_user_from_desknet(user_info: DesknetUserInfo):
-    User = get_user_model()
-    user, created = User.objects.get_or_create(username=user_info.employee_id)
-    last_name, first_name = split_desknet_name(user_info.name)
-    user.last_name = last_name
-    user.first_name = first_name
-    user.email = ""
-    user.is_active = True
-    user.set_unusable_password()
-    user.save()
-    if created:
-        UserAccessRequest.objects.get_or_create(user=user)
-    return user
 
 
 @ensure_csrf_cookie
@@ -49,13 +25,14 @@ def upsert_django_user_from_desknet(user_info: DesknetUserInfo):
 def login_page(request: HttpRequest) -> HttpResponse:
     if request.user.is_authenticated:
         return redirect("portal:dashboard")
+    context = login_page_usecase().execute(settings.AUTH_PROVIDER, _safe_next_url(request))
     return render(
         request,
         "identity/login.html",
         {
-            "auth_provider": settings.AUTH_PROVIDER,
-            "show_dev_login": is_dev_login_available(),
-            "next": safe_next_url(request),
+            "auth_provider": context.auth_provider,
+            "show_dev_login": context.show_dev_login,
+            "next": context.next_url,
         },
     )
 
@@ -64,50 +41,48 @@ def login_page(request: HttpRequest) -> HttpResponse:
 def desknet_login(request: HttpRequest) -> HttpResponse:
     employee_id = (request.POST.get("employee_id") or "").strip()
     password = request.POST.get("password") or ""
-    if not employee_id or not password:
-        messages.error(request, "社員番号とパスワードを入力してください。")
-        return redirect("identity:login")
-
     try:
-        user_info = authenticate_desknet_user(
+        result = desknet_login_usecase().execute(
             settings.DESKNETS_LOGIN_URL,
             employee_id,
             password,
-            timeout=settings.DESKNETS_TIMEOUT_SECONDS,
+            settings.DESKNETS_TIMEOUT_SECONDS,
         )
+    except ValueError as exc:
+        messages.error(request, str(exc))
+        return redirect("identity:login")
     except DesknetAuthError as exc:
         messages.error(request, str(exc))
         return redirect("identity:login")
 
-    user = upsert_django_user_from_desknet(user_info)
-    request.session["desknet_user_id"] = user_info.user_id
-    request.session["desknet_default_group_id"] = user_info.default_group_id
-    login(request, user)
-    access_request = getattr(user, "access_request", None)
-    if access_request and access_request.status != UserAccessRequest.Status.APPROVED:
+    request.session["desknet_user_id"] = result.user_info.user_id
+    request.session["desknet_default_group_id"] = result.user_info.default_group_id
+    login(request, result.user)
+    if result.requires_access_approval:
         return redirect("portal:access_status")
-    return redirect(safe_next_url(request))
+    return redirect(_safe_next_url(request))
 
 
 @csrf_exempt
 @require_POST
 def dev_login(request: HttpRequest) -> HttpResponse:
-    if not is_dev_login_available():
+    try:
+        user = dev_login_usecase().execute(
+            (request.POST.get("employee_id") or "").strip(),
+            request.POST.get("password") or "",
+        )
+    except PermissionError:
         return HttpResponse("Not Found", status=404)
-
-    employee_id = (request.POST.get("employee_id") or "").strip()
-    password = request.POST.get("password") or ""
-    if not employee_id or not password:
-        messages.error(request, "社員番号とパスワードを入力してください。")
+    except ValueError as exc:
+        messages.error(request, str(exc))
         return redirect("identity:login")
 
-    user = authenticate(request, username=employee_id, password=password)
     if user is None:
         messages.error(request, "社員番号またはパスワードが正しくありません。")
         return redirect("identity:login")
 
     login(request, user)
-    return redirect(safe_next_url(request))
+    return redirect(_safe_next_url(request))
 
 
 @require_http_methods(["GET", "POST"])

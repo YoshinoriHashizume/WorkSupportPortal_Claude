@@ -7,7 +7,7 @@ from apps.receipt_comparison.infrastructure.oracle.vendors import (
     list_receipt_vendors,
     lookup_receipt_vendor_name,
 )
-from apps.receipt_comparison.views import receipt_vendor_choices
+from apps.receipt_comparison.infrastructure.oracle.receipt_choices import list_vendor_choices
 
 
 def test_vendor_code_digit_length_is_four():
@@ -33,7 +33,7 @@ def test_lookup_receipt_vendor_name(monkeypatch):
 def test_receipt_vendor_choices_filters_four_digit(monkeypatch):
     monkeypatch.setenv("ORACLE_USE_MOCK", "true")
 
-    vendors, error = receipt_vendor_choices()
+    vendors, error = list_vendor_choices()
 
     assert not error
     assert all(len(row["vendorCode"]) == 4 for row in vendors)

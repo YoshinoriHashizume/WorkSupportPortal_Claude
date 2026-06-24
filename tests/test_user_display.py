@@ -3,11 +3,11 @@ from __future__ import annotations
 import pytest
 from django.contrib.auth import get_user_model
 
-from apps.inventory_order_alert.application.user_display import (
+from apps.inventory_order_alert.domain.user_display import (
     format_user_display_name,
-    resolve_user_display_names,
     user_display_name_from_model,
 )
+from apps.inventory_order_alert.infrastructure.persistence.user_display_repository import resolve_user_display_names
 
 
 def test_format_user_display_name_prefers_full_name():

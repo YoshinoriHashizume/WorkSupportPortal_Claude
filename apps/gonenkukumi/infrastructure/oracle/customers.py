@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from apps.gonenkukumi.domain.errors import OracleNotConfiguredError, OracleQueryError
+
 CUSTOMER_CODE_DIGIT_LENGTH_3 = 3
 CUSTOMER_CODE_DIGIT_LENGTH_4 = 4
 VALID_CUSTOMER_CODE_DIGIT_LENGTHS = {
@@ -42,8 +44,6 @@ def customer_code_digit_pattern(digit_length: int) -> str:
 
 def list_customers_by_digit_length(*, digit_length: int, keyword: str = "") -> list[dict[str, str]]:
     from .client import (
-        OracleNotConfiguredError,
-        OracleQueryError,
         oracle_config,
         oracle_connection,
         rows_as_dicts,
@@ -104,8 +104,6 @@ def list_customers_4(keyword: str = "") -> list[dict[str, str]]:
 
 def lookup_customer_name(customer_code: str) -> str | None:
     from .client import (
-        OracleNotConfiguredError,
-        OracleQueryError,
         oracle_config,
         oracle_connection,
         rows_as_dicts,

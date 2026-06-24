@@ -10,7 +10,7 @@ from apps.receipt_comparison.models import (
     ReceiptComparisonType,
     SuppliedPartsReceiptSupplier,
 )
-from apps.receipt_comparison.services.supplier_codes import mari_vendor_codes_for_supplier
+from apps.receipt_comparison.infrastructure.persistence.supplier_repository import mari_vendor_codes_for_supplier
 
 
 def fetch_mari_rows(

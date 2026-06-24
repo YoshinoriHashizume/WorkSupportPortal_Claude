@@ -2,8 +2,8 @@ from __future__ import annotations
 
 from apps.receipt_comparison.domain.comparison import ComparisonRow
 from apps.receipt_comparison.models import ReceiptFlag
-from apps.receipt_comparison.services.comparison_sort import quantity_sort_key, resolve_sort_params, sort_display_rows
-from apps.receipt_comparison.services.pending_comparison import DisplayRow, comparison_row_from_dict, comparison_row_to_dict
+from apps.receipt_comparison.domain.comparison_display import DisplayRow, comparison_row_from_dict, comparison_row_to_dict
+from apps.receipt_comparison.domain.comparison_sort import quantity_sort_key, resolve_sort_params, sort_display_rows
 
 
 def test_comparison_row_roundtrip_dict():

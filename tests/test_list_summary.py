@@ -2,12 +2,11 @@ from __future__ import annotations
 
 from datetime import date
 
-from apps.inventory_order_alert.application.list_summary import (
-    ListQuery,
+from apps.inventory_order_alert.domain.list_rows import (
     filter_summary_rows,
-    parse_list_query,
     sort_summary_rows,
 )
+from apps.inventory_order_alert.domain.list_query import ListQuery, parse_list_query
 
 
 def _row(

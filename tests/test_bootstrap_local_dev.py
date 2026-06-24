@@ -3,7 +3,8 @@ from __future__ import annotations
 import pytest
 from django.contrib.auth import get_user_model
 
-from apps.portal.bootstrap_local_dev import BootstrapLocalDevConfig, bootstrap_local_dev
+from apps.portal.composition import bootstrap_local_dev_usecase
+from apps.portal.domain.bootstrap import BootstrapLocalDevConfig
 from apps.portal.favorites import can_access_menu_item, is_portal_admin
 from apps.portal.menu import MENU_GROUPS
 from apps.portal.models import PortalMenuGroupAccess, UserAccessRequest
@@ -11,7 +12,7 @@ from apps.portal.models import PortalMenuGroupAccess, UserAccessRequest
 
 @pytest.mark.django_db
 def test_bootstrap_local_dev_creates_admin_with_all_menu_groups():
-    result = bootstrap_local_dev(
+    result = bootstrap_local_dev_usecase().execute(
         BootstrapLocalDevConfig(
             username="10001",
             password="dev",
@@ -38,8 +39,8 @@ def test_bootstrap_local_dev_is_idempotent():
         last_name="開発",
         first_name="管理者",
     )
-    bootstrap_local_dev(config)
-    result = bootstrap_local_dev(config)
+    bootstrap_local_dev_usecase().execute(config)
+    result = bootstrap_local_dev_usecase().execute(config)
 
     assert result.created is False
     assert get_user_model().objects.filter(username="10001").count() == 1

@@ -16,12 +16,7 @@ logger = logging.getLogger(__name__)
 DAY_NUMBER_PATTERN = re.compile(r"(\d{1,2})")
 
 
-class OracleNotConfiguredError(RuntimeError):
-    pass
-
-
-class OracleQueryError(RuntimeError):
-    pass
+from apps.gonenkukumi.domain.errors import OracleNotConfiguredError, OracleQueryError
 
 
 def use_mock() -> bool:

@@ -3,7 +3,8 @@ from __future__ import annotations
 import pytest
 from django.contrib.auth import get_user_model
 
-from apps.portal.bootstrap_production_admin import BootstrapProductionAdminConfig, bootstrap_production_admin
+from apps.portal.composition import bootstrap_production_admin_usecase
+from apps.portal.domain.bootstrap import BootstrapProductionAdminConfig
 from apps.portal.favorites import can_access_menu_item, is_portal_admin
 from apps.portal.menu import MENU_GROUPS
 from apps.portal.models import PortalMenuGroupAccess, UserAccessRequest
@@ -11,7 +12,7 @@ from apps.portal.models import PortalMenuGroupAccess, UserAccessRequest
 
 @pytest.mark.django_db
 def test_bootstrap_production_admin_creates_desknet_admin():
-    result = bootstrap_production_admin(
+    result = bootstrap_production_admin_usecase().execute(
         BootstrapProductionAdminConfig(
             username="10001",
             last_name="橋爪",

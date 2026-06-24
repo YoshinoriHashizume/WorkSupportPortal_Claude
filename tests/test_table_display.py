@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from apps.inventory_order_alert.application.table_display import (
+from apps.inventory_order_alert.domain.table_display import (
     DEFAULT_PAGE_SIZE,
     DEFAULT_SORT,
     SortSpec,

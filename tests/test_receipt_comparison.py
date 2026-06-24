@@ -32,19 +32,18 @@ from apps.receipt_comparison.models import (
     ReceiptFlag,
     SuppliedPartsReceiptSupplier,
 )
-from apps.receipt_comparison.type_registry import (
+from apps.receipt_comparison.domain.comparison_type import is_finished_product
+from apps.receipt_comparison.infrastructure.persistence.model_registry import (
     comparison_result_model,
-    is_finished_product,
     list_suppliers_for_settings,
     supplier_model,
 )
-from apps.receipt_comparison.views import (
-    comparison_export_filename,
-    comparison_type_from_slug,
-    is_results_panel_active,
-    receiving_places_for_supplier,
-    settings_redirect_url,
-)
+from apps.receipt_comparison.domain.comparison_type import UnknownComparisonTypeError, comparison_type_from_slug
+from apps.receipt_comparison.domain.comparison_urls import is_results_panel_active, settings_redirect_path
+from apps.receipt_comparison.domain.settings_labels import settings_target_label
+from apps.receipt_comparison.infrastructure.oracle.receipt_choices import list_customer_choices, list_vendor_choices
+from apps.receipt_comparison.infrastructure.persistence.supplier_lookup import receiving_places_for_supplier
+from apps.receipt_comparison.usecase.usecase_comparison_page import comparison_export_filename
 
 
 def attachment_filename_from_response(response) -> str:
@@ -167,11 +166,11 @@ def test_comparison_type_from_slug():
     assert comparison_type_from_slug("finished-product") == ReceiptComparisonType.FINISHED_PRODUCT
     assert comparison_type_from_slug("supplied-parts") == ReceiptComparisonType.SUPPLIED_PARTS
 
-    with pytest.raises(Http404):
+    with pytest.raises(UnknownComparisonTypeError):
         comparison_type_from_slug("invalid")
 
 
-def test_type_registry_returns_split_models():
+def test_model_registry_returns_split_models():
     assert supplier_model(ReceiptComparisonType.FINISHED_PRODUCT) is FinishedProductReceiptSupplier
     assert supplier_model(ReceiptComparisonType.SUPPLIED_PARTS) is SuppliedPartsReceiptSupplier
     assert comparison_result_model(ReceiptComparisonType.FINISHED_PRODUCT) is FinishedProductComparisonResult
@@ -362,7 +361,7 @@ def test_receipt_comparison_compare_does_not_save_until_register(client, product
     def fake_fetch_mari_rows(**kwargs):
         return [MariReceiptRow(item_cd="AB-001", ship_date="2026/06/01", ship_qty="10", delivery_place="A1")]
 
-    monkeypatch.setattr("apps.receipt_comparison.views.fetch_mari_rows", fake_fetch_mari_rows)
+    monkeypatch.setattr("apps.receipt_comparison.infrastructure.oracle.client.fetch_mari_rows", fake_fetch_mari_rows)
     client.force_login(production_user)
     upload = SimpleUploadedFile(
         "receipt.csv",
@@ -420,7 +419,7 @@ def test_receipt_comparison_display_clears_pending_preview(client, production_us
     def fake_fetch_mari_rows(**kwargs):
         return []
 
-    monkeypatch.setattr("apps.receipt_comparison.views.fetch_mari_rows", fake_fetch_mari_rows)
+    monkeypatch.setattr("apps.receipt_comparison.infrastructure.oracle.client.fetch_mari_rows", fake_fetch_mari_rows)
     client.force_login(production_user)
     upload = SimpleUploadedFile(
         "receipt.csv",
@@ -532,7 +531,7 @@ def test_receipt_comparison_can_export_pending_without_register(client, producti
     def fake_fetch_mari_rows(**kwargs):
         return [MariReceiptRow(item_cd="AB-001", ship_date="2026/06/01", ship_qty="10", delivery_place="A1")]
 
-    monkeypatch.setattr("apps.receipt_comparison.views.fetch_mari_rows", fake_fetch_mari_rows)
+    monkeypatch.setattr("apps.receipt_comparison.infrastructure.oracle.client.fetch_mari_rows", fake_fetch_mari_rows)
     client.force_login(production_user)
     upload = SimpleUploadedFile(
         "receipt.csv",
@@ -570,7 +569,7 @@ def test_receipt_comparison_can_register_and_export(client, production_user, sup
     def fake_fetch_mari_rows(**kwargs):
         return [MariReceiptRow(item_cd="AB-001", ship_date="2026/06/01", ship_qty="10", delivery_place="A1")]
 
-    monkeypatch.setattr("apps.receipt_comparison.views.fetch_mari_rows", fake_fetch_mari_rows)
+    monkeypatch.setattr("apps.receipt_comparison.infrastructure.oracle.client.fetch_mari_rows", fake_fetch_mari_rows)
     client.force_login(production_user)
     upload = SimpleUploadedFile(
         "receipt.csv",
@@ -661,7 +660,8 @@ def test_finished_product_settings_get_with_registered_supplier(client, admin_us
     row_section = html[row_index:exclusion_index]
     assert 'name="direct_delivery_customer_code"' in row_section
     assert 'value="update_supplier">更新</button>' in row_section
-    assert 'value="delete_supplier">削除</button>' in row_section
+    assert 'value="delete_supplier"' in row_section
+    assert '>削除</button>' in row_section
     assert 'receipt-supplier-direct-delivery-field' in html
     assert 'portal-customer-select--receipt' in html
     assert '設定を更新' not in html
@@ -880,7 +880,7 @@ def test_display_file_select_runs_compare(client, production_user, supplier, mon
     def fake_fetch_mari_rows(**kwargs):
         return [MariReceiptRow(item_cd="AB-001", ship_date="2026/06/01", ship_qty="10", delivery_place="A1")]
 
-    monkeypatch.setattr("apps.receipt_comparison.views.fetch_mari_rows", fake_fetch_mari_rows)
+    monkeypatch.setattr("apps.receipt_comparison.infrastructure.oracle.client.fetch_mari_rows", fake_fetch_mari_rows)
     client.force_login(production_user)
     client.get(
         "/app/production/receipt-comparison?type=finished-product"
@@ -953,18 +953,25 @@ def test_no_supplier_admin_sees_settings_hint_in_results_card(client, admin_user
 
 @pytest.mark.django_db
 def test_is_results_panel_active_with_display_flag(supplier):
-    from django.test import RequestFactory
+    assert is_results_panel_active(
+        method="GET",
+        get_display="1",
+        get_compared=None,
+        post_action=None,
+        supplier_selected=True,
+        has_pending=False,
+    )
 
-    request = RequestFactory().get("/?display=1")
-    assert is_results_panel_active(request, supplier, False)
 
-
-@pytest.mark.django_db
 def test_is_results_panel_active_with_compare_post(supplier):
-    from django.test import RequestFactory
-
-    request = RequestFactory().post("/", {"action": "compare"})
-    assert is_results_panel_active(request, supplier, False)
+    assert is_results_panel_active(
+        method="POST",
+        get_display=None,
+        get_compared=None,
+        post_action="compare",
+        supplier_selected=True,
+        has_pending=False,
+    )
 
 
 @pytest.mark.django_db
@@ -1148,11 +1155,12 @@ def test_settings_use_unified_template_with_oracle_customer_selection(client, ad
 
 
 def test_settings_redirect_url_includes_supplier_id():
+    base = "/app/production/receipt-comparison/settings"
     assert (
-        settings_redirect_url("finished-product", 12)
+        settings_redirect_path(base, "finished-product", 12)
         == "/app/production/receipt-comparison/settings?type=finished-product&supplier_id=12"
     )
-    assert settings_redirect_url("supplied-parts") == "/app/production/receipt-comparison/settings?type=supplied-parts"
+    assert settings_redirect_path(base, "supplied-parts") == "/app/production/receipt-comparison/settings?type=supplied-parts"
 
 
 @pytest.mark.django_db

@@ -1,135 +1,112 @@
 from __future__ import annotations
 
-import base64
 import csv
-from datetime import date, datetime
-from pathlib import Path
-from typing import Any
+from datetime import date
 
-from django.conf import settings
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
-from django.core.files.storage import FileSystemStorage
-from django.db import transaction
 from django.http import Http404, HttpRequest, HttpResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
-from django.utils import timezone
 from django.utils.http import content_disposition_header
 from django.views.decorators.http import require_http_methods
 
 from apps.portal.favorites import is_menu_favorited, is_portal_admin, menu_title, receipt_comparison_menu_key
-from apps.gonenkukumi.infrastructure.oracle.client import OracleNotConfiguredError, OracleQueryError
-
-from .domain.comparison import ComparisonRow, compare_receipts
-from .domain.file_parser import parse_receipt_file
-from .infrastructure.oracle.client import fetch_mari_rows
-from .infrastructure.oracle.customers import list_receipt_customers, lookup_receipt_customer_name
-from .infrastructure.oracle.vendors import (
-    VENDOR_CODE_DIGIT_LENGTH,
-    list_receipt_vendors,
-    lookup_receipt_vendor_name,
-)
-from .models import (
-    FinishedProductReceiptSupplier,
-    ReceiptComparisonType,
-    ReceiptFlag,
-    SuppliedPartsReceiptSupplier,
-    SuppliedPartsSubcontractor,
-)
-from .services.comparison_sort import (
-    comparison_sort_headers,
-    default_sort_params,
-    normalize_sort_direction,
-    normalize_sort_key,
-    resolve_sort_params,
-    sort_display_rows,
-)
-from .services.pending_comparison import (
-    clear_pending_comparison,
-    get_pending_comparison,
-    pending_display_rows,
-    pending_matches,
-    pending_rows_for_register,
-    saved_display_rows,
-    store_pending_comparison,
-)
-from .services.supplier_codes import mari_vendor_codes_for_supplier, vendor_match_codes_for_supplier
-from .type_registry import (
-    comparison_result_model,
-    customer_digit_length,
-    file_import_model,
-    is_finished_product,
-    list_suppliers,
-    list_suppliers_for_settings,
-    settings_exclusion_label,
-    settings_target_label,
-    receiving_setting_model,
+from apps.receipt_comparison.composition import (
+    compare_usecase,
+    comparison_page_usecase,
+    export_csv_usecase,
+    pending_comparison_store,
+    register_comparison_usecase,
+    settings_page_usecase,
+    settings_post_usecase,
+    slug_to_comparison_type,
     supplier_model,
+    update_results_usecase,
 )
+from apps.receipt_comparison.usecase.usecase_compare import FlashMessage
+from apps.receipt_comparison.usecase.usecase_comparison_page import ComparisonPageContext
+from apps.receipt_comparison.domain.comparison_type import UnknownComparisonTypeError, comparison_type_from_slug
+from apps.receipt_comparison.domain.comparison_urls import append_query, comparison_url_path, parse_date
+from apps.receipt_comparison.models import ReceiptFlag
 
 
-RESULT_COLUMNS = [
-    "結果",
-    "品目番号(MARI)",
-    "売上計上日(MARI)",
-    "売上実績数量(MARI)",
-    "得意先指定納品場所コード",
-    "品番(取引先)",
-    "納入月日(取引先)",
-    "納入数(取引先)",
-    "キャンセル数(取引先)",
-    "取引先名",
-    "備考",
-]
-
-COMPARISON_TYPE_SLUGS = {
-    "finished-product": ReceiptComparisonType.FINISHED_PRODUCT,
-    "supplied-parts": ReceiptComparisonType.SUPPLIED_PARTS,
-}
-COMPARISON_SLUG_BY_TYPE = {value: slug for slug, value in COMPARISON_TYPE_SLUGS.items()}
-COMPARISON_TYPE_PAGE_LABELS = {
-    ReceiptComparisonType.FINISHED_PRODUCT: "完成品",
-    ReceiptComparisonType.SUPPLIED_PARTS: "支給品",
-}
+def _post_values(request: HttpRequest) -> dict[str, str]:
+    return {key: value for key, value in request.POST.items()}
 
 
-def comparison_type_page_label(comparison_type: str) -> str:
-    return COMPARISON_TYPE_PAGE_LABELS[comparison_type]
+def _apply_flash_messages(request: HttpRequest, flash_messages: tuple[FlashMessage, ...]) -> None:
+    for message in flash_messages:
+        level = message.level
+        if level == "error":
+            messages.error(request, message.text)
+        elif level == "warning":
+            messages.warning(request, message.text)
+        elif level == "info":
+            messages.info(request, message.text)
+        else:
+            messages.success(request, message.text)
 
 
-def comparison_export_filename(comparison_type: str, at: datetime | None = None) -> str:
-    label = comparison_type_page_label(comparison_type)
-    moment = timezone.localtime(at) if at is not None else timezone.localtime()
-    return f"検収書比較結果({label})_{moment:%Y%m%d%H%M%S}.csv"
+def _comparison_page_template_context(request: HttpRequest, context: ComparisonPageContext) -> dict[str, object]:
+    favorite_menu_key = receipt_comparison_menu_key(context.comparison_type)
+    return {
+        "type_slug": context.type_slug,
+        "comparison_type": context.comparison_type,
+        "comparison_type_page_label": context.comparison_type_page_label,
+        "favorite_menu_key": favorite_menu_key,
+        "favorite_menu_title": menu_title(favorite_menu_key),
+        "is_comparison_favorite": is_menu_favorited(request.user, favorite_menu_key),
+        "show_settings": is_portal_admin(request.user),
+        "suppliers": context.suppliers,
+        "supplier": context.supplier,
+        "start_date": context.start_date.isoformat(),
+        "end_date": context.end_date.isoformat(),
+        "rows": context.rows,
+        "has_pending": context.has_pending,
+        "results_panel_active": context.results_panel_active,
+        "receipt_file_accept": context.receipt_file_accept,
+        "flag_choices": ReceiptFlag.choices,
+        "show_cancel_qty": context.show_cancel_qty,
+        "show_supplier_name": context.show_supplier_name,
+        "sort_key": context.sort_key,
+        "sort_direction": context.sort_direction,
+        "sort_headers": [
+            {
+                "key": header.key,
+                "label": header.label,
+                "sort_direction": header.sort_direction,
+                "is_sorted": header.is_sorted,
+                "href": header.href,
+            }
+            for header in context.sort_headers
+        ],
+        "comparison_query": context.comparison_query,
+    }
 
 
-def comparison_type_from_slug(slug: str) -> str:
-    comparison_type = COMPARISON_TYPE_SLUGS.get(slug)
-    if comparison_type is None:
-        raise Http404
-    return comparison_type
-
-
-def comparison_type_slug_from_request(request: HttpRequest) -> str | None:
+def _comparison_type_slug_from_request(request: HttpRequest) -> str | None:
     slug = (request.POST.get("type") or request.GET.get("type") or "").strip()
     return slug or None
-
-
-def append_query(url: str, query: str) -> str:
-    if not query:
-        return url
-    separator = "&" if "?" in url else "?"
-    return f"{url}{separator}{query}"
 
 
 @login_required
 @require_http_methods(["GET", "POST"])
 def comparison_page(request: HttpRequest) -> HttpResponse:
-    type_slug = comparison_type_slug_from_request(request)
+    page_usecase = comparison_page_usecase()
+    type_slug = _comparison_type_slug_from_request(request)
     if type_slug is None:
-        return redirect(append_query(f"{reverse('receipt_comparison:comparison')}?type=finished-product", request.GET.urlencode()))
-    comparison_type = comparison_type_from_slug(type_slug)
+        return redirect(
+            append_query(
+                f"{reverse('receipt_comparison:comparison')}?type=finished-product",
+                request.GET.urlencode(),
+            )
+        )
+    try:
+        comparison_type = comparison_type_from_slug(type_slug)
+    except UnknownComparisonTypeError as exc:
+        raise Http404 from exc
+
     supplier_id = request.POST.get("supplier_id") or request.GET.get("supplier_id") or ""
     start_date = parse_date(request.POST.get("start_date") or request.GET.get("start_date")) or date.today()
     end_date = parse_date(request.POST.get("end_date") or request.GET.get("end_date")) or start_date
@@ -140,16 +117,57 @@ def comparison_page(request: HttpRequest) -> HttpResponse:
     if supplier_id:
         supplier = get_object_or_404(supplier_model(comparison_type), id=supplier_id)
 
+    pending_store = pending_comparison_store(request)
+
     if request.method == "POST":
         action = request.POST.get("action")
         if action == "compare" and supplier:
-            return compare_only(request, type_slug, comparison_type, supplier, start_date, end_date)
+            outcome = compare_usecase().execute(
+                pending_store,
+                type_slug=type_slug,
+                comparison_type=comparison_type,
+                supplier=supplier,
+                start_date=start_date,
+                end_date=end_date,
+                file_name=request.FILES.get("receipt_file").name if request.FILES.get("receipt_file") else None,
+                file_content=request.FILES.get("receipt_file").read() if request.FILES.get("receipt_file") else None,
+                sort_key=request.POST.get("sort") or request.GET.get("sort") or "",
+                sort_direction=request.POST.get("dir") or request.GET.get("dir") or "asc",
+                results_panel_active=True,
+            )
+            _apply_flash_messages(request, outcome.messages)
+            if outcome.redirect_url:
+                return redirect(outcome.redirect_url)
+            assert outcome.page is not None
+            return render(
+                request,
+                "receipt_comparison/comparison.html",
+                _comparison_page_template_context(request, outcome.page),
+            )
         if action == "register" and supplier:
-            return register_pending_comparison(request, type_slug, comparison_type, supplier, start_date, end_date)
+            outcome = register_comparison_usecase().execute(
+                pending_store,
+                comparison_type=comparison_type,
+                supplier=supplier,
+                start_date=start_date,
+                end_date=end_date,
+                post_values=_post_values(request),
+                user_id=request.user.id,
+                sort_key=request.POST.get("sort"),
+                sort_direction=request.POST.get("dir"),
+            )
+            _apply_flash_messages(request, outcome.messages)
+            return redirect(outcome.redirect_url)
         if action == "update" and supplier:
-            update_existing_results(request, comparison_type)
+            update_results_usecase().execute(
+                comparison_type=comparison_type,
+                result_ids=request.POST.getlist("result_id"),
+                post_values=_post_values(request),
+                user_id=request.user.id,
+            )
             return redirect(
-                comparison_url(
+                comparison_url_path(
+                    reverse("receipt_comparison:comparison"),
                     comparison_type,
                     supplier.id,
                     start_date,
@@ -165,16 +183,16 @@ def comparison_page(request: HttpRequest) -> HttpResponse:
         and (request.GET.get("display") == "1" or request.GET.get("compared") == "1")
         and not request.GET.get("sort")
     )
-    sort_key, sort_direction = resolve_sort_params(
+    sort_key, sort_direction = page_usecase.resolve_sort(
         sort_key=request.GET.get("sort"),
         sort_direction=request.GET.get("dir"),
         reset_to_default=reset_sort,
     )
     if supplier and request.method == "GET" and request.GET.get("display") == "1":
-        clear_pending_comparison(request)
+        pending_store.clear()
 
-    rows, has_pending = rows_for_comparison_page(
-        request,
+    rows, has_pending = page_usecase.rows_for_page(
+        pending_store,
         comparison_type,
         supplier,
         start_date,
@@ -182,346 +200,101 @@ def comparison_page(request: HttpRequest) -> HttpResponse:
         sort_key,
         sort_direction,
     )
-    results_panel_active = is_results_panel_active(request, supplier, has_pending)
-    return render_comparison_page(
-        request,
-        type_slug,
-        comparison_type,
-        supplier,
-        start_date,
-        end_date,
-        rows,
+    results_panel_active = page_usecase.is_results_panel_active(
+        method=request.method,
+        get_display=request.GET.get("display"),
+        get_compared=request.GET.get("compared"),
+        post_action=request.POST.get("action"),
+        supplier=supplier,
+        has_pending=has_pending,
+    )
+    context = page_usecase.build_context(
+        type_slug=type_slug,
+        comparison_type=comparison_type,
+        supplier=supplier,
+        start_date=start_date,
+        end_date=end_date,
+        rows=rows,
         has_pending=has_pending,
         results_panel_active=results_panel_active,
         sort_key=sort_key,
         sort_direction=sort_direction,
+        display=1 if request.GET.get("display") == "1" else None,
+        compared=1 if request.GET.get("compared") == "1" else None,
     )
-
-
-def is_results_panel_active(
-    request: HttpRequest,
-    supplier: FinishedProductReceiptSupplier | SuppliedPartsReceiptSupplier | None,
-    has_pending: bool,
-) -> bool:
-    if supplier is None:
-        return False
-    if has_pending:
-        return True
-    if request.method == "GET":
-        return request.GET.get("display") == "1" or request.GET.get("compared") == "1"
-    return request.POST.get("action") == "compare"
-
-
-def rows_for_comparison_page(
-    request: HttpRequest,
-    comparison_type: str,
-    supplier: FinishedProductReceiptSupplier | SuppliedPartsReceiptSupplier | None,
-    start_date: date,
-    end_date: date,
-    sort_key: str,
-    sort_direction: str,
-) -> tuple[list[Any], bool]:
-    if supplier is None:
-        return [], False
-
-    pending = get_pending_comparison(request)
-    if pending_matches(pending, comparison_type, supplier.id, start_date, end_date):
-        rows = sort_display_rows(pending_display_rows(pending), sort_key, sort_direction)
-        return rows, True
-
-    saved_rows = existing_rows_for_display(comparison_type, supplier, start_date, end_date)
-    rows = sort_display_rows(saved_display_rows(saved_rows), sort_key, sort_direction)
-    return rows, False
+    return render(
+        request,
+        "receipt_comparison/comparison.html",
+        _comparison_page_template_context(request, context),
+    )
 
 
 @login_required
 def legacy_comparison_redirect(request: HttpRequest, comparison_slug: str) -> HttpResponse:
-    comparison_type_from_slug(comparison_slug)
-    return redirect(append_query(f"{reverse('receipt_comparison:comparison')}?type={comparison_slug}", request.GET.urlencode()))
+    slug_to_comparison_type(comparison_slug)
+    return redirect(
+        append_query(
+            f"{reverse('receipt_comparison:comparison')}?type={comparison_slug}",
+            request.GET.urlencode(),
+        )
+    )
 
 
 @login_required
 def legacy_export_redirect(request: HttpRequest, comparison_slug: str) -> HttpResponse:
-    comparison_type_from_slug(comparison_slug)
-    return redirect(append_query(f"{reverse('receipt_comparison:export')}?type={comparison_slug}", request.GET.urlencode()))
+    slug_to_comparison_type(comparison_slug)
+    return redirect(
+        append_query(
+            f"{reverse('receipt_comparison:export')}?type={comparison_slug}",
+            request.GET.urlencode(),
+        )
+    )
 
 
 @login_required
 def legacy_settings_redirect(request: HttpRequest, comparison_slug: str) -> HttpResponse:
-    comparison_type_from_slug(comparison_slug)
-    return redirect(append_query(f"{reverse('receipt_comparison:settings')}?type={comparison_slug}", request.GET.urlencode()))
-
-
-def compare_only(
-    request: HttpRequest,
-    type_slug: str,
-    comparison_type: str,
-    supplier: FinishedProductReceiptSupplier | SuppliedPartsReceiptSupplier,
-    start_date: date,
-    end_date: date,
-) -> HttpResponse:
-    upload = request.FILES.get("receipt_file")
-    if upload is None:
-        messages.error(request, "受領書データを選択してください。")
-        sort_key = normalize_sort_key(request.POST.get("sort") or request.GET.get("sort") or "")
-        sort_direction = normalize_sort_direction(request.POST.get("dir") or request.GET.get("dir") or "asc")
-        rows, has_pending = rows_for_comparison_page(
-            request, comparison_type, supplier, start_date, end_date, sort_key, sort_direction
-        )
-        return render_comparison_page(
-            request,
-            type_slug,
-            comparison_type,
-            supplier,
-            start_date,
-            end_date,
-            rows,
-            has_pending=has_pending,
-            results_panel_active=True,
-            sort_key=sort_key,
-            sort_direction=sort_direction,
-        )
-
-    try:
-        content = upload.read()
-        receiving_places = receiving_places_for_supplier(supplier)
-        match_codes = subcontractor_codes(supplier)
-        if comparison_type == ReceiptComparisonType.SUPPLIED_PARTS and not match_codes:
-            messages.warning(
-                request,
-                "子取引先が未登録です。設定画面で購買取引先コードを追加してください。",
-            )
-        parent_customer_code = supplier.customer_code if isinstance(supplier, SuppliedPartsReceiptSupplier) else ""
-        receipt_rows = parse_receipt_file(
-            comparison_type=comparison_type,
-            file_name=upload.name,
-            content=content,
-            subcontractor_codes=match_codes,
-            receiving_places=receiving_places,
-            exclusion=supplier.exclusion,
-            parent_customer_code=parent_customer_code,
-        )
-        mari_rows = fetch_mari_rows(
-            comparison_type=comparison_type,
-            supplier=supplier,
-            start_date=start_date,
-            end_date=end_date,
-            receiving_places=receiving_places,
-        )
-        rows = compare_receipts(
-            mari_rows,
-            receipt_rows,
-            existing_rows_for_comparison(comparison_type, supplier, start_date, end_date),
-            supplied_parts=comparison_type == ReceiptComparisonType.SUPPLIED_PARTS,
-        )
-        if receipt_rows and mari_rows and not any(row.supplier_item_cd for row in rows if row.mari_item_cd):
-            messages.warning(
-                request,
-                "受領ファイルは読み取れましたが、MARIデータと一致する行がありませんでした。品番・日付・数量を確認してください。",
-            )
-        elif not receipt_rows and content.strip():
-            messages.warning(
-                request,
-                "取込ファイルから比較対象行を読み取れませんでした。子取引先・品番・品番設定を確認してください。",
-            )
-        store_pending_comparison(
-            request,
-            comparison_type=comparison_type,
-            supplier_id=supplier.id,
-            start_date=start_date,
-            end_date=end_date,
-            file_name=upload.name,
-            file_content=content,
-            rows=rows,
-        )
-    except (ValueError, OracleNotConfiguredError, OracleQueryError) as exc:
-        messages.error(request, str(exc))
-        sort_key = normalize_sort_key(request.POST.get("sort") or "")
-        sort_direction = normalize_sort_direction(request.POST.get("dir") or "asc")
-        rows, has_pending = rows_for_comparison_page(
-            request, comparison_type, supplier, start_date, end_date, sort_key, sort_direction
-        )
-        return render_comparison_page(
-            request,
-            type_slug,
-            comparison_type,
-            supplier,
-            start_date,
-            end_date,
-            rows,
-            has_pending=has_pending,
-            results_panel_active=True,
-            sort_key=sort_key,
-            sort_direction=sort_direction,
-        )
-
+    slug_to_comparison_type(comparison_slug)
     return redirect(
-        comparison_url(
-            comparison_type,
-            supplier.id,
-            start_date,
-            end_date,
-            compared=1,
-            sort_key=default_sort_params()[0],
-            sort_direction=default_sort_params()[1],
+        append_query(
+            f"{reverse('receipt_comparison:settings')}?type={comparison_slug}",
+            request.GET.urlencode(),
         )
-    )
-
-
-def register_pending_comparison(
-    request: HttpRequest,
-    type_slug: str,
-    comparison_type: str,
-    supplier: FinishedProductReceiptSupplier | SuppliedPartsReceiptSupplier,
-    start_date: date,
-    end_date: date,
-) -> HttpResponse:
-    pending = get_pending_comparison(request)
-    if not pending_matches(pending, comparison_type, supplier.id, start_date, end_date):
-        messages.error(request, "登録する比較結果がありません。先に比較を実行してください。")
-        return redirect(comparison_url(comparison_type, supplier.id, start_date, end_date))
-
-    try:
-        content = base64.b64decode(str(pending.get("file_content_b64") or ""))
-        rows = pending_rows_for_register(request, pending)
-        file_import = save_upload_file(
-            comparison_type,
-            supplier,
-            str(pending.get("file_name") or "receipt.dat"),
-            content,
-            end_date,
-            request.user,
-        )
-        save_comparison_rows(comparison_type, supplier, file_import, rows, request.user)
-    except (ValueError, OracleNotConfiguredError, OracleQueryError) as exc:
-        messages.error(request, str(exc))
-        return redirect(
-            comparison_url(
-                comparison_type,
-                supplier.id,
-                start_date,
-                end_date,
-                compared=1,
-                sort_key=request.POST.get("sort"),
-                sort_direction=request.POST.get("dir"),
-            )
-        )
-
-    clear_pending_comparison(request)
-    return redirect(
-        comparison_url(
-            comparison_type,
-            supplier.id,
-            start_date,
-            end_date,
-            display=1,
-            sort_key=default_sort_params()[0],
-            sort_direction=default_sort_params()[1],
-        )
-    )
-
-
-def render_comparison_page(
-    request: HttpRequest,
-    type_slug: str,
-    comparison_type: str,
-    supplier: FinishedProductReceiptSupplier | SuppliedPartsReceiptSupplier | None,
-    start_date: date,
-    end_date: date,
-    rows: list[Any],
-    *,
-    has_pending: bool = False,
-    results_panel_active: bool = False,
-    sort_key: str = "receipt_flag",
-    sort_direction: str = "asc",
-) -> HttpResponse:
-    favorite_menu_key = receipt_comparison_menu_key(comparison_type)
-    return render(
-        request,
-        "receipt_comparison/comparison.html",
-        {
-            "type_slug": type_slug,
-            "comparison_type": comparison_type,
-            "comparison_type_page_label": comparison_type_page_label(comparison_type),
-            "favorite_menu_key": favorite_menu_key,
-            "favorite_menu_title": menu_title(favorite_menu_key),
-            "is_comparison_favorite": is_menu_favorited(request.user, favorite_menu_key),
-            "show_settings": is_portal_admin(request.user),
-            "suppliers": list_suppliers(comparison_type),
-            "supplier": supplier,
-            "start_date": start_date.isoformat(),
-            "end_date": end_date.isoformat(),
-            "rows": rows,
-            "has_pending": has_pending,
-            "results_panel_active": results_panel_active,
-            "receipt_file_accept": ".csv" if is_finished_product(comparison_type) else ".txt",
-            "flag_choices": ReceiptFlag.choices,
-            "show_cancel_qty": is_finished_product(comparison_type),
-            "show_supplier_name": not is_finished_product(comparison_type),
-            "sort_key": normalize_sort_key(sort_key),
-            "sort_direction": normalize_sort_direction(sort_direction),
-            "sort_headers": comparison_sort_links(
-                comparison_type,
-                supplier.id if supplier else None,
-                start_date,
-                end_date,
-                sort_key,
-                sort_direction,
-            ),
-            "comparison_query": comparison_query(
-                comparison_type,
-                supplier.id if supplier else None,
-                start_date,
-                end_date,
-            ),
-        },
     )
 
 
 @login_required
 def export_csv(request: HttpRequest) -> HttpResponse:
-    type_slug = comparison_type_slug_from_request(request)
+    type_slug = _comparison_type_slug_from_request(request)
     if type_slug is None:
         raise Http404
-    comparison_type = comparison_type_from_slug(type_slug)
+    comparison_type = slug_to_comparison_type(type_slug)
     supplier = get_object_or_404(supplier_model(comparison_type), id=request.GET.get("supplier_id"))
     start_date = parse_date(request.GET.get("start_date")) or date.today()
     end_date = parse_date(request.GET.get("end_date")) or start_date
-    sort_key = normalize_sort_key(request.GET.get("sort") or "")
-    sort_direction = normalize_sort_direction(request.GET.get("dir") or "asc")
-    rows, _has_pending = rows_for_comparison_page(
-        request,
-        comparison_type,
-        supplier,
-        start_date,
-        end_date,
-        sort_key,
-        sort_direction,
+    page_usecase = comparison_page_usecase()
+    sort_key, sort_direction = page_usecase.resolve_sort(
+        sort_key=request.GET.get("sort"),
+        sort_direction=request.GET.get("dir"),
+        reset_to_default=False,
     )
-
+    outcome = export_csv_usecase().execute(
+        pending_comparison_store(request),
+        comparison_type=comparison_type,
+        supplier=supplier,
+        start_date=start_date,
+        end_date=end_date,
+        sort_key=sort_key,
+        sort_direction=sort_direction,
+    )
     response = HttpResponse(content_type="text/csv; charset=cp932")
     response["Content-Disposition"] = content_disposition_header(
         as_attachment=True,
-        filename=comparison_export_filename(comparison_type),
+        filename=outcome.filename,
     )
     writer = csv.writer(response)
-    writer.writerow(RESULT_COLUMNS)
-    for row in rows:
-        writer.writerow(
-            [
-                row.flag_label,
-                row.mari_item_cd,
-                row.mari_date,
-                row.mari_qty,
-                row.delivery_place,
-                row.supplier_item_cd,
-                row.supplier_delivery_month_day,
-                row.supplier_qty,
-                row.supplier_cancel_qty,
-                row.supplier_name,
-                row.remarks,
-            ]
-        )
+    writer.writerow(outcome.columns)
+    for row in outcome.rows:
+        writer.writerow(row)
     return response
 
 
@@ -530,468 +303,40 @@ def export_csv(request: HttpRequest) -> HttpResponse:
 def settings_page(request: HttpRequest) -> HttpResponse:
     if not is_portal_admin(request.user):
         return HttpResponse("権限がありません。", status=403)
-    type_slug = comparison_type_slug_from_request(request)
+    type_slug = _comparison_type_slug_from_request(request)
     if type_slug is None:
         return redirect(f"{reverse('receipt_comparison:settings')}?type=finished-product")
-    comparison_type = comparison_type_from_slug(type_slug)
+    comparison_type = slug_to_comparison_type(type_slug)
     if request.method == "POST":
-        action = request.POST.get("action")
-        handle_settings_post(request, comparison_type)
-        supplier_id = request.POST.get("supplier_id")
-        if action == "delete_supplier":
-            supplier_id = None
-        return redirect(settings_redirect_url(type_slug, supplier_id))
+        outcome = settings_post_usecase().execute(
+            type_slug=type_slug,
+            comparison_type=comparison_type,
+            action=request.POST.get("action"),
+            post_data=_post_values(request),
+            user=request.user,
+        )
+        _apply_flash_messages(request, outcome.messages)
+        return redirect(outcome.redirect_url)
 
-    customer_choices, choice_error = receipt_customer_choices(comparison_type)
-    vendor_choices: list[dict[str, str]] = []
-    vendor_choice_error = ""
-    if comparison_type == ReceiptComparisonType.SUPPLIED_PARTS:
-        vendor_choices, vendor_choice_error = receipt_vendor_choices()
-    suppliers = list(list_suppliers_for_settings(comparison_type))
-    supplier_rows = [{"supplier": supplier} for supplier in suppliers]
-    open_supplier_id = (request.GET.get("supplier_id") or "").strip()
-    combined_choice_error = " / ".join(part for part in (choice_error, vendor_choice_error) if part)
+    context = settings_page_usecase().execute(
+        type_slug=type_slug,
+        comparison_type=comparison_type,
+        open_supplier_id=(request.GET.get("supplier_id") or "").strip(),
+    )
     return render(
         request,
         "receipt_comparison/settings.html",
         {
-            "type_slug": type_slug,
-            "comparison_type": comparison_type,
-            "comparison_type_page_label": comparison_type_page_label(comparison_type),
-            "customer_choices": customer_choices,
-            "choice_error": combined_choice_error,
-            "vendor_choices": vendor_choices,
-            "suppliers": suppliers,
-            "supplier_rows": supplier_rows,
-            "open_supplier_id": open_supplier_id,
-            "settings_target_label": settings_target_label(comparison_type),
-            "settings_exclusion_label": settings_exclusion_label(comparison_type),
+            "type_slug": context.type_slug,
+            "comparison_type": context.comparison_type,
+            "comparison_type_page_label": context.comparison_type_page_label,
+            "customer_choices": context.customer_choices,
+            "choice_error": context.choice_error,
+            "vendor_choices": context.vendor_choices,
+            "suppliers": context.suppliers,
+            "supplier_rows": context.supplier_rows,
+            "open_supplier_id": context.open_supplier_id,
+            "settings_target_label": context.settings_target_label,
+            "settings_exclusion_label": context.settings_exclusion_label,
         },
     )
-
-
-def settings_redirect_url(type_slug: str, supplier_id: object = None) -> str:
-    url = f"{reverse('receipt_comparison:settings')}?type={type_slug}"
-    if supplier_id:
-        url += f"&supplier_id={supplier_id}"
-    return url
-
-
-def handle_settings_post(request: HttpRequest, comparison_type: str) -> None:
-    action = request.POST.get("action")
-    if is_finished_product(comparison_type):
-        handle_finished_product_settings_post(request, action)
-        return
-    handle_supplied_parts_settings_post(request, action)
-
-
-def handle_finished_product_settings_post(request: HttpRequest, action: str | None) -> None:
-    if action == "add_supplier":
-        customer_code = (request.POST.get("customer_code") or "").strip()
-        if not is_fixed_digit_code(customer_code, 3):
-            messages.error(request, "得意先は3桁で選択してください。")
-            return
-        direct_delivery_customer_code = (request.POST.get("direct_delivery_customer_code") or "").strip()
-        FinishedProductReceiptSupplier.objects.update_or_create(
-            customer_code=customer_code,
-            defaults={
-                "name": customer_name_for_code(customer_code, comparison_type=ReceiptComparisonType.FINISHED_PRODUCT),
-                "direct_delivery_customer_code": direct_delivery_customer_code,
-                "exclusion": request.POST.get("exclusion") == "on",
-            },
-        )
-        messages.success(request, "得意先を保存しました。")
-        return
-
-    supplier = get_object_or_404(FinishedProductReceiptSupplier, id=request.POST.get("supplier_id"))
-    if action == "update_supplier":
-        posted_customer_code = (request.POST.get("customer_code") or "").strip()
-        if posted_customer_code and posted_customer_code != supplier.customer_code:
-            messages.error(request, "得意先コードは編集できません。変更する場合は削除してから再度追加してください。")
-            return
-        supplier.direct_delivery_customer_code = (request.POST.get("direct_delivery_customer_code") or "").strip()
-        supplier.exclusion = request.POST.get("exclusion") == "on"
-        supplier.save(
-            update_fields=[
-                "direct_delivery_customer_code",
-                "exclusion",
-                "updated_at",
-            ]
-        )
-        messages.success(request, "設定を更新しました。")
-    elif action in {"add_receiving", "delete_receiving", "delete_supplier"}:
-        handle_supplier_child_settings_post(request, action, supplier, ReceiptComparisonType.FINISHED_PRODUCT)
-
-
-def handle_supplied_parts_settings_post(request: HttpRequest, action: str | None) -> None:
-    digit_length = customer_digit_length(ReceiptComparisonType.SUPPLIED_PARTS)
-    if action == "add_supplier":
-        customer_code = (request.POST.get("customer_code") or "").strip()
-        if not is_fixed_digit_code(customer_code, digit_length):
-            messages.error(request, "得意先は3桁で選択してください。")
-            return
-        SuppliedPartsReceiptSupplier.objects.update_or_create(
-            customer_code=customer_code,
-            defaults={
-                "name": customer_name_for_code(customer_code, comparison_type=ReceiptComparisonType.SUPPLIED_PARTS),
-                "exclusion": request.POST.get("exclusion") == "on",
-            },
-        )
-        messages.success(request, "得意先を保存しました。子取引先（購買取引先コード）を登録してください。")
-        return
-
-    supplier = get_object_or_404(SuppliedPartsReceiptSupplier, id=request.POST.get("supplier_id"))
-    if action == "update_supplier":
-        posted_customer_code = (request.POST.get("customer_code") or "").strip()
-        if posted_customer_code and posted_customer_code != supplier.customer_code:
-            messages.error(request, "得意先コードは編集できません。変更する場合は削除してから再度追加してください。")
-            return
-        supplier.exclusion = request.POST.get("exclusion") == "on"
-        supplier.save(update_fields=["exclusion", "updated_at"])
-        messages.success(request, "設定を更新しました。")
-    elif action in {"add_subcontractor", "delete_subcontractor"}:
-        handle_supplied_parts_subcontractor_post(request, action, supplier)
-    elif action in {"add_receiving", "delete_receiving", "delete_supplier"}:
-        handle_supplier_child_settings_post(request, action, supplier, ReceiptComparisonType.SUPPLIED_PARTS)
-
-
-def handle_supplied_parts_subcontractor_post(
-    request: HttpRequest,
-    action: str,
-    supplier: SuppliedPartsReceiptSupplier,
-) -> None:
-    if action == "add_subcontractor":
-        vendor_code = (request.POST.get("vendor_code") or "").strip()
-        if not is_fixed_digit_code(vendor_code, VENDOR_CODE_DIGIT_LENGTH):
-            messages.error(request, "子取引先は4桁の購買取引先コードで選択してください。")
-            return
-        vendor_name = lookup_receipt_vendor_name(vendor_code)
-        _, created = SuppliedPartsSubcontractor.objects.get_or_create(
-            supplier=supplier,
-            vendor_code=vendor_code,
-            defaults={"vendor_name": vendor_name},
-        )
-        if created:
-            messages.success(request, "子取引先を追加しました。")
-        else:
-            messages.info(request, "同じ購買取引先コードは既に登録されています。")
-        return
-
-    subcontractor = get_object_or_404(
-        SuppliedPartsSubcontractor,
-        id=request.POST.get("subcontractor_id"),
-        supplier=supplier,
-    )
-    subcontractor.delete()
-    messages.success(request, "子取引先を削除しました。")
-
-
-def handle_supplier_child_settings_post(
-    request: HttpRequest,
-    action: str,
-    supplier: FinishedProductReceiptSupplier | SuppliedPartsReceiptSupplier,
-    comparison_type: str,
-) -> None:
-    if action == "add_receiving":
-        save_receiving_setting(request, supplier, comparison_type)
-    elif action == "delete_receiving":
-        delete_receiving_setting(request, supplier, comparison_type)
-    elif action == "delete_supplier":
-        delete_receipt_supplier(request, comparison_type, supplier)
-
-
-def save_receiving_setting(
-    request: HttpRequest,
-    supplier: FinishedProductReceiptSupplier | SuppliedPartsReceiptSupplier,
-    comparison_type: str,
-) -> None:
-    delivery_place = (request.POST.get("delivery_place") or "").strip()
-    if not delivery_place:
-        return
-    receiving_setting_model(comparison_type).objects.update_or_create(
-        supplier=supplier,
-        delivery_place=delivery_place,
-        defaults={
-            "updated_by": request.user,
-            "created_by": request.user,
-        },
-    )
-    messages.success(request, f"{settings_target_label(comparison_type)}を保存しました。")
-
-
-def delete_receiving_setting(
-    request: HttpRequest,
-    supplier: FinishedProductReceiptSupplier | SuppliedPartsReceiptSupplier,
-    comparison_type: str,
-) -> None:
-    setting = get_object_or_404(
-        receiving_setting_model(comparison_type),
-        id=request.POST.get("setting_id"),
-        supplier=supplier,
-    )
-    setting.delete()
-    messages.success(request, f"{settings_target_label(comparison_type)}を削除しました。")
-
-
-def delete_receipt_supplier(
-    request: HttpRequest,
-    comparison_type: str,
-    supplier: FinishedProductReceiptSupplier | SuppliedPartsReceiptSupplier,
-) -> None:
-    with transaction.atomic():
-        comparison_result_model(comparison_type).objects.filter(supplier=supplier).delete()
-        file_import_model(comparison_type).objects.filter(supplier=supplier).delete()
-        supplier.delete()
-    messages.success(request, "得意先を削除しました。")
-
-
-def receipt_customer_choices(comparison_type: str) -> tuple[list[dict[str, str]], str]:
-    errors = []
-    digit_length = customer_digit_length(comparison_type)
-    try:
-        customers = [
-            row
-            for row in list_receipt_customers(digit_length=digit_length)
-            if is_fixed_digit_code(row["custCode"], digit_length)
-        ]
-    except (OracleNotConfiguredError, OracleQueryError) as exc:
-        customers = []
-        errors.append(str(exc))
-    return customers, " / ".join(errors)
-
-
-def receipt_vendor_choices() -> tuple[list[dict[str, str]], str]:
-    errors: list[str] = []
-    try:
-        vendors = [
-            row
-            for row in list_receipt_vendors()
-            if is_fixed_digit_code(row.get("vendorCode"), VENDOR_CODE_DIGIT_LENGTH)
-        ]
-    except (OracleNotConfiguredError, OracleQueryError) as exc:
-        vendors = []
-        errors.append(str(exc))
-    return vendors, " / ".join(errors)
-
-
-def is_fixed_digit_code(value: object, length: int) -> bool:
-    text = str(value or "").strip()
-    return len(text) == length and text.isdigit()
-
-
-def customer_name_for_code(customer_code: str, *, comparison_type: str | None = None, fallback: object = "") -> str:
-    if not customer_code:
-        return str(fallback or "").strip()
-    try:
-        name = lookup_receipt_customer_name(customer_code)
-    except (OracleNotConfiguredError, OracleQueryError):
-        name = None
-    if name:
-        return name
-    return str(fallback or "").strip() or customer_code
-
-
-def parse_date(value: object) -> date | None:
-    if not value:
-        return None
-    try:
-        return datetime.strptime(str(value), "%Y-%m-%d").date()
-    except ValueError:
-        return None
-
-
-def comparison_url(
-    comparison_type: str,
-    supplier_id: int,
-    start_date: date,
-    end_date: date,
-    *,
-    display: int | None = None,
-    compared: int | None = None,
-    sort_key: str | None = None,
-    sort_direction: str | None = None,
-) -> str:
-    type_slug = COMPARISON_SLUG_BY_TYPE[comparison_type]
-    query = comparison_query(
-        comparison_type,
-        supplier_id,
-        start_date,
-        end_date,
-        display=display,
-        compared=compared,
-        sort_key=sort_key,
-        sort_direction=sort_direction,
-    )
-    return f"{reverse('receipt_comparison:comparison')}?{query}"
-
-
-def comparison_query(
-    comparison_type: str,
-    supplier_id: int | None,
-    start_date: date,
-    end_date: date,
-    *,
-    display: int | None = None,
-    compared: int | None = None,
-    sort_key: str | None = None,
-    sort_direction: str | None = None,
-) -> str:
-    type_slug = COMPARISON_SLUG_BY_TYPE[comparison_type]
-    parts = [
-        f"type={type_slug}",
-        f"start_date={start_date.isoformat()}",
-        f"end_date={end_date.isoformat()}",
-    ]
-    if supplier_id:
-        parts.append(f"supplier_id={supplier_id}")
-    if display == 1:
-        parts.append("display=1")
-    if compared == 1:
-        parts.append("compared=1")
-    active_sort_key = normalize_sort_key(sort_key or "")
-    active_sort_direction = normalize_sort_direction(sort_direction or "asc")
-    parts.append(f"sort={active_sort_key}")
-    parts.append(f"dir={active_sort_direction}")
-    return "&".join(parts)
-
-
-def comparison_sort_links(
-    comparison_type: str,
-    supplier_id: int | None,
-    start_date: date,
-    end_date: date,
-    sort_key: str,
-    sort_direction: str,
-    *,
-    display: int | None = None,
-    compared: int | None = None,
-) -> list[dict[str, object]]:
-    headers = comparison_sort_headers(sort_key, sort_direction)
-    for header in headers:
-        header["href"] = (
-            f"{reverse('receipt_comparison:comparison')}?"
-            f"{comparison_query(comparison_type, supplier_id, start_date, end_date, display=display, compared=compared, sort_key=header['key'], sort_direction=header['sort_direction'])}"
-        )
-    return headers
-
-
-def receiving_places_for_supplier(supplier: FinishedProductReceiptSupplier | SuppliedPartsReceiptSupplier) -> list[str]:
-    return list(supplier.receiving_settings.values_list("delivery_place", flat=True))
-
-
-def subcontractor_codes(supplier: FinishedProductReceiptSupplier | SuppliedPartsReceiptSupplier) -> list[str]:
-    if isinstance(supplier, FinishedProductReceiptSupplier):
-        return []
-    return vendor_match_codes_for_supplier(supplier)
-
-
-def existing_rows_for_display(
-    comparison_type: str,
-    supplier: FinishedProductReceiptSupplier | SuppliedPartsReceiptSupplier | None,
-    start_date: date,
-    end_date: date,
-) -> list[Any]:
-    if supplier is None:
-        return []
-    result_model = comparison_result_model(comparison_type)
-    in_range = result_model.objects.filter(
-        supplier=supplier,
-        file_import__receipt_date__range=(start_date, end_date),
-    )
-    carry_over = result_model.objects.filter(
-        supplier=supplier,
-        file_import__receipt_date__lt=start_date,
-    ).exclude(receipt_flag=ReceiptFlag.OK)
-    return list((in_range | carry_over).select_related("file_import").order_by("receipt_flag", "mari_item_cd", "supplier_item_cd"))
-
-
-def existing_rows_for_comparison(
-    comparison_type: str,
-    supplier: FinishedProductReceiptSupplier | SuppliedPartsReceiptSupplier,
-    start_date: date,
-    end_date: date,
-) -> list[ComparisonRow]:
-    return [
-        ComparisonRow(
-            existing_id=row.id,
-            receipt_flag=row.receipt_flag,
-            mari_item_cd=row.mari_item_cd,
-            mari_date=row.mari_date,
-            mari_qty=row.mari_qty,
-            delivery_place=row.delivery_place,
-            supplier_item_cd=row.supplier_item_cd,
-            supplier_delivery_month_day=row.supplier_delivery_month_day,
-            supplier_qty=row.supplier_qty,
-            supplier_cancel_qty=row.supplier_cancel_qty,
-            supplier_name=row.supplier_name,
-            remarks=row.remarks,
-        )
-        for row in existing_rows_for_display(comparison_type, supplier, start_date, end_date)
-    ]
-
-
-def save_upload_file(
-    comparison_type: str,
-    supplier: FinishedProductReceiptSupplier | SuppliedPartsReceiptSupplier,
-    original_name: str,
-    content: bytes,
-    receipt_date: date,
-    user: object,
-) -> Any:
-    storage = FileSystemStorage(location=Path(settings.BASE_DIR) / "var" / "receipt_uploads")
-    stored_name = f"{timezone.localtime():%Y%m%d%H%M%S}_{comparison_type}_{supplier.id}_{Path(original_name).name}"
-    storage.save(stored_name, content=io_content(content))
-    return file_import_model(comparison_type).objects.create(
-        supplier=supplier,
-        original_file_name=original_name,
-        stored_file_name=stored_name,
-        receipt_date=receipt_date,
-        imported_by=user,
-    )
-
-
-def io_content(content: bytes):
-    from django.core.files.base import ContentFile
-
-    return ContentFile(content)
-
-
-def save_comparison_rows(
-    comparison_type: str,
-    supplier: FinishedProductReceiptSupplier | SuppliedPartsReceiptSupplier,
-    file_import: Any,
-    rows: list[ComparisonRow],
-    user: object,
-) -> None:
-    result_model = comparison_result_model(comparison_type)
-    for row in rows:
-        values = {
-            "supplier": supplier,
-            "file_import": file_import,
-            "receipt_flag": row.receipt_flag,
-            "mari_item_cd": row.mari_item_cd,
-            "mari_date": row.mari_date,
-            "mari_qty": row.mari_qty,
-            "delivery_place": row.delivery_place,
-            "supplier_item_cd": row.supplier_item_cd,
-            "supplier_delivery_month_day": row.supplier_delivery_month_day,
-            "supplier_qty": row.supplier_qty,
-            "supplier_cancel_qty": row.supplier_cancel_qty,
-            "supplier_name": row.supplier_name,
-            "remarks": row.remarks,
-            "updated_by": user,
-        }
-        if row.existing_id:
-            result_model.objects.filter(id=row.existing_id, supplier=supplier).update(**values)
-        else:
-            result_model.objects.create(**values)
-
-
-def update_existing_results(request: HttpRequest, comparison_type: str) -> None:
-    result_model = comparison_result_model(comparison_type)
-    for result_id in request.POST.getlist("result_id"):
-        result = result_model.objects.get(id=result_id)
-        result.receipt_flag = int(request.POST.get(f"receipt_flag_{result_id}", result.receipt_flag))
-        result.remarks = request.POST.get(f"remarks_{result_id}", "")
-        result.updated_by = request.user
-        result.save(update_fields=["receipt_flag", "remarks", "updated_by", "updated_at"])

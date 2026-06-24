@@ -33,7 +33,7 @@ from apps.gonenkukumi.infrastructure.oracle.client import (  # noqa: E402
     oracle_connection,
     use_mock,
 )
-from apps.inventory_order_alert.application.list_summary import ListQuery, build_list_rows  # noqa: E402
+from apps.inventory_order_alert.composition import ListQuery, build_list_rows  # noqa: E402
 from apps.inventory_order_alert.domain.dates import parse_optional_ymd  # noqa: E402
 from apps.inventory_order_alert.domain.export_csv import render_export_csv  # noqa: E402
 from apps.inventory_order_alert.domain.slims_stock import read_csv_text  # noqa: E402

@@ -1,4 +1,4 @@
-﻿from __future__ import annotations
+from __future__ import annotations
 
 import json
 
@@ -211,9 +211,9 @@ def user_management_column_headers(sort_key: str, sort_direction: str) -> list[d
 def dashboard(request: HttpRequest) -> HttpResponse:
     inventory_order_alert_banner = None
     if can_access_menu_item(request.user, "inventory-order-alert"):
-        from apps.inventory_order_alert.application.portal_dashboard import load_dashboard_banner_context
+        from apps.inventory_order_alert.composition import portal_dashboard_usecase
 
-        inventory_order_alert_banner = load_dashboard_banner_context()
+        inventory_order_alert_banner = portal_dashboard_usecase().execute()
 
     return render(
         request,

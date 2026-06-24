@@ -4,10 +4,7 @@ from pathlib import Path
 
 from django.core.management.base import BaseCommand, CommandError
 
-from apps.inventory_order_alert.application.stock_storage import (
-    decode_slims_csv_bytes,
-    import_slims_csv_text,
-)
+from apps.inventory_order_alert.composition import import_stock_usecase
 
 
 class Command(BaseCommand):
@@ -27,8 +24,7 @@ class Command(BaseCommand):
             raise CommandError(f"CSV ファイルが見つかりません: {csv_path}")
 
         file_name = str(options["file_name"] or csv_path.name)
-        text = decode_slims_csv_bytes(csv_path.read_bytes())
-        info = import_slims_csv_text(text, user=None, file_name=file_name)
+        info = import_stock_usecase().execute(csv_path.read_bytes(), file_name=file_name)
 
         if info.aggregation_error:
             raise CommandError(f"集計に失敗しました: {info.aggregation_error}")

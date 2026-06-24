@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from apps.inventory_order_alert.views import _rows_for_template
+from apps.inventory_order_alert.usecase.usecase_list_page import _rows_for_template
 
 
 def test_rows_for_template_sets_alert_row_class():

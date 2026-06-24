@@ -8,7 +8,7 @@ import pytest
 from django.contrib.auth import get_user_model
 from django.contrib.auth.models import Group
 
-from apps.inventory_order_alert.application.summary_storage import store_summary_snapshot
+from apps.inventory_order_alert.infrastructure.persistence.summary_snapshot_repository import store_summary_snapshot
 from apps.inventory_order_alert.models import SlimsStockImport
 from apps.portal.models import PortalMenuGroupAccess
 
@@ -68,7 +68,7 @@ def test_list_page_requires_login(client):
 
 
 @pytest.mark.django_db
-@patch("apps.inventory_order_alert.application.summary_storage.run_summary_aggregation")
+@patch("apps.inventory_order_alert.infrastructure.persistence.slims_stock_repository.run_summary_aggregation")
 def test_list_page_post_imports_slims_csv(mock_aggregate, client, production_user):
     mock_aggregate.return_value = ("", 0)
     fixture = Path("tests/fixtures/slims_stock_sample.csv")
@@ -291,9 +291,9 @@ def test_api_save_alert_settings(client, production_user):
     assert response.status_code == 200
     assert response.json()["ok"] is True
 
-    from apps.inventory_order_alert.application.settings_service import get_app_settings
+    from apps.inventory_order_alert.infrastructure.persistence.settings_repository import load_app_settings
 
-    settings = get_app_settings()
+    settings = load_app_settings()
     assert settings.warning_shipment_months == 18
     assert settings.warning_incoming_months == 6
 
@@ -527,11 +527,11 @@ def test_export_csv_forbidden_without_production_access(client, db):
 
 
 @pytest.mark.django_db
-@patch("apps.inventory_order_alert.application.portal_dashboard.load_dashboard_banner_context")
-def test_dashboard_shows_inventory_order_alert_banner(mock_banner, client, production_user):
-    from apps.inventory_order_alert.application.portal_dashboard import DashboardBannerContext
+@patch("apps.inventory_order_alert.composition.portal_dashboard_usecase")
+def test_dashboard_shows_inventory_order_alert_banner(mock_usecase_factory, client, production_user):
+    from apps.inventory_order_alert.usecase.usecase_portal_dashboard import DashboardBannerContext
 
-    mock_banner.return_value = DashboardBannerContext(
+    mock_usecase_factory.return_value.execute.return_value = DashboardBannerContext(
         critical=1,
         warning_ship=1,
         warning_incoming=1,

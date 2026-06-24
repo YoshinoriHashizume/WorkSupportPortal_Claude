@@ -1,4 +1,4 @@
-﻿import json
+import json
 import re
 from pathlib import Path
 
@@ -7,7 +7,7 @@ from django.contrib.auth import get_user_model
 from django.contrib.auth.models import Group
 from django.utils import timezone
 
-from apps.gonenkukumi.infrastructure.oracle.client import OracleQueryError
+from apps.gonenkukumi.domain.errors import OracleQueryError
 from apps.gonenkukumi.models import GonenKukumiSearchHistory
 from apps.portal.models import PortalMenuGroupAccess, UserFavoriteMenu
 
@@ -109,7 +109,7 @@ def test_search_page_defaults_to_empty_and_current_month(client, user):
     assert "品目任意変換値" in html
     assert "設変値" not in html
     assert html.index("得意先品目") < html.index("品目任意変換値") < html.index("検索年月")
-    assert 'class="favorite-toggle gonen-title-favorite"' in html
+    assert 'class="favorite-toggle portal-title-favorite"' in html
     assert 'data-menu-key="five-year-nine"' in html
     assert "♡" in html
 
@@ -123,7 +123,7 @@ def test_search_page_shows_favorite_button_as_active(client, user):
 
     assert response.status_code == 200
     html = response.content.decode("utf-8")
-    assert 'class="favorite-toggle gonen-title-favorite is-favorite"' in html
+    assert 'class="favorite-toggle portal-title-favorite is-favorite"' in html
     assert "♥" in html
 
 
@@ -198,7 +198,7 @@ def test_search_api_hides_internal_naisak_not_found_code(client, user, monkeypat
     def raise_not_found(_params):
         raise OracleQueryError("NAISAK_NOT_FOUND")
 
-    monkeypatch.setattr("apps.gonenkukumi.views.run_gonenkukumi_oracle_search", raise_not_found)
+    monkeypatch.setattr("apps.gonenkukumi.infrastructure.oracle.client.run_gonenkukumi_oracle_search", raise_not_found)
     client.force_login(user)
     response = client.post(
         "/api/gonenkukumi/search",
@@ -258,7 +258,7 @@ def test_result_page_initially_shows_base_month_and_add_buttons(client, user, mo
         requested_months.append(params.year_month)
         return fake_monthly_result(params)
 
-    monkeypatch.setattr("apps.gonenkukumi.views.run_gonenkukumi_oracle_search", fake_search)
+    monkeypatch.setattr("apps.gonenkukumi.infrastructure.oracle.client.run_gonenkukumi_oracle_search", fake_search)
     client.force_login(user)
 
     response = client.get("/app/production/five-year-nine/result?custCode=101&custItem=ITEM-001&yearMonth=2026-05&optionChange=*")
@@ -282,7 +282,7 @@ def test_result_page_adds_requested_months_inside_each_block(client, user, monke
         requested_months.append(params.year_month)
         return fake_monthly_result(params)
 
-    monkeypatch.setattr("apps.gonenkukumi.views.run_gonenkukumi_oracle_search", fake_search)
+    monkeypatch.setattr("apps.gonenkukumi.infrastructure.oracle.client.run_gonenkukumi_oracle_search", fake_search)
     client.force_login(user)
 
     response = client.get(
@@ -306,7 +306,7 @@ def test_result_page_uses_named_adjacent_two_month_labels(client, user, monkeypa
     def fake_search(params):
         return fake_monthly_result(params)
 
-    monkeypatch.setattr("apps.gonenkukumi.views.run_gonenkukumi_oracle_search", fake_search)
+    monkeypatch.setattr("apps.gonenkukumi.infrastructure.oracle.client.run_gonenkukumi_oracle_search", fake_search)
     client.force_login(user)
 
     response = client.get(
@@ -335,7 +335,7 @@ def test_result_page_includes_balance_in_total_and_keeps_stock_out_of_day_one(cl
         ]
         return result
 
-    monkeypatch.setattr("apps.gonenkukumi.views.run_gonenkukumi_oracle_search", fake_search)
+    monkeypatch.setattr("apps.gonenkukumi.infrastructure.oracle.client.run_gonenkukumi_oracle_search", fake_search)
     client.force_login(user)
 
     response = client.get("/app/production/five-year-nine/result?custCode=101&custItem=ITEM-001&yearMonth=2026-05&optionChange=*")
@@ -375,7 +375,7 @@ def test_export_uses_requested_months(client, user, monkeypatch):
         requested_months.append(params.year_month)
         return fake_monthly_result(params)
 
-    monkeypatch.setattr("apps.gonenkukumi.views.run_gonenkukumi_oracle_search", fake_search)
+    monkeypatch.setattr("apps.gonenkukumi.infrastructure.oracle.client.run_gonenkukumi_oracle_search", fake_search)
     client.force_login(user)
 
     response = client.get(

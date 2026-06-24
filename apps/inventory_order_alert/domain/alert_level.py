@@ -105,3 +105,15 @@ def is_alert_escalated(previous_level: str, current_level: str) -> bool:
     previous_rank = alert_sort_rank(previous_level)
     current_rank = alert_sort_rank(current_level)
     return current_rank < previous_rank
+
+
+def lookup_alert_level_for_row(
+    rows: list[dict[str, object]],
+    *,
+    cust_code: str,
+    item_cd: str,
+) -> str:
+    for row in rows:
+        if str(row.get("cust_code") or "") == cust_code and str(row.get("item_cd") or "") == item_cd:
+            return normalize_alert_level(str(row.get("alert_level") or ""))
+    return ALERT_NONE
