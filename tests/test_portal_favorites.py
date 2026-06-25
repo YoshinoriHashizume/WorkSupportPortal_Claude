@@ -675,6 +675,10 @@ def test_sidebar_nav_scrolls_when_menu_overflows_viewport():
     assert "border-left" not in branch_panel_rule
     group_panel_rule = css.split(".sidebar-menu-group-panel {")[1].split("}")[0]
     assert "--sidebar-level1-gutter: 16px" in group_panel_rule
-    assert "padding: 2px 0 0 20px" in group_panel_rule
+    assert "padding: 1px 0 0 20px" in group_panel_rule
     assert ".sidebar-menu-branch > summary {\n  display: grid;\n  grid-template-columns: var(--sidebar-level1-gutter) minmax(0, 1fr);" in css
     assert "padding-left: calc(var(--sidebar-level1-gutter) + var(--sidebar-level1-gap))" in css.split(".sidebar-menu-group-panel > .sidebar-menu-item > a {")[1].split("}")[0]
+    group_summary_rule = css.split(".sidebar-menu-group > summary {")[1].split("}")[0]
+    assert "padding: 8px 10px 8px 12px" in group_summary_rule
+    menu_item_rule = css.split(".sidebar-menu-item a {")[1].split("}")[0]
+    assert "padding: 5px 10px" in menu_item_rule
