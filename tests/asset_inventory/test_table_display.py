@@ -1,0 +1,111 @@
+from __future__ import annotations
+
+from apps.asset_inventory.domain.list_query import build_list_page_query_string
+from apps.asset_inventory.domain.ports import ReconcileRow, RowTone, MatchStatus
+from apps.asset_inventory.domain.table_display import (
+    DEFAULT_SORT_SPECS,
+    PaginatedRows,
+    SortSpec,
+    paginate_rows,
+    parse_page_size,
+    parse_sort_specs,
+    sort_rows,
+    sort_spec_label,
+)
+
+
+def _row(asset_number: str, branch_number: str = "0000") -> ReconcileRow:
+    return ReconcileRow(
+        match_status=MatchStatus.MATCHED,
+        row_tone=RowTone.MATCH_CLEAN,
+        status_label="棚卸済み",
+        tone_label="一致",
+        asset_number=asset_number,
+        branch_number=branch_number,
+        site_name="",
+        manufacturer="",
+        model_name="",
+        serial_number="",
+        old_asset_number="",
+        usage_category="",
+        summary="",
+        plate_created="",
+        inventory_operator="",
+        inventory_datetime="",
+    )
+
+
+def test_TC_AIV_DOM_080_paginate_rows_range():
+    rows = tuple(_row(str(index)) for index in range(1, 6))
+    paginated = paginate_rows(rows, page=1, page_size=2)
+    assert paginated.total_count == 5
+    assert paginated.total_pages == 3
+    assert paginated.start_index == 1
+    assert paginated.end_index == 2
+    assert paginated.has_next is True
+    assert paginated.has_previous is False
+
+
+def test_TC_AIV_DOM_081_paginate_rows_last_page():
+    rows = tuple(_row(str(index)) for index in range(1, 6))
+    paginated = paginate_rows(rows, page=3, page_size=2)
+    assert paginated.start_index == 5
+    assert paginated.end_index == 5
+    assert paginated.has_next is False
+    assert paginated.has_previous is True
+
+
+def test_TC_AIV_DOM_082_parse_page_size():
+    options = (20, 50, 100)
+    assert parse_page_size("50", options=options, default=20) == 50
+    assert parse_page_size("999", options=options, default=20) == 20
+    assert parse_page_size("bad", options=options, default=20) == 20
+
+
+def test_TC_AIV_DOM_083_build_list_page_query_string():
+    query = build_list_page_query_string(
+        management_id="1",
+        status="matched",
+        site_filter="宮崎工場",
+        plate_filter="1",
+        sort_specs=DEFAULT_SORT_SPECS,
+        page=2,
+        page_size=50,
+    )
+    assert "managementId=1" in query
+    assert "status=matched" in query
+    assert "plate=1" in query
+    assert query.count("site=") == 1
+    assert "site=%E5%AE%AE%E5%B4%8E%E5%B7%A5%E5%A0%B4" in query
+    assert "page=2" in query
+    assert "page_size=50" in query
+    assert "sort=asset_number%2Cbranch_number" in query
+    assert "dir=asc%2Casc" in query
+
+
+def test_TC_AIV_DOM_086_parse_sort_specs_default():
+    specs = parse_sort_specs({})
+    assert specs == DEFAULT_SORT_SPECS
+
+
+def test_TC_AIV_DOM_087_parse_sort_specs_multi():
+    specs = parse_sort_specs({"sort": "site_name,asset_number", "dir": "desc,asc"})
+    assert specs == (
+        SortSpec("site_name", "desc"),
+        SortSpec("asset_number", "asc"),
+    )
+
+
+def test_TC_AIV_DOM_088_sort_rows_multi_column():
+    rows = (
+        _row("2", "0001"),
+        _row("1", "0002"),
+        _row("1", "0001"),
+    )
+    sorted_rows = sort_rows(rows, (SortSpec("asset_number", "asc"), SortSpec("branch_number", "asc")))
+    assert [row.asset_number for row in sorted_rows] == ["1", "1", "2"]
+    assert [row.branch_number for row in sorted_rows] == ["0001", "0002", "0001"]
+
+
+def test_TC_AIV_DOM_089_sort_spec_label():
+    assert sort_spec_label(SortSpec("asset_number", "asc")) == "資産番号（昇順）"

@@ -100,4 +100,20 @@ class AccessApprovalMiddleware:
                 status=403,
             )
 
+        if request.path.startswith("/app/general-affairs/asset-inventory") and not can_access_menu_item(
+            request.user, "asset-inventory"
+        ):
+            return HttpResponse("権限がありません。", status=403)
+
+        if request.path.startswith("/api/asset-inventory/") and not can_access_menu_item(
+            request.user, "asset-inventory"
+        ):
+            return JsonResponse(
+                {
+                    "success": False,
+                    "error": {"message": "権限がありません。"},
+                },
+                status=403,
+            )
+
         return None

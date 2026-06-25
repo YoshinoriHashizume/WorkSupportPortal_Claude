@@ -64,6 +64,12 @@ MENU_ITEMS = [
         group_key="production",
     ),
     PortalMenuItem(
+        key="asset-inventory",
+        title="資産棚卸結果",
+        href="/app/general-affairs/asset-inventory",
+        group_key="general-affairs",
+    ),
+    PortalMenuItem(
         key="notices",
         title="お知らせ",
         href="/app/management/notices",

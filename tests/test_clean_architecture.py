@@ -12,6 +12,7 @@ BUSINESS_APPS = (
     "gonenkukumi",
     "receipt_comparison",
     "inventory_order_alert",
+    "asset_inventory",
     "portal",
     "identity",
 )
@@ -64,7 +65,7 @@ def test_usecase_does_not_import_infrastructure(app_name: str):
         assert not any(module.startswith(forbidden) for module in imports), path
 
 
-@pytest.mark.parametrize("app_name", ("gonenkukumi", "receipt_comparison", "inventory_order_alert", "portal", "identity"))
+@pytest.mark.parametrize("app_name", ("gonenkukumi", "receipt_comparison", "inventory_order_alert", "asset_inventory", "portal", "identity"))
 def test_domain_does_not_import_django_or_outer_layers(app_name: str):
     forbidden_prefixes = (
         "django",
@@ -161,3 +162,16 @@ def test_receipt_comparison_has_handlers_and_composition():
     assert not (ROOT / "apps/receipt_comparison/services").exists()
     assert not (ROOT / "apps/receipt_comparison/infrastructure/usecase_comparison.py").exists()
     assert (ROOT / "apps/receipt_comparison/composition.py").is_file()
+
+
+def test_asset_inventory_usecase_only_has_usecase_files():
+    app_dir = ROOT / "apps/asset_inventory/usecase"
+    for path in app_dir.glob("*.py"):
+        if path.name == "__init__.py":
+            continue
+        assert path.name.startswith("usecase_"), path
+
+
+def test_asset_inventory_has_domain_ports():
+    assert (ROOT / "apps/asset_inventory/domain/ports.py").is_file()
+    assert (ROOT / "apps/asset_inventory/composition.py").is_file()

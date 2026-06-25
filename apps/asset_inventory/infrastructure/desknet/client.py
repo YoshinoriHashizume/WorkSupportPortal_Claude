@@ -1,0 +1,142 @@
+from __future__ import annotations
+
+import json
+import urllib.error
+import urllib.parse
+import urllib.request
+from typing import Any
+
+from apps.asset_inventory.domain.ports import Record
+
+
+from apps.asset_inventory.domain.errors import DesknetAccessKeyMissingError, DesknetApiError
+
+
+def appsr_api_url(login_url: str) -> str:
+    return login_url.replace("dneo.cgi", "appsr.cgi").replace("dneor.cgi", "appsr.cgi")
+
+
+def record_field_value(field_payload: Any) -> str:
+    if field_payload is None:
+        return ""
+    if isinstance(field_payload, dict):
+        return str(field_payload.get("val") or "").strip()
+    return str(field_payload).strip()
+
+
+def encode_fields_parameter(fields: tuple[str, ...] | None) -> str | None:
+    if not fields:
+        return None
+    return json.dumps([{"field_name": name} for name in fields], ensure_ascii=False)
+
+
+def extract_api_error_message(payload: dict[str, Any]) -> str:
+    for key in ("errormessage", "message", "error", "hint", "detail"):
+        value = payload.get(key)
+        if value:
+            return str(value)
+    return "desknet's API エラー"
+
+
+def is_no_data_response(payload: dict[str, Any]) -> bool:
+    errorno = payload.get("errorno")
+    if errorno in (-110,):
+        return True
+    message = extract_api_error_message(payload)
+    return "該当データが存在しません" in message
+
+
+def normalize_list_response(payload: dict[str, Any]) -> list[Record]:
+    if str(payload.get("status") or "").lower() != "ok":
+        if is_no_data_response(payload):
+            return []
+        raise DesknetApiError(extract_api_error_message(payload))
+
+    list_block = payload.get("list") or {}
+    items = list_block.get("item") or []
+    if isinstance(items, dict):
+        items = [items]
+
+    records: list[Record] = []
+    for item in items:
+        if not isinstance(item, dict):
+            continue
+        record: Record = {}
+        for field_name, field_value in item.items():
+            record[str(field_name)] = record_field_value(field_value)
+        records.append(record)
+    return records
+
+
+def fetch_list_data_page(
+    *,
+    login_url: str,
+    access_key: str,
+    app_id: str,
+    offset: int,
+    limit: int,
+    fields: tuple[str, ...] | None,
+    timeout: float,
+) -> list[Record]:
+    if not access_key:
+        raise DesknetAccessKeyMissingError("desknet's のアクセスキーがありません。再ログインしてください。")
+
+    base_url = appsr_api_url(login_url)
+    form_data: dict[str, str] = {
+        "action": "list_data",
+        "app_id": str(app_id),
+        "offset": str(offset),
+        "limit": str(limit),
+    }
+    fields_param = encode_fields_parameter(fields)
+    if fields_param:
+        form_data["fields"] = fields_param
+
+    encoded_body = urllib.parse.urlencode(form_data).encode("utf-8")
+    request = urllib.request.Request(
+        base_url,
+        data=encoded_body,
+        method="POST",
+        headers={
+            "X-Desknets-Auth": access_key,
+            "Content-Type": "application/x-www-form-urlencoded",
+        },
+    )
+    try:
+        with urllib.request.urlopen(request, timeout=timeout) as response:
+            body = response.read().decode("utf-8")
+    except urllib.error.HTTPError as exc:
+        raise DesknetApiError(f"desknet's API HTTP エラー: {exc.code}") from exc
+    except urllib.error.URLError as exc:
+        raise DesknetApiError(f"desknet's API 接続エラー: {exc.reason}") from exc
+
+    payload = json.loads(body)
+    return normalize_list_response(payload)
+
+
+def fetch_all_list_data(
+    *,
+    login_url: str,
+    access_key: str,
+    app_id: str,
+    fields: tuple[str, ...] | None,
+    timeout: float,
+    page_size: int = 5000,
+) -> list[Record]:
+    all_records: list[Record] = []
+    offset = 0
+    while True:
+        page = fetch_list_data_page(
+            login_url=login_url,
+            access_key=access_key,
+            app_id=app_id,
+            offset=offset,
+            limit=page_size,
+            fields=fields,
+            timeout=timeout,
+        )
+        all_records.extend(page)
+        if len(page) < page_size:
+            break
+        offset += page_size
+    return all_records

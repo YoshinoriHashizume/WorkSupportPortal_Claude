@@ -59,6 +59,7 @@ INSTALLED_APPS = [
     "apps.gonenkukumi",
     "apps.receipt_comparison",
     "apps.inventory_order_alert",
+    "apps.asset_inventory",
 ]
 
 MIDDLEWARE = [

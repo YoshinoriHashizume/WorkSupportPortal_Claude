@@ -57,6 +57,7 @@ def desknet_login(request: HttpRequest) -> HttpResponse:
 
     request.session["desknet_user_id"] = result.user_info.user_id
     request.session["desknet_default_group_id"] = result.user_info.default_group_id
+    request.session["desknet_access_key"] = result.user_info.access_key
     login(request, result.user)
     if result.requires_access_approval:
         return redirect("portal:access_status")

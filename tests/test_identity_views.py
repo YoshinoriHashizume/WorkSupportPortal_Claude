@@ -46,6 +46,7 @@ def test_desknet_login_creates_user_bound_by_employee_id(client, monkeypatch, se
     assert session["_auth_user_id"] == str(user.pk)
     assert session["desknet_user_id"] == "U001"
     assert session["desknet_default_group_id"] == "G001"
+    assert session["desknet_access_key"] == "access-token"
 
 
 @pytest.mark.django_db

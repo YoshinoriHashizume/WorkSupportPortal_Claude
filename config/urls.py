@@ -10,4 +10,5 @@ urlpatterns = [
     path("", include("apps.gonenkukumi.urls")),
     path("", include("apps.receipt_comparison.urls")),
     path("", include("apps.inventory_order_alert.urls")),
+    path("", include("apps.asset_inventory.urls")),
 ]
