@@ -51,3 +51,19 @@ def test_TC_AIV_DOM_034_factory_change():
 def test_TC_AIV_DOM_033_no_factory_change_same_site():
     site_map = {"001": "S1"}
     assert has_factory_change(ASSET, INVENTORY_SAME, site_map) is False
+
+
+def test_TC_AIV_DOM_035_factory_change_fallback_without_site_master():
+    inventory = {**ASSET, "管理部門コード": "002", "管理部門名称": "本社"}
+    assert has_factory_change(ASSET, inventory, {}) is True
+
+
+def test_TC_AIV_DOM_036_factory_change_same_code_different_name():
+    inventory = {**ASSET, "管理部門名称": "別拠点名"}
+    assert has_factory_change(ASSET, inventory, {}) is False
+
+
+def test_TC_AIV_DOM_037_factory_change_prefers_site_master_when_resolved():
+    inventory = {**ASSET, "管理部門コード": "002", "管理部門名称": "本社"}
+    site_map = {"001": "S1", "002": "S1"}
+    assert has_factory_change(ASSET, inventory, site_map) is False

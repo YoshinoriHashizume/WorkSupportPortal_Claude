@@ -9,6 +9,7 @@ from apps.asset_inventory.domain.ports import (
     MatchStatus,
     PAGE_SIZE_OPTIONS,
     ReconcileRow,
+    RowTone,
     SORTABLE_COLUMNS,
     SORTABLE_KEYS,
 )
@@ -21,6 +22,13 @@ STATUS_SORT_ORDER = {
     MatchStatus.MATCHED: 0,
     MatchStatus.ASSET_ONLY: 1,
     MatchStatus.INVENTORY_ONLY: 2,
+}
+
+TONE_SORT_ORDER = {
+    RowTone.MATCH_CLEAN: 0,
+    RowTone.MATCH_FACTORY: 1,
+    RowTone.MATCH_DIFF: 2,
+    RowTone.NONE: 3,
 }
 
 
@@ -162,6 +170,8 @@ def build_table_query_string(*, sort_specs: tuple[SortSpec, ...], page: int, pag
 def _sort_value(row: ReconcileRow, column: str) -> object:
     if column == "status_label":
         return (STATUS_SORT_ORDER.get(row.match_status, 99), row.status_label.lower())
+    if column == "tone_label":
+        return (TONE_SORT_ORDER.get(row.row_tone, 99), row.tone_label.lower())
     value = getattr(row, column, "")
     if column in {"asset_number", "branch_number", "site_name", "inventory_datetime", "plate_created"}:
         return (value == "", str(value).lower())

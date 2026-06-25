@@ -35,6 +35,7 @@ def test_TC_AIV_DOM_060_utf8_bom():
 def test_TC_AIV_DOM_061_csv_headers():
     content = render_export_csv((_sample_row(),)).decode("utf-8-sig")
     first_line = content.splitlines()[0]
-    assert "突合結果" in first_line
-    assert "行色区分" in first_line
+    assert "棚卸結果" in first_line
+    assert "変化状況" in first_line
+    assert "行色区分" not in first_line
     assert "資産番号" in first_line

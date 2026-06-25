@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from apps.asset_inventory.domain.plate_display import format_plate_created
+from apps.asset_inventory.domain.row_detail import build_field_comparisons
 from apps.asset_inventory.domain.ports import (
     MatchStatus,
     RowTone,
@@ -22,6 +23,13 @@ def derive_row_tone(status: MatchStatus, has_diff: bool, factory_change: bool) -
     return RowTone.MATCH_DIFF
 
 
+def _attachment_photo_url(record: Record, field_name: str) -> str:
+    value = (record.get(field_name) or "").strip()
+    if value.startswith("http://") or value.startswith("https://"):
+        return value
+    return ""
+
+
 def map_record_to_display(
     source: Record,
     *,
@@ -30,11 +38,20 @@ def map_record_to_display(
     has_diff: bool,
     factory_change: bool,
     empty_inventory_fields: bool = False,
+    asset_row: Record | None = None,
+    inventory_row: Record | None = None,
+    photo_source: Record | None = None,
 ) -> ReconcileRow:
     if empty_inventory_fields:
         plate_code, plate_label = "", ""
     else:
         plate_code, plate_label = format_plate_created(source.get("プレート作成", ""))
+    photo_record = photo_source or (source if not empty_inventory_fields else {})
+    compare_asset = asset_row if asset_row is not None else (source if status == MatchStatus.ASSET_ONLY else None)
+    compare_inventory = inventory_row if inventory_row is not None else (
+        source if status in (MatchStatus.MATCHED, MatchStatus.INVENTORY_ONLY) else None
+    )
+    field_comparisons = build_field_comparisons(compare_asset, compare_inventory)
     return ReconcileRow(
         match_status=status,
         row_tone=row_tone,
@@ -56,4 +73,7 @@ def map_record_to_display(
         has_diff=has_diff,
         factory_change=factory_change,
         css_class=ROW_TONE_CSS[row_tone],
+        asset_photo_url=_attachment_photo_url(photo_record, "資産写真"),
+        plate_photo_url=_attachment_photo_url(photo_record, "資産プレート写真"),
+        field_comparisons=field_comparisons,
     )

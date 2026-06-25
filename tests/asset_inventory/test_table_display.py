@@ -109,3 +109,47 @@ def test_TC_AIV_DOM_088_sort_rows_multi_column():
 
 def test_TC_AIV_DOM_089_sort_spec_label():
     assert sort_spec_label(SortSpec("asset_number", "asc")) == "資産番号（昇順）"
+    assert sort_spec_label(SortSpec("tone_label", "desc")) == "変化状況（降順）"
+
+
+def test_TC_AIV_DOM_08A_sort_rows_by_tone_label():
+    rows = (
+        ReconcileRow(
+            match_status=MatchStatus.MATCHED,
+            row_tone=RowTone.MATCH_DIFF,
+            status_label="棚卸済み",
+            tone_label="差異",
+            asset_number="1",
+            branch_number="0001",
+            site_name="",
+            manufacturer="",
+            model_name="",
+            serial_number="",
+            old_asset_number="",
+            usage_category="",
+            summary="",
+            plate_created="",
+            inventory_operator="",
+            inventory_datetime="",
+        ),
+        ReconcileRow(
+            match_status=MatchStatus.MATCHED,
+            row_tone=RowTone.MATCH_CLEAN,
+            status_label="棚卸済み",
+            tone_label="一致",
+            asset_number="2",
+            branch_number="0001",
+            site_name="",
+            manufacturer="",
+            model_name="",
+            serial_number="",
+            old_asset_number="",
+            usage_category="",
+            summary="",
+            plate_created="",
+            inventory_operator="",
+            inventory_datetime="",
+        ),
+    )
+    sorted_rows = sort_rows(rows, (SortSpec("tone_label", "asc"),))
+    assert [row.tone_label for row in sorted_rows] == ["一致", "差異"]

@@ -52,7 +52,7 @@
     <form method="get" class="aiv-filter-panel">
       <h3 class="aiv-filter-panel-title">フィルター</h3>
       <div class="aiv-filter-panel-fields">
-        <label>突合結果
+        <label>棚卸結果
           <select name="status" class="portal-filter-select" onchange="this.form.submit()">
             {% for value, label in status_filter_options %}
               <option value="{{ value }}" {% if status_filter == value %}selected{% endif %}>{{ label }}</option>
@@ -107,8 +107,9 @@
         </thead>
         <tbody>
           {% for row in rows %}
-            <tr class="{{ row.css_class }}">
+            <tr class="{{ row.css_class }} aiv-table-row--clickable" tabindex="0" role="button" data-aiv-row-key="{{ row.asset_number }}|{{ row.branch_number }}" aria-label="詳細を表示">
               <td>{{ row.status_label }}</td>
+              <td>{{ row.tone_label }}</td>
               <td>{{ row.asset_number }}</td>
               <td>{{ row.branch_number }}</td>
               <td>{{ row.site_name }}</td>
@@ -123,7 +124,7 @@
               <td>{{ row.inventory_datetime }}</td>
             </tr>
           {% empty %}
-            <tr><td colspan="13">表示するデータがありません。</td></tr>
+            <tr><td colspan="14">表示するデータがありません。</td></tr>
           {% endfor %}
         </tbody>
       </table>
@@ -218,6 +219,7 @@
         </div>
       </template>
     </dialog>
+    {{ row_details_index|json_script:"aiv-row-details-data" }}
     </div>
     {% elif not selected_management_id %}
       <p class="favorite-empty">棚卸を選択してください。</p>
@@ -242,7 +244,7 @@
         </colgroup>
         <thead>
           <tr>
-            <th scope="col">突合結果</th>
+            <th scope="col">棚卸結果</th>
             <th scope="col">差異</th>
             <th scope="col">行の色</th>
           </tr>
@@ -263,5 +265,59 @@
     </div>
   </div>
 </dialog>
-<script src="/static/js/asset-inventory-list.js?v=20260625-1200" defer></script>
+
+<dialog id="aiv-row-detail-dialog" class="aiv-row-detail-dialog">
+  <div class="aiv-row-detail-content">
+    <h3 class="aiv-row-detail-title"></h3>
+    <p class="aiv-row-detail-meta muted"></p>
+    <div class="aiv-row-detail-photos">
+      <figure class="aiv-row-detail-photo">
+        <figcaption>資産写真</figcaption>
+        <img class="aiv-row-detail-photo-asset" alt="資産写真" loading="eager" decoding="async">
+        <p class="aiv-row-detail-photo-empty aiv-row-detail-photo-empty--asset muted">写真がありません</p>
+      </figure>
+      <figure class="aiv-row-detail-photo">
+        <figcaption>資産プレート写真</figcaption>
+        <img class="aiv-row-detail-photo-plate" alt="資産プレート写真" loading="eager" decoding="async">
+        <p class="aiv-row-detail-photo-empty aiv-row-detail-photo-empty--plate muted">写真がありません</p>
+      </figure>
+    </div>
+    <div class="aiv-row-detail-compare-wrap">
+      <h4 class="aiv-row-detail-compare-title">データ比較</h4>
+      <div class="aiv-row-detail-compare-scroll">
+        <table class="aiv-row-detail-compare-table">
+          <colgroup>
+            <col class="aiv-row-detail-compare-col-label">
+            <col class="aiv-row-detail-compare-col-asset">
+            <col class="aiv-row-detail-compare-col-inventory">
+          </colgroup>
+          <thead>
+            <tr>
+              <th scope="col">項目</th>
+              <th scope="col">資産データ</th>
+              <th scope="col">棚卸データ</th>
+            </tr>
+          </thead>
+          <tbody></tbody>
+        </table>
+      </div>
+    </div>
+    <div class="aiv-row-detail-actions">
+      <button type="button" class="button-link aiv-row-detail-close">閉じる</button>
+    </div>
+  </div>
+</dialog>
+
+<dialog id="aiv-photo-zoom-dialog" class="aiv-photo-zoom-dialog" aria-labelledby="aiv-photo-zoom-caption">
+  <div class="aiv-photo-zoom-content">
+    <p id="aiv-photo-zoom-caption" class="aiv-photo-zoom-caption"></p>
+    <div class="aiv-photo-zoom-image-wrap">
+      <img class="aiv-photo-zoom-image" alt="" decoding="async">
+    </div>
+    <div class="aiv-photo-zoom-actions">
+      <button type="button" class="button-link aiv-photo-zoom-close">閉じる</button>
+    </div>
+  </div>
+</dialog>
+<script src="/static/js/asset-inventory-list.js?v=20260625-2100" defer></script>
 {% endblock %}

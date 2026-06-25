@@ -23,6 +23,26 @@ def test_record_field_value_extracts_val():
     assert record_field_value({"val": "ABC"}) == "ABC"
 
 
+def test_TC_AIV_INF_009_record_field_value_attachment_url():
+    payload = {
+        "val": {
+            "attach": {
+                "item": [
+                    {
+                        "url": "https://maruei01.dn-cloud.com/cgi-bin/dneo/appsuite.cgi?action=download_data_file&id=1"
+                    }
+                ]
+            }
+        }
+    }
+    assert record_field_value(payload).endswith("download_data_file&id=1")
+
+
+def test_TC_AIV_INF_010_record_field_value_empty_attachment():
+    payload = {"val": {"attach": {"item": []}}}
+    assert record_field_value(payload) == ""
+
+
 def test_TC_AIV_INF_005_encode_fields_parameter():
     encoded = encode_fields_parameter(("データID", "棚卸項目"))
     assert encoded == '[{"field_name": "データID"}, {"field_name": "棚卸項目"}]'

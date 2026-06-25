@@ -44,8 +44,11 @@ def has_factory_change(
     inventory_code = (inventory_row.get("管理部門コード") or "").strip()
     if not asset_code or not inventory_code:
         return False
+
     asset_site = site_code_map.get(asset_code)
     inventory_site = site_code_map.get(inventory_code)
-    if not asset_site or not inventory_site:
-        return False
-    return asset_site != inventory_site
+    if asset_site and inventory_site:
+        return asset_site != inventory_site
+
+    # 拠点マスタで両方解決できない場合は、管理部門コードの直接比較で判定する。
+    return asset_code != inventory_code

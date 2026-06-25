@@ -73,6 +73,31 @@ def test_TC_AIV_DOM_033_factory_change():
     assert has_factory_change(ASSET, inv, site_map)
 
 
+def test_TC_AIV_DOM_038_reconcile_factory_change_without_site_master():
+    inv = {**INVENTORY_MATCH, "管理部門コード": "4003", "管理部門名称": "丸栄宮崎MTV工場"}
+    rows, counts = reconcile_records([ASSET], [inv], [])
+    assert counts.matched == 1
+    assert rows[0].row_tone == RowTone.MATCH_FACTORY
+    assert rows[0].tone_label == "拠点変更"
+    assert rows[0].css_class == "aiv-row-factory"
+
+
+def test_TC_AIV_DOM_039_reconcile_row_photos_and_diffs():
+    inv = {
+        **INVENTORY_MATCH,
+        "管理部門コード": "4003",
+        "管理部門名称": "丸栄宮崎MTV工場",
+        "摘要": "B",
+        "資産写真": "https://example.com/asset.jpg",
+        "資産プレート写真": "https://example.com/plate.jpg",
+    }
+    rows, _counts = reconcile_records([ASSET], [inv], [])
+    assert rows[0].asset_photo_url == "https://example.com/asset.jpg"
+    assert rows[0].plate_photo_url == "https://example.com/plate.jpg"
+    assert len(rows[0].field_comparisons) == 9
+    assert sum(1 for item in rows[0].field_comparisons if item.is_diff) >= 2
+
+
 @pytest.mark.parametrize(
     ("status", "diff", "factory", "expected"),
     [

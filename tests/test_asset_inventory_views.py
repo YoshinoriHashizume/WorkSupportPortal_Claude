@@ -159,7 +159,9 @@ def test_TC_AIV_API_003_general_affairs_user_ok(client, general_affairs_user, mo
     assert response.status_code == 200
     html = response.content.decode("utf-8")
     assert "資産棚卸結果" in html
-    assert "突合結果" in html
+    assert "<label>棚卸結果" in html
+    assert "変化状況" in html
+    assert "突合結果" not in html
     assert 'class="portal-filter-select' in html
     assert "生産品番⑧コードが 1" not in html
     assert "表示件数" in html
@@ -169,7 +171,26 @@ def test_TC_AIV_API_003_general_affairs_user_ok(client, general_affairs_user, mo
     assert "2025年度" in html
     assert "資産台帳と棚卸データを突合し、棚卸結果を表示します。" in html
     assert 'id="aiv-row-color-dialog"' in html
-    assert "突合結果" in html and "差異" in html and "行の色" in html
+    assert 'id="aiv-row-detail-dialog"' in html
+    assert 'id="aiv-photo-zoom-dialog"' in html
+    assert 'class="aiv-photo-zoom-image"' in html
+    assert 'class="aiv-row-detail-compare-col-label"' in html
+    assert 'class="aiv-row-detail-compare-col-asset"' in html
+    assert 'class="aiv-row-detail-compare-col-inventory"' in html
+    assert 'id="aiv-row-details-data"' in html
+    import json
+    import re
+
+    script_match = re.search(
+        r'<script id="aiv-row-details-data" type="application/json">(.*?)</script>',
+        html,
+        re.DOTALL,
+    )
+    assert script_match is not None
+    details = json.loads(script_match.group(1))
+    assert isinstance(details, dict)
+    assert "1|0" in details
+    assert "棚卸結果" in html and "差異" in html and "行の色" in html
     assert "緑: 一致" not in html
     assert "aiv-sort-priority" in html
     assert "プレート作成" in html

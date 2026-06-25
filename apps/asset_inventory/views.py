@@ -1,13 +1,18 @@
 from __future__ import annotations
 
+from django.conf import settings
 from django.contrib.auth.decorators import login_required
-from django.http import HttpRequest, HttpResponse
+from django.http import HttpRequest, HttpResponse, HttpResponseForbidden
 from django.shortcuts import render
+from django.urls import reverse
 
 from apps.asset_inventory.composition import export_csv_usecase, list_page_usecase
+from apps.asset_inventory.domain.attachment_proxy import fetch_attachment_content, is_allowed_attachment_url
+from apps.asset_inventory.domain.errors import DesknetApiError
 from apps.asset_inventory.domain.list_query import build_list_page_query_string
 from apps.asset_inventory.domain.ports import PAGE_SIZE_OPTIONS, PLATE_FILTER_OPTIONS, STATUS_FILTER_OPTIONS
 from apps.asset_inventory.domain.row_color_rules import build_row_color_rule_rows
+from apps.asset_inventory.domain.row_detail import build_row_details_index
 from apps.asset_inventory.domain.sort_headers import build_table_headers
 from apps.asset_inventory.domain.table_display import sort_spec_label
 from apps.asset_inventory.usecase.usecase_list_page import parse_list_page_query
@@ -70,6 +75,12 @@ def list_page(request: HttpRequest) -> HttpResponse:
         )
     )
     has_list_data = bool(result.selected_management_id) and result.error_message is None
+    attachment_proxy_base_path = reverse("asset_inventory:attachment")
+    row_details_index = (
+        build_row_details_index(result.rows, attachment_proxy_base_path=attachment_proxy_base_path)
+        if has_list_data
+        else {}
+    )
     return render(
         request,
         "asset_inventory/list.html",
@@ -105,8 +116,37 @@ def list_page(request: HttpRequest) -> HttpResponse:
             "error_message": result.error_message,
             "is_asset_inventory_favorite": is_menu_favorited(request.user, "asset-inventory"),
             "filtered_total": len(result.filtered_rows),
+            "row_details_index": row_details_index,
         },
     )
+
+
+@login_required
+def attachment_proxy(request: HttpRequest) -> HttpResponse:
+    source_url = (request.GET.get("src") or "").strip()
+    if not source_url or not is_allowed_attachment_url(source_url, settings.DESKNETS_LOGIN_URL):
+        return HttpResponseForbidden("invalid attachment source")
+
+    access_key = _access_key(request)
+    if not access_key:
+        return HttpResponse(
+            "desknet's のアクセスキーがありません。再ログインしてください。",
+            status=503,
+            content_type="text/plain; charset=utf-8",
+        )
+
+    try:
+        content, content_type = fetch_attachment_content(
+            source_url=source_url,
+            access_key=access_key,
+            timeout=float(settings.DESKNETS_TIMEOUT_SECONDS),
+        )
+    except DesknetApiError as exc:
+        return HttpResponse(str(exc), status=502, content_type="text/plain; charset=utf-8")
+
+    response = HttpResponse(content, content_type=content_type)
+    response["Cache-Control"] = "private, max-age=300"
+    return response
 
 
 @login_required

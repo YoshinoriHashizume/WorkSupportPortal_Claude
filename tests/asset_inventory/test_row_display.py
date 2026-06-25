@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from apps.asset_inventory.domain.ports import MatchStatus, RowTone
+from apps.asset_inventory.domain.ports import MatchStatus, RowTone, TONE_LABELS
 from apps.asset_inventory.domain.row_display import derive_row_tone, map_record_to_display
 
 
@@ -96,3 +96,30 @@ def test_TC_AIV_DOM_054_css_class_factory():
         factory_change=True,
     )
     assert row.css_class == "aiv-row-factory"
+
+
+def test_TC_AIV_DOM_055_tone_labels():
+    assert TONE_LABELS[RowTone.MATCH_CLEAN] == "一致"
+    assert TONE_LABELS[RowTone.MATCH_FACTORY] == "拠点変更"
+    assert TONE_LABELS[RowTone.MATCH_DIFF] == "差異"
+    assert TONE_LABELS[RowTone.NONE] == "未突合"
+
+
+def test_TC_AIV_DOM_056_map_record_tone_labels():
+    diff_row = map_record_to_display(
+        RECORD,
+        status=MatchStatus.MATCHED,
+        row_tone=RowTone.MATCH_DIFF,
+        has_diff=True,
+        factory_change=False,
+    )
+    assert diff_row.tone_label == "差異"
+
+    factory_row = map_record_to_display(
+        RECORD,
+        status=MatchStatus.MATCHED,
+        row_tone=RowTone.MATCH_FACTORY,
+        has_diff=True,
+        factory_change=True,
+    )
+    assert factory_row.tone_label == "拠点変更"

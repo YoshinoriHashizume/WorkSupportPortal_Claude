@@ -16,11 +16,33 @@ def appsr_api_url(login_url: str) -> str:
     return login_url.replace("dneo.cgi", "appsr.cgi").replace("dneor.cgi", "appsr.cgi")
 
 
+def extract_attachment_url(field_payload: Any) -> str:
+    if not isinstance(field_payload, dict):
+        return ""
+    val = field_payload.get("val")
+    if not isinstance(val, dict):
+        return ""
+    attach = val.get("attach") or {}
+    items = attach.get("item") or []
+    if isinstance(items, dict):
+        items = [items]
+    for item in items:
+        if not isinstance(item, dict):
+            continue
+        url = str(item.get("url") or "").strip()
+        if url:
+            return url
+    return ""
+
+
 def record_field_value(field_payload: Any) -> str:
     if field_payload is None:
         return ""
     if isinstance(field_payload, dict):
-        return str(field_payload.get("val") or "").strip()
+        val = field_payload.get("val")
+        if isinstance(val, dict) and "attach" in val:
+            return extract_attachment_url(field_payload)
+        return str(val or "").strip()
     return str(field_payload).strip()
 
 

@@ -47,6 +47,9 @@ def reconcile_records(
                 row_tone=tone,
                 has_diff=diff,
                 factory_change=factory,
+                asset_row=asset_row,
+                inventory_row=inventory_row,
+                photo_source=inventory_row,
             )
         elif asset_row:
             status = MatchStatus.ASSET_ONLY
@@ -59,6 +62,7 @@ def reconcile_records(
                 has_diff=False,
                 factory_change=False,
                 empty_inventory_fields=True,
+                asset_row=asset_row,
             )
         else:
             status = MatchStatus.INVENTORY_ONLY
@@ -71,6 +75,8 @@ def reconcile_records(
                 row_tone=tone,
                 has_diff=False,
                 factory_change=False,
+                inventory_row=display_source,
+                photo_source=display_source,
             )
 
         rows.append(row)

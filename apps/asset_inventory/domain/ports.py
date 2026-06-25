@@ -1,13 +1,12 @@
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
-
-if TYPE_CHECKING:
-    from apps.asset_inventory.domain.table_display import SortSpec
-
 from dataclasses import dataclass, field
 from enum import Enum
-from typing import Callable, Protocol
+from typing import Callable, Protocol, TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from apps.asset_inventory.domain.row_detail import FieldDiffItem
+    from apps.asset_inventory.domain.table_display import SortSpec
 
 
 class MatchStatus(str, Enum):
@@ -59,6 +58,9 @@ class ReconcileRow:
     factory_change: bool = False
     css_class: str = ""
     plate_created_code: str = ""
+    asset_photo_url: str = ""
+    plate_photo_url: str = ""
+    field_comparisons: tuple = ()
 
 
 @dataclass
@@ -135,6 +137,8 @@ INVENTORY_FIELDS = ASSET_FIELDS + (
     "棚卸日時",
     "棚卸実施者",
     "プレート作成",
+    "資産写真",
+    "資産プレート写真",
 )
 
 SITE_FIELDS = (
@@ -144,7 +148,8 @@ SITE_FIELDS = (
 )
 
 DISPLAY_COLUMNS: tuple[tuple[str, str], ...] = (
-    ("status_label", "突合結果"),
+    ("status_label", "棚卸結果"),
+    ("tone_label", "変化状況"),
     ("asset_number", "資産番号"),
     ("branch_number", "資産枝番"),
     ("site_name", "拠点名"),
@@ -184,8 +189,8 @@ STATUS_LABELS = {
 TONE_LABELS = {
     RowTone.NONE: "未突合",
     RowTone.MATCH_CLEAN: "一致",
-    RowTone.MATCH_DIFF: "差異あり",
-    RowTone.MATCH_FACTORY: "拠点変更あり",
+    RowTone.MATCH_DIFF: "差異",
+    RowTone.MATCH_FACTORY: "拠点変更",
 }
 
 ROW_TONE_CSS = {
