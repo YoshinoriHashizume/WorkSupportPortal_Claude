@@ -17,7 +17,7 @@ def test_TC_AIV_DOM_085_build_table_headers():
         site_filter="all",
         plate_filter="all",
     )
-    assert len(headers) == 14
+    assert len(headers) == 15
     asset_header = next(header for header in headers if header.key == "asset_number")
     assert isinstance(asset_header, TableHeader)
     assert asset_header.sorted is True

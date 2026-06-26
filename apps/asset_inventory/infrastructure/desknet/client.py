@@ -9,7 +9,7 @@ from typing import Any
 from apps.asset_inventory.domain.ports import Record
 
 
-from apps.asset_inventory.domain.errors import DesknetAccessKeyMissingError, DesknetApiError
+from apps.asset_inventory.domain.errors import DesknetAccessKeyMissingError, DesknetApiError, format_desknet_user_error_message
 
 
 def appsr_api_url(login_url: str) -> str:
@@ -35,6 +35,20 @@ def extract_attachment_url(field_payload: Any) -> str:
     return ""
 
 
+def _format_date_field_value(val: Any) -> str:
+    if not isinstance(val, dict):
+        return ""
+    year = val.get("year")
+    month = val.get("month")
+    day = val.get("day")
+    if year in (None, "") or month in (None, "") or day in (None, ""):
+        return ""
+    try:
+        return f"{int(year):04d}-{int(month):02d}-{int(day):02d}"
+    except (TypeError, ValueError):
+        return ""
+
+
 def record_field_value(field_payload: Any) -> str:
     if field_payload is None:
         return ""
@@ -42,6 +56,10 @@ def record_field_value(field_payload: Any) -> str:
         val = field_payload.get("val")
         if isinstance(val, dict) and "attach" in val:
             return extract_attachment_url(field_payload)
+        if isinstance(val, dict):
+            date_text = _format_date_field_value(val)
+            if date_text:
+                return date_text
         return str(val or "").strip()
     return str(field_payload).strip()
 
@@ -72,7 +90,7 @@ def normalize_list_response(payload: dict[str, Any]) -> list[Record]:
     if str(payload.get("status") or "").lower() != "ok":
         if is_no_data_response(payload):
             return []
-        raise DesknetApiError(extract_api_error_message(payload))
+        raise DesknetApiError(format_desknet_user_error_message(extract_api_error_message(payload)))
 
     list_block = payload.get("list") or {}
     items = list_block.get("item") or []

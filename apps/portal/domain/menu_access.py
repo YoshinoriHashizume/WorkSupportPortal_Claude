@@ -3,7 +3,18 @@ from __future__ import annotations
 from urllib.parse import parse_qs, urlparse
 
 from apps.portal.domain.constants import MANAGEMENT_GROUP_KEY, RECEIPT_COMPARISON_PATH, RECEIPT_COMPARISON_MENU_KEYS
-from apps.portal.domain.menu import MENU_BY_KEY, MENU_ITEMS, PortalMenuItem
+from apps.portal.domain.menu import MENU_BY_KEY, MENU_GROUP_BY_KEY, MENU_GROUP_KEY_BY_TITLE, MENU_ITEMS, PortalMenuItem
+
+
+def normalize_menu_group_key(group_key: str) -> str:
+    key = (group_key or "").strip()
+    if key in MENU_GROUP_BY_KEY:
+        return key
+    return MENU_GROUP_KEY_BY_TITLE.get(key, key)
+
+
+def normalize_menu_group_keys(group_keys: set[str]) -> set[str]:
+    return {normalize_menu_group_key(key) for key in group_keys}
 
 
 def receipt_comparison_menu_key(comparison_type: str) -> str:

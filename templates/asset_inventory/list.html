@@ -4,12 +4,10 @@
 {% block content %}
 <section class="asset-inventory">
   <div class="portal-section-head">
-    <div>
-      <div class="portal-page-title-row">
-        <h1>資産棚卸結果</h1>
-        {% include "includes/page_favorite_toggle.html" with menu_key="asset-inventory" menu_title="資産棚卸結果" is_favorite=is_asset_inventory_favorite %}
-      </div>
-      <p>資産台帳と棚卸データを突合し、棚卸結果を表示します。</p>
+    <div class="portal-page-title-row">
+      <h1>資産棚卸結果</h1>
+      {% include "includes/page_favorite_toggle.html" with menu_key="asset-inventory" menu_title="資産棚卸結果" is_favorite=is_asset_inventory_favorite %}
+      <p class="portal-page-description">資産台帳と棚卸データを突合し、棚卸結果を表示します。</p>
     </div>
   </div>
 
@@ -18,18 +16,20 @@
   {% endif %}
 
   {% if management_rows %}
-  <form method="get" class="receipt-filter card aiv-management-filter">
-    <label>棚卸
-      <select name="managementId" class="portal-filter-select" onchange="this.form.submit()">
-        <option value="" {% if not selected_management_id %}selected{% endif %}>選択してください</option>
-        {% for row in management_rows %}
-          <option value="{{ row.data_id }}" {% if row.data_id == selected_management_id %}selected{% endif %}>
-            {{ row.inventory_name }}{% if row.fiscal_year %}（{{ row.fiscal_year }}年度）{% endif %}
-          </option>
-        {% endfor %}
-      </select>
-    </label>
-  </form>
+  {% include "includes/portal_search_disclosure_open.html" with disclosure_id="aiv-search-disclosure" storage_key="aiv-search-v2" %}
+    <form method="get" class="receipt-filter aiv-management-filter">
+      <label>棚卸
+        <select name="managementId" class="portal-filter-select" onchange="this.form.submit()">
+          <option value="" {% if not selected_management_id %}selected{% endif %}>選択してください</option>
+          {% for row in management_rows %}
+            <option value="{{ row.data_id }}" {% if row.data_id == selected_management_id %}selected{% endif %}>
+              {{ row.inventory_name }}{% if row.fiscal_year %}（{{ row.fiscal_year }}年度）{% endif %}
+            </option>
+          {% endfor %}
+        </select>
+      </label>
+    </form>
+  {% include "includes/portal_search_disclosure_close.html" %}
   {% endif %}
 
   <div class="card receipt-results-card aiv-results-card">
@@ -42,49 +42,63 @@
           棚卸の色分け
         </button>
         {% if has_list_data %}
-          <a class="button secondary-button" href="{% url 'asset_inventory:export_csv' %}{{ export_csv_href }}">CSV出力</a>
+          <a class="button secondary-button aiv-export-csv-link" href="{% url 'asset_inventory:export_csv' %}{{ export_csv_href }}">CSV出力</a>
         {% endif %}
       </div>
     </div>
 
     {% if has_list_data %}
     <div class="aiv-results-body">
-    <form method="get" class="aiv-filter-panel">
-      <h3 class="aiv-filter-panel-title">フィルター</h3>
+    <div class="aiv-filter-panel">
       <div class="aiv-filter-panel-fields">
-        <label>棚卸結果
-          <select name="status" class="portal-filter-select" onchange="this.form.submit()">
+        <label class="aiv-filter-field">
+          <span class="aiv-filter-field-label">棚卸結果</span>
+          <select name="status" class="portal-filter-select aiv-filter-control">
             {% for value, label in status_filter_options %}
               <option value="{{ value }}" {% if status_filter == value %}selected{% endif %}>{{ label }}</option>
             {% endfor %}
           </select>
         </label>
-        <label>プレート作成
-          <select name="plate" class="portal-filter-select" onchange="this.form.submit()">
+        <label class="aiv-filter-field">
+          <span class="aiv-filter-field-label">プレート作成</span>
+          <select name="plate" class="portal-filter-select aiv-filter-control">
             {% for value, label in plate_filter_options %}
               <option value="{{ value }}" {% if plate_filter == value %}selected{% endif %}>{{ label }}</option>
             {% endfor %}
           </select>
         </label>
-        <label>拠点
-          <select name="site" class="portal-filter-select" onchange="this.form.submit()">
+        <label class="aiv-filter-field">
+          <span class="aiv-filter-field-label">拠点</span>
+          <select name="site" class="portal-filter-select aiv-filter-control">
             <option value="all" {% if site_filter == "all" %}selected{% endif %}>すべて</option>
             {% for site in site_options %}
               <option value="{{ site }}" {% if site_filter == site %}selected{% endif %}>{{ site }}</option>
             {% endfor %}
           </select>
         </label>
+        <label class="aiv-filter-field">
+          <span class="aiv-filter-field-label">資産番号</span>
+          <input
+            type="text"
+            name="assetNumber"
+            class="aiv-filter-control aiv-filter-asset-number"
+            value="{{ asset_number_filter }}"
+            list="aiv-asset-number-options"
+            placeholder="資産番号"
+            autocomplete="off"
+          >
+        </label>
+        <datalist id="aiv-asset-number-options">
+          {% for asset_number in asset_number_options %}
+            <option value="{{ asset_number }}"></option>
+          {% endfor %}
+        </datalist>
       </div>
-      <input type="hidden" name="managementId" value="{{ selected_management_id }}">
-      <input type="hidden" name="sort" value="{{ table_params.sort_param }}">
-      <input type="hidden" name="dir" value="{{ table_params.dir_param }}">
-      <input type="hidden" name="page" value="1">
-      <input type="hidden" name="page_size" value="{{ page_size }}">
-    </form>
+    </div>
 
     <div class="aiv-table-toolbar">
       <button type="button" class="button-link aiv-sort-open" aria-haspopup="dialog" aria-controls="aiv-sort-dialog">
-        並び替え{% if sort_spec_labels %}（{{ sort_spec_labels|join:" → " }}）{% endif %}
+        並び替え
       </button>
       <p class="aiv-table-counts">
         棚卸済み {{ counts.matched }} 件 / 未棚卸 {{ counts.asset_only }} 件 / 台帳外 {{ counts.inventory_only }} 件
@@ -116,6 +130,7 @@
               <td>{{ row.manufacturer }}</td>
               <td>{{ row.model_name }}</td>
               <td>{{ row.serial_number }}</td>
+              <td>{{ row.asset_acquisition_date }}</td>
               <td>{{ row.old_asset_number }}</td>
               <td>{{ row.usage_category }}</td>
               <td>{{ row.summary }}</td>
@@ -124,48 +139,30 @@
               <td>{{ row.inventory_datetime }}</td>
             </tr>
           {% empty %}
-            <tr><td colspan="14">表示するデータがありません。</td></tr>
+            <tr><td colspan="15">表示するデータがありません。</td></tr>
           {% endfor %}
         </tbody>
       </table>
     </div>
 
-    {% if filtered_total %}
-    <form method="get" class="aiv-table-footer">
-      <input type="hidden" name="managementId" value="{{ selected_management_id }}">
-      <input type="hidden" name="status" value="{{ status_filter }}">
-      <input type="hidden" name="plate" value="{{ plate_filter }}">
-      {% if site_filter != "all" %}
-        <input type="hidden" name="site" value="{{ site_filter }}">
-      {% endif %}
-      <input type="hidden" name="sort" value="{{ table_params.sort_param }}">
-      <input type="hidden" name="dir" value="{{ table_params.dir_param }}">
+    <div class="aiv-table-footer"{% if not filtered_total %} hidden{% endif %}>
       <div class="aiv-table-footer-left">
         <label class="aiv-page-size-label" for="aiv-page-size">表示件数</label>
-        <select id="aiv-page-size" name="page_size" class="aiv-page-size-select" onchange="this.form.submit()">
+        <select id="aiv-page-size" name="page_size" class="aiv-page-size-select">
           {% for size in page_size_options %}
             <option value="{{ size }}" {% if page_size == size %}selected{% endif %}>{{ size }} 件</option>
           {% endfor %}
         </select>
         <nav class="aiv-pagination" aria-label="一覧ページ移動">
-          {% if has_previous %}
-            <a class="button-link" href="{{ prev_href }}">前へ</a>
-          {% else %}
-            <span class="button-link is-disabled">前へ</span>
-          {% endif %}
-          {% if has_next %}
-            <a class="button-link" href="{{ next_href }}">次へ</a>
-          {% else %}
-            <span class="button-link is-disabled">次へ</span>
-          {% endif %}
+          <button type="button" class="button-link aiv-pagination-prev"{% if not has_previous %} disabled{% endif %}>前へ</button>
+          <button type="button" class="button-link aiv-pagination-next"{% if not has_next %} disabled{% endif %}>次へ</button>
         </nav>
         <p class="muted aiv-table-range">{{ start_index }}–{{ end_index }} 件目を表示（{{ page }} / {{ total_pages }} ページ）</p>
       </div>
-    </form>
-    {% endif %}
+    </div>
 
     <dialog id="aiv-sort-dialog" class="aiv-sort-dialog">
-      <form method="get" class="aiv-sort-form">
+      <form class="aiv-sort-form">
         <h3 class="aiv-sort-dialog-title">並び替え</h3>
         <p class="aiv-sort-dialog-help muted">上から順に優先されます（最大 5 条件）。番号をドラッグして順序を変更できます。</p>
         <div class="aiv-sort-rows">
@@ -192,16 +189,6 @@
             <button type="submit" class="button-link">適用</button>
           </div>
         </div>
-        <input type="hidden" name="sort" value="{{ table_params.sort_param }}">
-        <input type="hidden" name="dir" value="{{ table_params.dir_param }}">
-        <input type="hidden" name="page" value="1">
-        <input type="hidden" name="page_size" value="{{ table_params.page_size }}">
-        <input type="hidden" name="managementId" value="{{ selected_management_id }}">
-        <input type="hidden" name="status" value="{{ status_filter }}">
-        <input type="hidden" name="plate" value="{{ plate_filter }}">
-        {% if site_filter != "all" %}
-          <input type="hidden" name="site" value="{{ site_filter }}">
-        {% endif %}
       </form>
       <template id="aiv-sort-row-template">
         <div class="aiv-sort-row">
@@ -219,7 +206,9 @@
         </div>
       </template>
     </dialog>
-    {{ row_details_index|json_script:"aiv-row-details-data" }}
+    {% if list_client_payload %}
+      {{ list_client_payload|json_script:"aiv-list-data" }}
+    {% endif %}
     </div>
     {% elif not selected_management_id %}
       <p class="favorite-empty">棚卸を選択してください。</p>
@@ -266,10 +255,9 @@
   </div>
 </dialog>
 
-<dialog id="aiv-row-detail-dialog" class="aiv-row-detail-dialog">
+<dialog id="aiv-row-detail-dialog" class="aiv-row-detail-dialog" aria-labelledby="aiv-row-detail-compare-heading">
   <div class="aiv-row-detail-content">
-    <h3 class="aiv-row-detail-title"></h3>
-    <p class="aiv-row-detail-meta muted"></p>
+    <button type="button" class="dialog-close-button aiv-row-detail-close" aria-label="閉じる">×</button>
     <div class="aiv-row-detail-photos">
       <figure class="aiv-row-detail-photo">
         <figcaption>資産写真</figcaption>
@@ -283,7 +271,7 @@
       </figure>
     </div>
     <div class="aiv-row-detail-compare-wrap">
-      <h4 class="aiv-row-detail-compare-title">データ比較</h4>
+      <h4 id="aiv-row-detail-compare-heading" class="aiv-row-detail-compare-title">データ差異</h4>
       <div class="aiv-row-detail-compare-scroll">
         <table class="aiv-row-detail-compare-table">
           <colgroup>
@@ -302,22 +290,20 @@
         </table>
       </div>
     </div>
-    <div class="aiv-row-detail-actions">
-      <button type="button" class="button-link aiv-row-detail-close">閉じる</button>
-    </div>
   </div>
 </dialog>
 
 <dialog id="aiv-photo-zoom-dialog" class="aiv-photo-zoom-dialog" aria-labelledby="aiv-photo-zoom-caption">
   <div class="aiv-photo-zoom-content">
+    <button type="button" class="dialog-close-button aiv-photo-zoom-close" aria-label="閉じる">×</button>
     <p id="aiv-photo-zoom-caption" class="aiv-photo-zoom-caption"></p>
     <div class="aiv-photo-zoom-image-wrap">
       <img class="aiv-photo-zoom-image" alt="" decoding="async">
     </div>
-    <div class="aiv-photo-zoom-actions">
-      <button type="button" class="button-link aiv-photo-zoom-close">閉じる</button>
-    </div>
   </div>
 </dialog>
-<script src="/static/js/asset-inventory-list.js?v=20260625-2100" defer></script>
+<script src="/static/js/portal-list-core.js?v=20260627-portal-list" defer></script>
+<script src="/static/js/portal-list-sort-dialog.js?v=20260627-portal-list" defer></script>
+<script src="/static/js/asset-inventory-list-client.js?v=20260627-portal-list" defer></script>
+<script src="/static/js/asset-inventory-list.js?v=20260627-portal-list" defer></script>
 {% endblock %}

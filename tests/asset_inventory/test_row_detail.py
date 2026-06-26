@@ -90,7 +90,7 @@ def test_TC_AIV_DOM_068_build_row_detail_payload():
         field_comparisons=comparisons,
     )
     payload = build_row_detail_payload(row, attachment_proxy_base_path="/api/asset-inventory/attachment")
-    assert payload["title"] == "4527 / 0000"
+    assert "title" not in payload
     assert payload["photos"][0]["href"].startswith("/api/asset-inventory/attachment?src=")
     assert len(payload["field_comparisons"]) == 9
     assert payload["field_comparisons"][2]["is_diff"] is True

@@ -9,18 +9,16 @@
 {% block content %}
 <section class="gonen-search">
   <div class="portal-section-head gonen-search-head">
-    <div>
-      <div class="portal-page-title-row">
-        <h1>5年9組</h1>
-        <button
-          type="button"
-          class="favorite-toggle portal-title-favorite{% if is_five_year_nine_favorite %} is-favorite{% endif %}"
-          data-menu-key="five-year-nine"
-          data-menu-title="5年9組"
-          aria-label="5年9組のお気に入りを切り替え"
-        >{% if is_five_year_nine_favorite %}♥{% else %}♡{% endif %}</button>
-      </div>
-      <p>検索条件を入力して結果を表示します。右の履歴から過去の条件を再利用できます。</p>
+    <div class="portal-page-title-row">
+      <h1>5年9組</h1>
+      <button
+        type="button"
+        class="favorite-toggle portal-title-favorite{% if is_five_year_nine_favorite %} is-favorite{% endif %}"
+        data-menu-key="five-year-nine"
+        data-menu-title="5年9組"
+        aria-label="5年9組のお気に入りを切り替え"
+      >{% if is_five_year_nine_favorite %}♥{% else %}♡{% endif %}</button>
+      <p class="portal-page-description">得意先品目の内示・受注・出荷・仕入・入荷の推移を検索します。</p>
     </div>
   </div>
 

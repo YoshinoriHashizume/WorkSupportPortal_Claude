@@ -83,6 +83,19 @@ def test_TC_AIV_DOM_083_build_list_page_query_string():
     assert "dir=asc%2Casc" in query
 
 
+def test_TC_AIV_DOM_084_build_list_page_query_string_asset_number():
+    query = build_list_page_query_string(
+        management_id="1",
+        status="all",
+        site_filter="all",
+        plate_filter="all",
+        asset_number_filter="5262",
+        sort_specs=DEFAULT_SORT_SPECS,
+        page=1,
+        page_size=50,
+    )
+    assert "assetNumber=5262" in query
+
 def test_TC_AIV_DOM_086_parse_sort_specs_default():
     specs = parse_sort_specs({})
     assert specs == DEFAULT_SORT_SPECS
@@ -110,6 +123,73 @@ def test_TC_AIV_DOM_088_sort_rows_multi_column():
 def test_TC_AIV_DOM_089_sort_spec_label():
     assert sort_spec_label(SortSpec("asset_number", "asc")) == "資産番号（昇順）"
     assert sort_spec_label(SortSpec("tone_label", "desc")) == "変化状況（降順）"
+
+
+def test_TC_AIV_DOM_08B_sort_rows_by_acquisition_date_empty_last():
+    rows = (
+        ReconcileRow(
+            match_status=MatchStatus.MATCHED,
+            row_tone=RowTone.MATCH_CLEAN,
+            status_label="棚卸済み",
+            tone_label="一致",
+            asset_number="1",
+            branch_number="0",
+            site_name="",
+            manufacturer="",
+            model_name="",
+            serial_number="",
+            old_asset_number="",
+            usage_category="",
+            summary="",
+            plate_created="",
+            inventory_operator="",
+            inventory_datetime="",
+            asset_acquisition_date="",
+        ),
+        ReconcileRow(
+            match_status=MatchStatus.MATCHED,
+            row_tone=RowTone.MATCH_CLEAN,
+            status_label="棚卸済み",
+            tone_label="一致",
+            asset_number="2",
+            branch_number="0",
+            site_name="",
+            manufacturer="",
+            model_name="",
+            serial_number="",
+            old_asset_number="",
+            usage_category="",
+            summary="",
+            plate_created="",
+            inventory_operator="",
+            inventory_datetime="",
+            asset_acquisition_date="2026/03/01",
+        ),
+        ReconcileRow(
+            match_status=MatchStatus.MATCHED,
+            row_tone=RowTone.MATCH_CLEAN,
+            status_label="棚卸済み",
+            tone_label="一致",
+            asset_number="3",
+            branch_number="0",
+            site_name="",
+            manufacturer="",
+            model_name="",
+            serial_number="",
+            old_asset_number="",
+            usage_category="",
+            summary="",
+            plate_created="",
+            inventory_operator="",
+            inventory_datetime="",
+            asset_acquisition_date="2025/12/31",
+        ),
+    )
+    asc_rows = sort_rows(rows, (SortSpec("asset_acquisition_date", "asc"),))
+    assert [row.asset_number for row in asc_rows] == ["3", "2", "1"]
+
+    desc_rows = sort_rows(rows, (SortSpec("asset_acquisition_date", "desc"),))
+    assert [row.asset_number for row in desc_rows] == ["2", "3", "1"]
 
 
 def test_TC_AIV_DOM_08A_sort_rows_by_tone_label():

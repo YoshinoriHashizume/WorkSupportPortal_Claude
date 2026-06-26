@@ -79,8 +79,12 @@ def test_notices_can_be_managed_and_shown_on_dashboard(client, user):
     assert notice.body == "本日18時から作業します。"
     assert notice.is_published is True
 
+    notices_page = client.get("/app/management/notices").content.decode("utf-8")
+    assert "portal-menu-page" in notices_page
+
     dashboard = client.get("/app")
     dashboard_html = dashboard.content.decode("utf-8")
+    assert "portal-menu-page" in dashboard_html
     assert "メンテナンス" in dashboard_html
     assert "本日18時から作業します。" in dashboard_html
 
@@ -263,6 +267,20 @@ def test_is_menu_favorited(user):
 
 
 @pytest.mark.django_db
+def test_page_favorite_toggle_context(user):
+    from apps.portal.favorites import page_favorite_toggle_context
+    from apps.portal.models import UserFavoriteMenu
+
+    assert page_favorite_toggle_context(user, "notices") == {
+        "menu_key": "notices",
+        "menu_title": "お知らせ",
+        "is_favorite": False,
+    }
+    UserFavoriteMenu.objects.create(user=user, menu_key="notices", sort_order=0)
+    assert page_favorite_toggle_context(user, "notices")["is_favorite"] is True
+
+
+@pytest.mark.django_db
 def test_parent_menu_cannot_be_favorited(client, user):
     PortalMenuGroupAccess.objects.create(user=user, group_key="production")
     client.force_login(user)
@@ -341,6 +359,9 @@ def test_user_management_shows_user_information(client, user):
     assert response.status_code == 200
     html = response.content.decode("utf-8")
     assert "<h1>ユーザー管理</h1>" in html
+    assert 'class="portal-page-description"' in html
+    assert "登録済みユーザーの情報、権限、利用可能グループを確認できます。" in html
+    assert 'data-menu-key="user-management"' in html
     assert "10001" in html
     assert "橋爪" in html
     assert "良典" in html
@@ -496,6 +517,8 @@ def test_database_viewer_lists_tables_and_rows(client, user):
     assert response.status_code == 200
     html = response.content.decode("utf-8")
     assert "<h1>データベース</h1>" in html
+    assert 'class="portal-page-description"' in html
+    assert 'data-menu-key="database"' in html
     assert 'name="table"' in html
     assert "auth_user" in html
     assert "表示するテーブルを選択してください。" in html
@@ -682,3 +705,5 @@ def test_sidebar_nav_scrolls_when_menu_overflows_viewport():
     assert "padding: 8px 10px 8px 12px" in group_summary_rule
     menu_item_rule = css.split(".sidebar-menu-item a {")[1].split("}")[0]
     assert "padding: 5px 10px" in menu_item_rule
+    foot_rule = css.split(".sidebar-foot {")[1].split("}")[0]
+    assert "flex-shrink: 0" in foot_rule

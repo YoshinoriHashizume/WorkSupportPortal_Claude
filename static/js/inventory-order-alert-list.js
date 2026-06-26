@@ -1,6 +1,5 @@
 (function () {
   const ROW_SELECTOR = ".inventory-order-alert-page .ioa-table tbody tr.ioa-data-row";
-  const MAX_SORT_ROWS = 5;
   const CONFIRMATION_API = "/api/inventory-order-alert/confirmation";
   const CONFIRMATION_MEMO_API = "/api/inventory-order-alert/confirmation/memos";
   const CONFIRMATION_RESET_API = "/api/inventory-order-alert/confirmation/reset";
@@ -76,7 +75,10 @@
     return window.portalCsrfToken || "";
   }
 
-  function getListFilterParams() {
+  function getListFilterParams(listClient) {
+    if (listClient) {
+      return listClient.getListFilterParams();
+    }
     const params = new URLSearchParams(window.location.search);
     return {
       custCodeFilter: params.get("cust_code") || "",
@@ -103,7 +105,7 @@
     return row.dataset.confirmationStatus || "unconfirmed";
   }
 
-  async function saveConfirmation(row, { status }) {
+  async function saveConfirmation(row, { status }, listClient) {
     const response = await fetch(CONFIRMATION_API, {
       method: "PUT",
       headers: {
@@ -114,19 +116,23 @@
         custCode: row.dataset.custCode || "",
         itemCd: row.dataset.itemCd || "",
         status,
-        ...getListFilterParams(),
+        ...getListFilterParams(listClient),
       }),
     });
     const payload = await response.json();
     if (!response.ok || !payload.ok) {
       throw new Error(payload.message || "確認状態の保存に失敗しました。");
     }
-    updateRowConfirmationState(row, payload);
-    updateTableCounts(payload.counts);
+    if (listClient) {
+      listClient.updateRowFromConfirmation(row.dataset.custCode || "", row.dataset.itemCd || "", payload);
+    } else {
+      updateRowConfirmationState(row, payload);
+      updateTableCounts(payload.counts);
+    }
     return payload;
   }
 
-  async function saveConfirmationStatus(select, row) {
+  async function saveConfirmationStatus(select, row, listClient) {
     const previousStatus = getRowConfirmationStatus(row);
     const nextStatus = select.value;
     if (nextStatus === previousStatus) {
@@ -137,7 +143,7 @@
     try {
       await saveConfirmation(row, {
         status: nextStatus,
-      });
+      }, listClient);
     } catch (error) {
       select.value = previousStatus;
       window.alert(error.message || "確認状態の保存に失敗しました。");
@@ -162,18 +168,26 @@
     }
   }
 
-  function initConfirmationStatusSelects() {
-    document.querySelectorAll(".inventory-order-alert-page .ioa-confirmation-status").forEach((select) => {
+  function initConfirmationStatusSelects(listClient) {
+    const tableBody = document.querySelector(".inventory-order-alert-page .ioa-table tbody");
+    if (!tableBody) {
+      return;
+    }
+    tableBody.addEventListener("click", (event) => {
+      if (event.target.closest(".ioa-confirmation-status")) {
+        event.stopPropagation();
+      }
+    });
+    tableBody.addEventListener("change", (event) => {
+      const select = event.target.closest(".ioa-confirmation-status");
+      if (!select) {
+        return;
+      }
       const row = select.closest(ROW_SELECTOR);
       if (!row) {
         return;
       }
-      select.addEventListener("click", (event) => {
-        event.stopPropagation();
-      });
-      select.addEventListener("change", () => {
-        saveConfirmationStatus(select, row);
-      });
+      void saveConfirmationStatus(select, row, listClient);
     });
   }
 
@@ -209,151 +223,34 @@
     });
   }
 
-  function refreshSortRowOrders(container) {
-    container.querySelectorAll(".ioa-sort-row").forEach((row, index) => {
-      const order = row.querySelector(".ioa-sort-row-order");
-      if (order) {
-        order.textContent = String(index + 1);
-      }
-    });
-  }
-
-  function initSortDialog() {
-    const dialog = document.getElementById("ioa-sort-dialog");
-    const openButton = document.querySelector(".inventory-order-alert-page .ioa-sort-open");
-    if (!dialog || !openButton) {
-      return;
-    }
-
-    const form = dialog.querySelector(".ioa-sort-form");
-    const rowsContainer = dialog.querySelector(".ioa-sort-rows");
-    const template = dialog.querySelector("#ioa-sort-row-template");
-    const addButton = dialog.querySelector(".ioa-sort-add");
-    const cancelButton = dialog.querySelector(".ioa-sort-cancel");
-    const sortInput = form.querySelector('input[name="sort"]');
-    const dirInput = form.querySelector('input[name="dir"]');
-    let draggedSortRow = null;
-
-    function bindSortRowDrag(row) {
-      const handle = row.querySelector(".ioa-sort-row-order");
-      if (!handle || handle.dataset.dragBound === "true") {
-        return;
-      }
-      handle.dataset.dragBound = "true";
-      handle.setAttribute("draggable", "true");
-      handle.setAttribute("aria-label", "ドラッグして順序を変更");
-      handle.setAttribute("title", "ドラッグして順序を変更");
-
-      handle.addEventListener("dragstart", (event) => {
-        draggedSortRow = row;
-        row.classList.add("is-dragging");
-        event.dataTransfer.effectAllowed = "move";
-        event.dataTransfer.setData("text/plain", "");
-      });
-
-      handle.addEventListener("dragend", () => {
-        row.classList.remove("is-dragging");
-        draggedSortRow = null;
-        refreshSortRowOrders(rowsContainer);
-      });
-    }
-
-    rowsContainer.addEventListener("dragover", (event) => {
-      if (!draggedSortRow) {
-        return;
-      }
-      const targetRow = event.target.closest(".ioa-sort-row");
-      if (!targetRow || targetRow === draggedSortRow) {
-        return;
-      }
-      event.preventDefault();
-      const rect = targetRow.getBoundingClientRect();
-      const insertAfter = event.clientY > rect.top + rect.height / 2;
-      rowsContainer.insertBefore(draggedSortRow, insertAfter ? targetRow.nextSibling : targetRow);
-    });
-
-    function bindRemoveButton(row) {
-      const removeButton = row.querySelector(".ioa-sort-remove");
-      if (!removeButton) {
-        return;
-      }
-      removeButton.addEventListener("click", () => {
-        const rows = rowsContainer.querySelectorAll(".ioa-sort-row");
-        if (rows.length <= 1) {
-          return;
-        }
-        row.remove();
-        refreshSortRowOrders(rowsContainer);
-      });
-    }
-
-    rowsContainer.querySelectorAll(".ioa-sort-row").forEach((row) => {
-      bindRemoveButton(row);
-      bindSortRowDrag(row);
-    });
-
-    openButton.addEventListener("click", () => {
-      if (typeof dialog.showModal === "function") {
-        dialog.showModal();
-      }
-    });
-
-    cancelButton.addEventListener("click", () => {
-      dialog.close();
-    });
-
-    dialog.addEventListener("click", (event) => {
-      if (event.target === dialog) {
-        dialog.close();
-      }
-    });
-
-    addButton.addEventListener("click", () => {
-      const currentCount = rowsContainer.querySelectorAll(".ioa-sort-row").length;
-      if (currentCount >= MAX_SORT_ROWS || !template) {
-        return;
-      }
-      const fragment = template.content.cloneNode(true);
-      const row = fragment.querySelector(".ioa-sort-row");
-      rowsContainer.appendChild(fragment);
-      bindRemoveButton(row);
-      bindSortRowDrag(row);
-      refreshSortRowOrders(rowsContainer);
-    });
-
-    form.addEventListener("submit", (event) => {
-      const columns = [];
-      const directions = [];
-      rowsContainer.querySelectorAll(".ioa-sort-row").forEach((row) => {
-        const column = row.querySelector(".ioa-sort-column");
-        const direction = row.querySelector(".ioa-sort-direction");
-        if (!column || !direction) {
-          return;
-        }
-        const columnValue = column.value.trim();
-        if (!columnValue || columns.includes(columnValue)) {
-          return;
-        }
-        columns.push(columnValue);
-        directions.push(direction.value === "desc" ? "desc" : "asc");
-      });
-      if (!columns.length) {
-        event.preventDefault();
-        return;
-      }
-      sortInput.value = columns.join(",");
-      dirInput.value = directions.join(",");
+  function initSortDialog(listClient) {
+    window.PortalListSortDialog?.init({
+      dialog: document.getElementById("ioa-sort-dialog"),
+      openButton: document.querySelector(".inventory-order-alert-page .ioa-sort-open"),
+      listClient,
+      maxSortRows: 5,
+      rowClass: "ioa-sort-row",
+      orderClass: "ioa-sort-row-order",
+      columnClass: "ioa-sort-column",
+      directionClass: "ioa-sort-direction",
+      removeClass: "ioa-sort-remove",
+      formClass: "ioa-sort-form",
+      rowsContainerClass: "ioa-sort-rows",
+      template: document.querySelector("#ioa-sort-row-template"),
+      addButtonClass: "ioa-sort-add",
+      cancelButtonClass: "ioa-sort-cancel",
     });
   }
 
   function initLocationDialog() {
     const dialog = document.getElementById("ioa-location-dialog");
-    if (!dialog) {
+    const listTableBody = document.querySelector(".inventory-order-alert-page .ioa-table tbody");
+    if (!dialog || !listTableBody) {
       return;
     }
 
     const meta = dialog.querySelector(".ioa-location-meta");
-    const tableBody = dialog.querySelector(".ioa-location-table-body");
+    const locationTableBody = dialog.querySelector(".ioa-location-table-body");
     const tableWrap = dialog.querySelector(".ioa-location-table-wrap");
     const emptyMessage = dialog.querySelector(".ioa-location-empty");
     const asOfLabel = dialog.querySelector(".ioa-location-as-of");
@@ -471,7 +368,7 @@
     }
 
     async function openLocationDialog(row) {
-      if (!meta || !tableBody || !tableWrap || !emptyMessage || !asOfLabel || !memoInput) {
+      if (!meta || !locationTableBody || !tableWrap || !emptyMessage || !asOfLabel || !memoInput) {
         return;
       }
 
@@ -494,7 +391,7 @@
         stockQty ? ` / 在庫数合計: ${formatStockQty(stockQty)}` : ""
       }`;
 
-      tableBody.innerHTML = "";
+      locationTableBody.innerHTML = "";
       if (locations.length) {
         tableWrap.hidden = false;
         emptyMessage.hidden = true;
@@ -505,7 +402,7 @@
             <td class="mono">${location.wloccd}</td>
             <td class="ioa-location-qty">${formatStockQty(location.stockQty)}</td>
           `;
-          tableBody.append(tableRow);
+          locationTableBody.append(tableRow);
         }
       } else {
         tableWrap.hidden = true;
@@ -584,17 +481,19 @@
       });
     });
 
-    document.querySelectorAll(ROW_SELECTOR).forEach((row) => {
-      row.addEventListener("click", (event) => {
-        if (event.target.closest("select, option, button, a, label, textarea")) {
-          return;
-        }
-        void openLocationDialog(row);
-      });
+    listTableBody.addEventListener("click", (event) => {
+      const row = event.target.closest(ROW_SELECTOR);
+      if (!row) {
+        return;
+      }
+      if (event.target.closest("select, option, button, a, label, textarea")) {
+        return;
+      }
+      void openLocationDialog(row);
     });
   }
 
-  function initConfirmationReset() {
+  function initConfirmationReset(listClient) {
     const resetButton = document.querySelector(".inventory-order-alert-page .ioa-confirmation-reset");
     if (!resetButton) {
       return;
@@ -617,7 +516,7 @@
             "Content-Type": "application/json",
             "X-CSRFToken": getCsrfToken(),
           },
-          body: JSON.stringify(getListFilterParams()),
+          body: JSON.stringify(getListFilterParams(listClient)),
         });
         const payload = await response.json();
         if (!response.ok || !payload.ok) {
@@ -693,18 +592,15 @@
   }
 
   function initInventoryOrderAlertPage() {
+    const listClient = window.IoaListClient?.init?.() || null;
     restoreTableScrollPosition();
     initSlimsImport();
-    initSortDialog();
+    initSortDialog(listClient);
     initAlertRulesDialog();
     initLocationDialog();
-    initConfirmationStatusSelects();
-    initConfirmationReset();
+    initConfirmationStatusSelects(listClient);
+    initConfirmationReset(listClient);
   }
 
-  if (document.readyState === "loading") {
-    document.addEventListener("DOMContentLoaded", initInventoryOrderAlertPage);
-  } else {
-    initInventoryOrderAlertPage();
-  }
+  document.addEventListener("DOMContentLoaded", initInventoryOrderAlertPage);
 })();

@@ -7,6 +7,7 @@ from django.http import HttpRequest, HttpResponse, JsonResponse
 from django.shortcuts import render
 from django.views.decorators.http import require_http_methods
 
+from apps.inventory_order_alert.domain.list_client_data import build_list_client_payload
 from apps.inventory_order_alert.composition import (
     confirmation_memos_usecase,
     export_csv_usecase,
@@ -33,6 +34,15 @@ def list_page(request: HttpRequest) -> HttpResponse:
         query_params=_query_params(request),
         uploaded_csv=uploaded_csv,
         user=request.user,
+    )
+    list_client_payload = (
+        build_list_client_payload(
+            all_rows=context.all_rows,
+            filter_options=context.filter_options,
+            confirmation_status_choices=context.confirmation_status_choices,
+        )
+        if context.has_list_data
+        else None
     )
     return render(
         request,
@@ -67,6 +77,7 @@ def list_page(request: HttpRequest) -> HttpResponse:
             "warning_month_options": context.warning_month_options,
             "can_reset_confirmations": context.can_reset_confirmations,
             "test_data_warning": context.test_data_warning,
+            "list_client_payload": list_client_payload,
         },
     )
 

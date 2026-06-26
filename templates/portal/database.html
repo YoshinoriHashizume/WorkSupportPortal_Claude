@@ -4,8 +4,11 @@
 {% block content %}
 <section class="db-viewer">
   <div class="portal-section-head">
-    <h1>データベース</h1>
-    <p>テーブルを選択して、先頭100件を参照できます。</p>
+    <div class="portal-page-title-row">
+      <h1>データベース</h1>
+      {% include "includes/page_favorite_toggle.html" %}
+      <p class="portal-page-description">テーブルを選択して、先頭100件を参照できます。</p>
+    </div>
   </div>
 
   <form class="db-viewer-form" method="get">

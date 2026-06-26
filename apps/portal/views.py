@@ -11,8 +11,15 @@ from django.shortcuts import redirect, render
 from django.utils import timezone
 from django.views.decorators.http import require_http_methods
 
-from .favorites import can_access_menu_item, favorite_items_for_user, next_sort_order, reorder_favorites
+from .favorites import (
+    can_access_menu_item,
+    favorite_items_for_user,
+    next_sort_order,
+    page_favorite_toggle_context,
+    reorder_favorites,
+)
 from .menu import MENU_BY_KEY, MENU_GROUPS, MENU_ITEMS
+from apps.portal.domain.menu_access import normalize_menu_group_key
 from .models import PortalMenuGroupAccess, PortalNotice, UserAccessRequest, UserFavoriteMenu
 
 
@@ -54,6 +61,7 @@ def database_view_context(request: HttpRequest) -> dict[str, object]:
         "sort_column": "",
         "sort_direction": "asc",
         "error": "",
+        **page_favorite_toggle_context(request.user, "database"),
     }
 
     if not selected_table:
@@ -107,7 +115,8 @@ def access_request_entries() -> list[dict[str, object]]:
         group_names = set(access_request.user.groups.values_list("name", flat=True))
         role = ADMIN_GROUP_NAME if ADMIN_GROUP_NAME in group_names else GENERAL_USER_GROUP_NAME
         selected_menu_group_keys = set(
-            access_request.user.portal_menu_group_accesses.values_list("group_key", flat=True)
+            normalize_menu_group_key(key)
+            for key in access_request.user.portal_menu_group_accesses.values_list("group_key", flat=True)
         )
         if access_request.status == UserAccessRequest.Status.PENDING and not selected_menu_group_keys:
             selected_menu_group_keys = {"company"}
@@ -151,7 +160,12 @@ def user_management_entries(sort_key: str = "username", sort_direction: str = "a
             for access in user.portal_menu_group_accesses.all()
         ]
         role = "管理者" if "管理者" in role_names else "一般ユーザー"
-        selected_menu_group_keys = list(user.portal_menu_group_accesses.values_list("group_key", flat=True))
+        selected_menu_group_keys = list(
+            dict.fromkeys(
+                normalize_menu_group_key(key)
+                for key in user.portal_menu_group_accesses.values_list("group_key", flat=True)
+            )
+        )
         entries.append(
             {
                 "user": user,
@@ -278,6 +292,7 @@ def access_requests(request: HttpRequest) -> HttpResponse:
             "role_groups": Group.objects.filter(name__in=ROLE_GROUP_NAMES).order_by("name"),
             "menu_group_choices": menu_group_choices_in_order(),
             "admin_group_name": ADMIN_GROUP_NAME,
+            **page_favorite_toggle_context(request.user, "access-requests"),
         },
     )
 
@@ -342,6 +357,7 @@ def user_management(request: HttpRequest) -> HttpResponse:
             "sort_direction": sort_direction,
             "role_group_names": ROLE_GROUP_NAMES,
             "menu_group_choices": menu_group_choices_in_order(),
+            **page_favorite_toggle_context(request.user, "user-management"),
         },
     )
 
@@ -380,6 +396,7 @@ def notice_management(request: HttpRequest) -> HttpResponse:
         "portal/notices.html",
         {
             "notices": PortalNotice.objects.order_by("-created_at"),
+            **page_favorite_toggle_context(request.user, "notices"),
         },
     )
 

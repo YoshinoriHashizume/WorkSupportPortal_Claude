@@ -45,3 +45,36 @@ def test_TC_AIV_DOM_072_photo_zoom_dialog():
     template = template_path.read_text(encoding="utf-8")
     assert 'id="aiv-photo-zoom-dialog"' in template
     assert "aiv-photo-zoom-image" in template
+
+
+def test_TC_AIV_DOM_079_asset_number_filter_uses_local_client():
+    client_path = Path(settings.BASE_DIR) / "static" / "js" / "asset-inventory-list-client.js"
+    list_path = Path(settings.BASE_DIR) / "static" / "js" / "asset-inventory-list.js"
+    client_source = client_path.read_text(encoding="utf-8")
+    list_source = list_path.read_text(encoding="utf-8")
+
+    assert "ASSET_NUMBER_DEBOUNCE_MS = 600" in client_source
+    assert "applyFilters" in client_source
+    assert "Core.replaceUrl" in client_source
+    assert "PortalListCore" in client_source
+    assert "requestSubmit" not in client_source
+    assert "initAssetNumberFilter" not in list_source
+    assert "AivListClient?.init()" in list_source
+    assert "PortalListSortDialog" in list_source
+
+
+def test_TC_AIV_DOM_080_asset_inventory_template_loads_portal_list_scripts():
+    template_path = Path(settings.BASE_DIR) / "templates" / "asset_inventory" / "list.html"
+    template = template_path.read_text(encoding="utf-8")
+    assert "portal-list-core.js" in template
+    assert "portal-list-sort-dialog.js" in template
+    assert template.index("portal-list-core.js") < template.index("asset-inventory-list-client.js")
+
+
+def test_TC_AIV_DOM_081_results_card_has_reduced_top_spacing():
+    css_path = Path(settings.BASE_DIR) / "static" / "css" / "app.css"
+    source = css_path.read_text(encoding="utf-8")
+    card_block = source.split(".asset-inventory-page .aiv-results-card {", 1)[1].split("}", 1)[0]
+    assert "padding: 8px 16px 16px;" in card_block
+    inventory_block = source.split(".asset-inventory-page .asset-inventory {", 1)[1].split("}", 1)[0]
+    assert "gap: 6px;" in inventory_block

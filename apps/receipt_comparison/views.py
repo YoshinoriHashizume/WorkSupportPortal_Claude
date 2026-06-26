@@ -82,6 +82,7 @@ def _comparison_page_template_context(request: HttpRequest, context: ComparisonP
             for header in context.sort_headers
         ],
         "comparison_query": context.comparison_query,
+        "search_disclosure_storage_key": f"receipt-comparison-search-{context.type_slug}-v2",
     }
 
 

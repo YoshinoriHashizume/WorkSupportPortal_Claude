@@ -4,10 +4,30 @@ from pathlib import Path
 
 
 JS_PATH = Path(__file__).resolve().parents[1] / "static" / "js" / "inventory-order-alert-list.js"
+CLIENT_JS_PATH = Path(__file__).resolve().parents[1] / "static" / "js" / "inventory-order-alert-list-client.js"
 
 
-def test_inventory_order_alert_list_js_exists():
-    assert JS_PATH.is_file()
+def test_inventory_order_alert_list_client_js_renders_sort_headers_as_links():
+    source = CLIENT_JS_PATH.read_text(encoding="utf-8")
+    assert "window.PortalListCore" in source
+    assert "Core.renderTableHeaders" in source
+    assert 'headerMode: "link"' in source
+    assert 'sortColumnDataAttr: "data-ioa-sort-column"' in source
+    assert "function renderTableHeaders()" not in source
+
+
+def test_inventory_order_alert_list_js_init_location_dialog_has_no_duplicate_table_body():
+    source = JS_PATH.read_text(encoding="utf-8")
+    block = source.split("function initLocationDialog()", 1)[1].split("function initConfirmationReset", 1)[0]
+    assert "const tableBody" not in block
+    assert "const listTableBody" in block
+    assert "const locationTableBody" in block
+
+
+def test_inventory_order_alert_list_js_initializes_on_dom_content_loaded():
+    source = JS_PATH.read_text(encoding="utf-8")
+    assert 'document.addEventListener("DOMContentLoaded", initInventoryOrderAlertPage)' in source
+    assert "IoaListClient?.init" in source
 
 
 def test_inventory_order_alert_list_js_submits_import_on_file_select():
@@ -17,24 +37,25 @@ def test_inventory_order_alert_list_js_submits_import_on_file_select():
     assert "ioa-import-overlay" in source
     assert "form.submit()" in source
     assert "input.files" in source
-    import_block = source.split("function initSlimsImport()", 1)[1].split("function refreshSortRowOrders", 1)[0]
+    import_block = source.split("function initSlimsImport()", 1)[1].split("function initSortDialog", 1)[0]
     assert "input.disabled" not in import_block
 
 
 def test_inventory_order_alert_list_js_initializes_sort_dialog():
     source = JS_PATH.read_text(encoding="utf-8")
     assert "initSortDialog" in source
-    assert "showModal" in source
+    assert "PortalListSortDialog" in source
     assert "ioa-sort-add" in source
-    assert 'input[name="sort"]' in source
-
-
-def test_inventory_order_alert_list_js_supports_sort_row_drag_and_drop():
-    source = JS_PATH.read_text(encoding="utf-8")
-    assert "bindSortRowDrag" in source
-    assert "draggable" in source
     assert "ioa-sort-row-order" in source
-    assert "insertBefore" in source
+
+
+def test_inventory_order_alert_list_js_sort_dialog_is_shared_module():
+    sort_dialog_source = (
+        Path(__file__).resolve().parents[1] / "static" / "js" / "portal-list-sort-dialog.js"
+    ).read_text(encoding="utf-8")
+    assert "bindSortRowDrag" not in source
+    assert "draggable" in sort_dialog_source
+    assert "insertBefore" in sort_dialog_source
 
 
 def test_inventory_order_alert_list_js_initializes_alert_rules_dialog():
@@ -108,6 +129,27 @@ def test_inventory_order_alert_list_js_updates_confirmation_without_reload():
     assert "updateRowConfirmationState" in source
     assert "updateTableCounts" in source
     assert "getListFilterParams" in source
+    assert "IoaListClient" in source
     save_block = source.split("async function saveConfirmationStatus", 1)[1].split("function initConfirmationStatusSelects", 1)[0]
     assert "reloadInventoryOrderAlertPage" not in save_block
     assert "saveConfirmation(row," in save_block
+    assert "updateRowFromConfirmation" in source
+
+
+def test_inventory_order_alert_list_client_js_exists():
+    client_path = Path(__file__).resolve().parents[1] / "static" / "js" / "inventory-order-alert-list-client.js"
+    assert client_path.is_file()
+    source = client_path.read_text(encoding="utf-8")
+    assert "window.IoaListClient" in source
+    assert "ioa-list-data" in source
+    assert "Core.replaceUrl" in source
+    assert "onchange=\"this.form.submit()\"" not in source
+
+
+def test_inventory_order_alert_list_template_loads_portal_list_scripts():
+    template = (
+        Path(__file__).resolve().parents[1] / "templates" / "inventory_order_alert" / "list.html"
+    ).read_text(encoding="utf-8")
+    assert "portal-list-core.js" in template
+    assert "portal-list-sort-dialog.js" in template
+    assert template.index("portal-list-core.js") < template.index("inventory-order-alert-list-client.js")

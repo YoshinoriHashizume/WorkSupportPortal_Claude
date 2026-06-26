@@ -3,8 +3,11 @@
 {% block content %}
 <section class="access-requests">
   <div class="portal-section-head">
-    <h1>承認依頼</h1>
-    <p>初回ログインしたユーザーの利用可否と権限を設定します。</p>
+    <div class="portal-page-title-row">
+      <h1>承認依頼</h1>
+      {% include "includes/page_favorite_toggle.html" %}
+      <p class="portal-page-description">初回ログインしたユーザーの利用可否と権限を設定します。</p>
+    </div>
   </div>
 
   <div class="access-request-list">

@@ -48,6 +48,7 @@ class ListPageTableHeader:
 @dataclass(frozen=True)
 class ListPageContext:
     rows: list[dict[str, object]]
+    all_rows: list[dict[str, object]]
     paginated: PaginatedRows | None
     table_params: TableDisplayParams
     sort_spec_labels: list[str]
@@ -190,6 +191,7 @@ class ListPageUsecase:
 
         return ListPageContext(
             rows=_rows_for_template(paginated.rows) if paginated else [],
+            all_rows=all_rows,
             paginated=paginated,
             table_params=table_params,
             sort_spec_labels=[sort_spec_label(spec) for spec in table_params.sort_specs],

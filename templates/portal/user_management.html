@@ -4,8 +4,11 @@
 {% block content %}
 <section class="user-management">
   <div class="portal-section-head">
-    <h1>ユーザー管理</h1>
-    <p>登録済みユーザーの情報、権限、利用可能グループを確認できます。</p>
+    <div class="portal-page-title-row">
+      <h1>ユーザー管理</h1>
+      {% include "includes/page_favorite_toggle.html" %}
+      <p class="portal-page-description">登録済みユーザーの情報、権限、利用可能グループを確認できます。</p>
+    </div>
   </div>
 
   <div class="db-table-card">

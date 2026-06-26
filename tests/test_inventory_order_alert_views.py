@@ -61,6 +61,20 @@ def _warning_ship_row(**overrides: object) -> dict[str, object]:
 
 
 @pytest.mark.django_db
+def test_list_page_embeds_list_client_payload(client, production_user):
+    import_record = SlimsStockImport.objects.create(file_name="sample.csv", row_count=1)
+    store_summary_snapshot(import_record, [_sample_export_row()], as_of_date=date(2026, 6, 17))
+
+    client.force_login(production_user)
+    html = client.get("/app/production/inventory-order-alert").content.decode("utf-8")
+
+    assert 'id="ioa-list-data"' in html
+    assert '"cust_code": "112"' in html or '"cust_code":"112"' in html
+    assert 'onchange="this.form.submit()"' not in html
+    assert "/static/js/inventory-order-alert-list-client.js" in html
+
+
+@pytest.mark.django_db
 def test_list_page_requires_login(client):
     response = client.get("/app/production/inventory-order-alert")
     assert response.status_code == 302
@@ -115,6 +129,8 @@ def test_list_page_shows_favorite_toggle(client, production_user):
     assert 'data-menu-key="inventory-order-alert"' in html
     assert 'class="favorite-toggle portal-title-favorite"' in html
     assert "在庫発注アラートのお気に入りを切り替え" in html
+    assert 'class="portal-page-description"' in html
+    assert "SLIMS 在庫と基幹入出荷から、仕入先確認が必要な品目を一覧します。" in html
 
 
 @pytest.mark.django_db
@@ -159,6 +175,8 @@ def test_inventory_order_alert_page_uses_viewport_fitted_table_layout():
     assert "body.inventory-order-alert-page .ioa-alert-rules-dialog" in css
     assert ".inventory-order-alert-page .ioa-table th {\n  position: sticky;" in css
     assert "text-align: center;" in css.split(".inventory-order-alert-page .ioa-table th {")[1].split("}")[0]
+    counts_rule = css.split(".inventory-order-alert-page .ioa-table-counts {")[1].split("}")[0]
+    assert "font-size: var(--portal-font-size-caption)" in counts_rule
     assert "max-height: min(62vh, 720px)" not in css
 
 
@@ -328,13 +346,17 @@ def test_list_page_shows_paginated_summary_rows(client, production_user):
     assert 'class="ioa-table-counts-left"' in html
     assert 'class="ioa-table-counts-right"' in html
     assert 'class="ioa-table-counts-right-wrap"' in html
-    assert "確認状態リセット" in html
+    assert "リセット" in html
+    assert "確認状態リセット" not in html
     assert "ioa-confirmation-reset" in html
     assert "重点 21 件 / 警告（出荷あり） 0 件 / 警告（出荷なし） 0 件 / アラート無し 0 件" in html
     assert "全件数:" not in html
     assert "確認済み 0 件 / 確認中 0 件 / 未確認 21 件" in html
     assert "CSV 取込時に Oracle から全件集計し" not in html
     assert 'class="ioa-table-toolbar"' in html
+    sort_open_pos = html.index('class="button-link ioa-sort-open"')
+    sort_button_end = html.index("</button>", sort_open_pos)
+    assert "（" not in html[sort_open_pos:sort_button_end]
     assert 'class="ioa-table-footer"' in html
     assert 'id="ioa-sort-dialog"' in html
     select_pos = html.index('id="ioa-page-size"')
@@ -346,8 +368,8 @@ def test_list_page_shows_paginated_summary_rows(client, production_user):
     assert select_pos < html.index("前へ", footer_pos)
     assert html.index("前へ", footer_pos) < html.index("次へ", footer_pos)
     assert html.index("次へ", footer_pos) < html.index("件目を表示（2 / 2 ページ）", footer_pos)
-    assert "次へ" not in html or "is-disabled" in html
-    assert "前へ" in html
+    next_button_pos = html.index("ioa-pagination-next", footer_pos)
+    assert "disabled" in html[next_button_pos : next_button_pos + 120]
 
 
 @pytest.mark.django_db
@@ -410,7 +432,7 @@ def test_list_page_supports_multi_sort_query(client, production_user):
     tbody = body[tbody_start:tbody_end]
     assert tbody.index("ITEM-C") < tbody.index("ITEM-A") < tbody.index("ITEM-B")
     assert "ioa-sort-open" in html
-    assert "最終入荷日（昇順）" in html
+    assert 'id="ioa-list-data"' in html
     assert "番号をドラッグして順序を変更" in html
 
 
@@ -429,6 +451,7 @@ def test_list_page_shows_filter_panel_with_snapshot_options(client, production_u
 
     assert response.status_code == 200
     assert 'class="ioa-filter-panel"' in html
+    assert "ioa-filter-panel-title" not in html
     assert "担当者コード" in html
     assert ">担当者コード<" in html or "担当者コード</a>" in html or "担当者コード ▲" in html or "担当者コード ▼" in html
     assert "得意先コード" in html
@@ -439,7 +462,10 @@ def test_list_page_shows_filter_panel_with_snapshot_options(client, production_u
     assert STOCK_SUMMARY_HEADING_SUFFIX in html
     assert "一覧（1 件 / 全 2 件）" not in html
     assert "90249-10112" in html
-    assert "ITEM-2" not in html
+    tbody_start = html.index("<tbody>")
+    tbody_end = html.index("</tbody>", tbody_start)
+    tbody = html[tbody_start:tbody_end]
+    assert "ITEM-2" not in tbody
 
 
 @pytest.mark.django_db

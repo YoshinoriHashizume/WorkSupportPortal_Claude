@@ -54,6 +54,7 @@ class ReconcileRow:
     plate_created: str
     inventory_operator: str
     inventory_datetime: str
+    asset_acquisition_date: str = ""
     has_diff: bool = False
     factory_change: bool = False
     css_class: str = ""
@@ -79,6 +80,7 @@ class ListPageResult:
     management_rows: tuple[ManagementRow, ...]
     selected_management_id: str
     rows: tuple[ReconcileRow, ...]
+    all_rows: tuple[ReconcileRow, ...]
     filtered_rows: tuple[ReconcileRow, ...]
     counts: ReconcileCounts
     filtered_counts: ReconcileCounts
@@ -86,6 +88,8 @@ class ListPageResult:
     site_filter: str
     status_filter: str
     plate_filter: str
+    asset_number_filter: str
+    asset_number_options: tuple[str, ...]
     page: int
     page_size: int
     total_pages: int
@@ -118,7 +122,9 @@ MANAGEMENT_FIELDS = (
 ASSET_INVENTORY_TARGET_FIELD = "生産品番⑧コード"
 ASSET_INVENTORY_TARGET_CODE = "1"
 
-ASSET_FIELDS = (
+ASSET_ACQUISITION_DATE_FIELD = "取得日付"
+
+_SHARED_RECORD_FIELDS = (
     "データID",
     "資産番号",
     "資産枝番",
@@ -133,7 +139,9 @@ ASSET_FIELDS = (
     ASSET_INVENTORY_TARGET_FIELD,
 )
 
-INVENTORY_FIELDS = ASSET_FIELDS + (
+ASSET_FIELDS = _SHARED_RECORD_FIELDS[:8] + (ASSET_ACQUISITION_DATE_FIELD,) + _SHARED_RECORD_FIELDS[8:]
+
+INVENTORY_FIELDS = _SHARED_RECORD_FIELDS + (
     "棚卸日時",
     "棚卸実施者",
     "プレート作成",
@@ -156,6 +164,7 @@ DISPLAY_COLUMNS: tuple[tuple[str, str], ...] = (
     ("manufacturer", "メーカー名"),
     ("model_name", "型番"),
     ("serial_number", "シリアルNo."),
+    ("asset_acquisition_date", "取得日付"),
     ("old_asset_number", "旧資産番号"),
     ("usage_category", "使用区分"),
     ("summary", "摘要"),

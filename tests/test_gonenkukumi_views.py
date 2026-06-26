@@ -454,6 +454,8 @@ def test_search_page_uses_gonen_search_body_class(client, user):
     assert "gonen-search-page" in html
     assert 'class="gonen-search"' in html
     assert 'class="portal-section-head gonen-search-head"' in html
+    assert 'class="portal-page-description"' in html
+    assert "得意先品目の内示・受注・出荷・仕入・入荷の推移を検索します。" in html
     assert 'class="gonen-search-body"' in html
     assert 'class="gonen-search-sidebar"' in html
     assert 'class="gonen-setting-form card gonen-search-card"' in html

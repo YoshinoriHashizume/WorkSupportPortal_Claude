@@ -38,6 +38,17 @@ def is_menu_favorited(user: object, menu_key: str) -> bool:
     return favorites_usecase().is_menu_favorited(user, menu_key)
 
 
+def page_favorite_toggle_context(user: object, menu_key: str) -> dict[str, object]:
+    from apps.portal.domain.menu import MENU_BY_KEY
+
+    item = MENU_BY_KEY[menu_key]
+    return {
+        "menu_key": menu_key,
+        "menu_title": item.title,
+        "is_favorite": is_menu_favorited(user, menu_key),
+    }
+
+
 def favorite_keys_for_user(user: object) -> list[str]:
     return favorites_usecase().favorite_keys_for_user(user)
 
@@ -72,6 +83,7 @@ __all__ = [
     "favorite_items_for_user",
     "favorite_keys_for_user",
     "is_menu_favorited",
+    "page_favorite_toggle_context",
     "is_menu_path_active",
     "is_portal_admin",
     "menu_groups_with_items",

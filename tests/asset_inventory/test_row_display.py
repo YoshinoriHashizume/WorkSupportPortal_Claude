@@ -123,3 +123,42 @@ def test_TC_AIV_DOM_056_map_record_tone_labels():
         factory_change=True,
     )
     assert factory_row.tone_label == "拠点変更"
+
+
+def test_asset_acquisition_date_comes_from_asset_data_only():
+    asset_row = {**RECORD, "取得日付": "2026-03-01"}
+    inventory_row = {**RECORD, "取得日付": ""}
+    matched = map_record_to_display(
+        inventory_row,
+        status=MatchStatus.MATCHED,
+        row_tone=RowTone.MATCH_CLEAN,
+        has_diff=False,
+        factory_change=False,
+        asset_row=asset_row,
+        inventory_row=inventory_row,
+    )
+    assert matched.asset_acquisition_date == "2026/03/01"
+
+    inventory_only = map_record_to_display(
+        inventory_row,
+        status=MatchStatus.INVENTORY_ONLY,
+        row_tone=RowTone.NONE,
+        has_diff=False,
+        factory_change=False,
+        inventory_row=inventory_row,
+    )
+    assert inventory_only.asset_acquisition_date == ""
+
+
+def test_asset_acquisition_date_empty_for_inventory_only_row():
+    asset_row = {**RECORD}
+    row = map_record_to_display(
+        asset_row,
+        status=MatchStatus.ASSET_ONLY,
+        row_tone=RowTone.NONE,
+        has_diff=False,
+        factory_change=False,
+        empty_inventory_fields=True,
+        asset_row=asset_row,
+    )
+    assert row.asset_acquisition_date == ""

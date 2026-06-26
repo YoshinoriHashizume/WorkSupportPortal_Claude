@@ -1,5 +1,7 @@
 (function () {
   const STORAGE_KEY = "portal-sidebar-expanded";
+  const SCROLL_STORAGE_KEY = "portal-sidebar-nav-scroll-top";
+  const SCROLL_SAVE_DEBOUNCE_MS = 100;
 
   function loadState() {
     try {
@@ -17,6 +19,51 @@
 
   function saveState(state) {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+  }
+
+  function saveScrollPosition(nav) {
+    sessionStorage.setItem(SCROLL_STORAGE_KEY, String(nav.scrollTop));
+  }
+
+  function restoreScrollPosition(nav) {
+    const saved = sessionStorage.getItem(SCROLL_STORAGE_KEY);
+    if (saved !== null) {
+      nav.scrollTop = Number(saved) || 0;
+      return;
+    }
+    const activeLink = nav.querySelector(".sidebar-menu-item.is-active a");
+    if (activeLink) {
+      activeLink.scrollIntoView({ block: "nearest" });
+    }
+  }
+
+  function restoreScrollAfterLayout(nav) {
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => {
+        restoreScrollPosition(nav);
+      });
+    });
+  }
+
+  function bindScrollPersistence(nav) {
+    let debounceTimer = null;
+    nav.addEventListener("scroll", () => {
+      if (debounceTimer !== null) {
+        window.clearTimeout(debounceTimer);
+      }
+      debounceTimer = window.setTimeout(() => {
+        debounceTimer = null;
+        saveScrollPosition(nav);
+      }, SCROLL_SAVE_DEBOUNCE_MS);
+    });
+
+    nav.addEventListener("click", (event) => {
+      const link = event.target.closest("a[href]");
+      if (!link || !nav.contains(link)) {
+        return;
+      }
+      saveScrollPosition(nav);
+    });
   }
 
   function applyStoredState() {
@@ -65,6 +112,11 @@
     });
   }
 
+  const nav = document.querySelector(".sidebar-nav");
   applyStoredState();
   bindPersistence();
+  if (nav) {
+    bindScrollPersistence(nav);
+    restoreScrollAfterLayout(nav);
+  }
 })();

@@ -39,8 +39,13 @@ def fetch_reconcile_source_data(
     access_key: str,
     management_row: ManagementRow,
 ) -> tuple[list[Record], list[Record], list[Record]]:
-    assets = list_all(access_key, management_row.asset_app_id, ASSET_FIELDS) if management_row.asset_app_id else []
-    assets = filter_inventory_target_assets(assets)
+    assets = (
+        filter_inventory_target_assets(
+            list_all(access_key, management_row.asset_app_id, ASSET_FIELDS),
+        )
+        if management_row.asset_app_id
+        else []
+    )
     inventory = (
         list_all(access_key, management_row.inventory_app_id, INVENTORY_FIELDS)
         if management_row.inventory_app_id

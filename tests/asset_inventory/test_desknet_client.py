@@ -13,6 +13,7 @@ from apps.asset_inventory.infrastructure.desknet.client import (
     normalize_list_response,
     record_field_value,
 )
+from apps.asset_inventory.domain.errors import DesknetApiError
 
 
 def test_TC_AIV_INF_004_appsr_url():
@@ -21,6 +22,10 @@ def test_TC_AIV_INF_004_appsr_url():
 
 def test_record_field_value_extracts_val():
     assert record_field_value({"val": "ABC"}) == "ABC"
+
+
+def test_record_field_value_extracts_date_dict():
+    assert record_field_value({"val": {"year": 2026, "month": 3, "day": 1}}) == "2026-03-01"
 
 
 def test_TC_AIV_INF_009_record_field_value_attachment_url():
@@ -50,6 +55,10 @@ def test_TC_AIV_INF_005_encode_fields_parameter():
 
 def test_TC_AIV_INF_006_extract_api_error_message():
     assert extract_api_error_message({"status": "ng", "errormessage": "権限がありません"}) == "権限がありません"
+
+    with pytest.raises(DesknetApiError) as exc_info:
+        normalize_list_response({"status": "ng", "errormessage": "W:アクセス権がありません。[W10008]"})
+    assert "ポータルの総務権限とは別" in str(exc_info.value)
     assert extract_api_error_message({"status": "ng"}) == "desknet's API エラー"
 
 

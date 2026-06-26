@@ -28,6 +28,7 @@ def build_table_headers(
     status: str,
     site_filter: str,
     plate_filter: str,
+    asset_number_filter: str = "",
 ) -> tuple[TableHeader, ...]:
     sort_index_map = {spec.column: index + 1 for index, spec in enumerate(table_params.sort_specs)}
     headers: list[TableHeader] = []
@@ -47,6 +48,7 @@ def build_table_headers(
                     status=status,
                     site_filter=site_filter,
                     plate_filter=plate_filter,
+                    asset_number_filter=asset_number_filter,
                     sort_specs=single_column_sort_specs(table_params, column),
                     page=1,
                     page_size=table_params.page_size,

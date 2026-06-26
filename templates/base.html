@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>{% block title %}業務支援ポータル{% endblock %}</title>
   {% block extra_head %}{% endblock %}
-  <link rel="stylesheet" href="/static/css/app.css?v=20260625-sidebar-compact">
+  <link rel="stylesheet" href="/static/css/app.css?v=20260625-portal-menu-page">
 </head>
 <body class="{% if user.is_authenticated %}portal-app-page {% endif %}{% block body_class %}{% endblock %}">
   {% if user.is_authenticated %}
@@ -59,12 +59,12 @@
             </details>
           {% endfor %}
         </nav>
+        <div class="sidebar-foot">
+          <p class="sidebar-welcome">{% if user.last_name or user.first_name %}ようこそ、{{ user.last_name }} {{ user.first_name }} さん{% elif user.get_username %}ようこそ、{{ user.get_username }} さん{% endif %}</p>
+          <a class="sidebar-logout" href="/logout">ログアウト</a>
+        </div>
       </aside>
       <div class="portal-main">
-        <header class="topbar">
-          <span>{% if user.last_name or user.first_name %}ようこそ、{{ user.last_name }} {{ user.first_name }} さん{% elif user.get_username %}ようこそ、{{ user.get_username }} さん{% endif %}</span>
-          <a href="/logout">ログアウト</a>
-        </header>
         <main class="layout">
           <section class="content">
   {% else %}
@@ -77,8 +77,9 @@
         </main>
       </div>
     </div>
-    <script src="/static/js/portal-sidebar.js?v=20260615-1300" defer></script>
+    <script src="/static/js/portal-sidebar.js?v=20260627-sidebar-scroll" defer></script>
     <script src="/static/js/portal-favorites.js?v=20260604-1421" defer></script>
+    <script src="/static/js/portal-search-disclosure.js?v=20260625-disclosure-always-open" defer></script>
   {% else %}
     </main>
   {% endif %}

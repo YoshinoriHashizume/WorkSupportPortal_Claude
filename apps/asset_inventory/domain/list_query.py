@@ -11,6 +11,7 @@ def build_list_page_query_string(
     status: str,
     site_filter: str,
     plate_filter: str,
+    asset_number_filter: str = "",
     sort_specs: tuple[SortSpec, ...],
     page: int,
     page_size: int,
@@ -28,4 +29,7 @@ def build_list_page_query_string(
     ]
     if site_filter and site_filter != "all":
         params.append(("site", site_filter))
+    asset_number = (asset_number_filter or "").strip()
+    if asset_number:
+        params.append(("assetNumber", asset_number))
     return urlencode(params)

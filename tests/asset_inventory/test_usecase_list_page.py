@@ -12,6 +12,7 @@ def _list_page_query(**overrides) -> ListPageQuery:
         "status": "all",
         "site_filter": "all",
         "plate_filter": "all",
+        "asset_number_filter": "",
         "table_params": table_overrides
         or TableDisplayParams(sort_specs=DEFAULT_SORT_SPECS, page=1, page_size=DEFAULT_PAGE_SIZE),
     }
@@ -169,3 +170,67 @@ def test_TC_AIV_UC_003_missing_access_key():
     query = _list_page_query()
     result = usecase.execute("", query)
     assert result.error_message is not None
+
+
+RECONCILE_APP_IDS = frozenset({"415", "408", "395"})
+
+
+def _counting_mock_list_all(base_mock):
+    counts = {"reconcile": 0}
+
+    def list_all(access_key: str, app_id: str, fields):
+        if app_id in RECONCILE_APP_IDS:
+            counts["reconcile"] += 1
+        return base_mock(access_key, app_id, fields)
+
+    return list_all, counts
+
+
+def test_TC_AIV_UC_008_session_cache_skips_reconcile_api_on_filter_change():
+    list_all, counts = _counting_mock_list_all(_mock_list_all)
+    usecase = ListPageUsecase(list_all)
+    session: dict = {}
+    usecase.execute("key", _list_page_query(), session=session)
+    assert counts["reconcile"] == len(RECONCILE_APP_IDS)
+    usecase.execute("key", _list_page_query(status="matched"), session=session)
+    assert counts["reconcile"] == len(RECONCILE_APP_IDS)
+
+
+def test_TC_AIV_UC_009_session_cache_refetches_on_management_change():
+    management_two = [
+        *MANAGEMENT,
+        {
+            "データID": "2",
+            "棚卸項目": "2024年",
+            "年度": "2024",
+            "会社マスタ": "394",
+            "拠点マスタ": "395",
+            "資産データ": "415",
+            "棚卸データ": "408",
+        },
+    ]
+
+    def list_all(access_key: str, app_id: str, fields):
+        if app_id == MANAGEMENT_APP_ID:
+            return management_two
+        return _mock_list_all(access_key, app_id, fields)
+
+    list_all_counting, counts = _counting_mock_list_all(list_all)
+    usecase = ListPageUsecase(list_all_counting)
+    session: dict = {}
+    usecase.execute("key", _list_page_query(management_id="1"), session=session)
+    assert counts["reconcile"] == len(RECONCILE_APP_IDS)
+    usecase.execute("key", _list_page_query(management_id="2"), session=session)
+    assert counts["reconcile"] == len(RECONCILE_APP_IDS) * 2
+
+
+def test_TC_AIV_UC_010_session_cache_cleared_when_management_unselected():
+    from apps.asset_inventory.domain.reconcile_cache import SESSION_KEY
+
+    list_all, _counts = _counting_mock_list_all(_mock_list_all)
+    usecase = ListPageUsecase(list_all)
+    session: dict = {}
+    usecase.execute("key", _list_page_query(), session=session)
+    assert SESSION_KEY in session
+    usecase.execute("key", _list_page_query(management_id=""), session=session)
+    assert SESSION_KEY not in session

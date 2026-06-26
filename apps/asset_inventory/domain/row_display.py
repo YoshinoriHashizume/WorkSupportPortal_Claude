@@ -1,8 +1,10 @@
 from __future__ import annotations
 
+from apps.asset_inventory.domain.dates import format_asset_acquisition_date_display
 from apps.asset_inventory.domain.plate_display import format_plate_created
 from apps.asset_inventory.domain.row_detail import build_field_comparisons
 from apps.asset_inventory.domain.ports import (
+    ASSET_ACQUISITION_DATE_FIELD,
     MatchStatus,
     RowTone,
     ROW_TONE_CSS,
@@ -51,6 +53,9 @@ def map_record_to_display(
     compare_inventory = inventory_row if inventory_row is not None else (
         source if status in (MatchStatus.MATCHED, MatchStatus.INVENTORY_ONLY) else None
     )
+    acquisition_source = asset_row if asset_row is not None else (
+        source if status == MatchStatus.ASSET_ONLY else {}
+    )
     field_comparisons = build_field_comparisons(compare_asset, compare_inventory)
     return ReconcileRow(
         match_status=status,
@@ -63,6 +68,9 @@ def map_record_to_display(
         manufacturer=source.get("メーカー", ""),
         model_name=source.get("管理者名称", ""),
         serial_number=source.get("型番", ""),
+        asset_acquisition_date=format_asset_acquisition_date_display(
+            acquisition_source.get(ASSET_ACQUISITION_DATE_FIELD, ""),
+        ),
         old_asset_number=source.get("旧資産番号コード", ""),
         usage_category=source.get("使用区分", ""),
         summary=source.get("摘要", ""),

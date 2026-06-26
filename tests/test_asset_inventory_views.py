@@ -62,6 +62,7 @@ def _sample_list_result() -> ListPageResult:
         management_rows=(ManagementRow("1", "2025年", "2025", "", "", "415", "408"),),
         selected_management_id="1",
         rows=(row,),
+        all_rows=(row,),
         filtered_rows=(row,),
         counts=counts,
         filtered_counts=counts,
@@ -69,6 +70,8 @@ def _sample_list_result() -> ListPageResult:
         site_filter="all",
         status_filter="all",
         plate_filter="all",
+        asset_number_filter="",
+        asset_number_options=(),
         page=1,
         page_size=50,
         total_pages=1,
@@ -99,6 +102,7 @@ def _unselected_list_result() -> ListPageResult:
         management_rows=(ManagementRow("1", "2025年", "2025", "", "", "415", "408"),),
         selected_management_id="",
         rows=(),
+        all_rows=(),
         filtered_rows=(),
         counts=ReconcileCounts(),
         filtered_counts=ReconcileCounts(),
@@ -106,6 +110,8 @@ def _unselected_list_result() -> ListPageResult:
         site_filter="all",
         status_filter="all",
         plate_filter="all",
+        asset_number_filter="",
+        asset_number_options=(),
         page=1,
         page_size=50,
         total_pages=1,
@@ -125,7 +131,7 @@ def test_TC_AIV_API_007_unselected_shows_results_panel(client, general_affairs_u
         lambda: type(
             "U",
             (),
-            {"execute": lambda self, access_key, query: _unselected_list_result()},
+            {"execute": lambda self, access_key, query, session=None: _unselected_list_result()},
         )(),
     )
 
@@ -151,7 +157,7 @@ def test_TC_AIV_API_003_general_affairs_user_ok(client, general_affairs_user, mo
         lambda: type(
             "U",
             (),
-            {"execute": lambda self, access_key, query: _sample_list_result()},
+            {"execute": lambda self, access_key, query, session=None: _sample_list_result()},
         )(),
     )
 
@@ -159,7 +165,7 @@ def test_TC_AIV_API_003_general_affairs_user_ok(client, general_affairs_user, mo
     assert response.status_code == 200
     html = response.content.decode("utf-8")
     assert "資産棚卸結果" in html
-    assert "<label>棚卸結果" in html
+    assert 'class="aiv-filter-field-label"' in html
     assert "変化状況" in html
     assert "突合結果" not in html
     assert 'class="portal-filter-select' in html
@@ -170,6 +176,7 @@ def test_TC_AIV_API_003_general_affairs_user_ok(client, general_affairs_user, mo
     assert "<label>棚卸" in html
     assert "2025年度" in html
     assert "資産台帳と棚卸データを突合し、棚卸結果を表示します。" in html
+    assert 'class="portal-page-description"' in html
     assert 'id="aiv-row-color-dialog"' in html
     assert 'id="aiv-row-detail-dialog"' in html
     assert 'id="aiv-photo-zoom-dialog"' in html
@@ -177,25 +184,53 @@ def test_TC_AIV_API_003_general_affairs_user_ok(client, general_affairs_user, mo
     assert 'class="aiv-row-detail-compare-col-label"' in html
     assert 'class="aiv-row-detail-compare-col-asset"' in html
     assert 'class="aiv-row-detail-compare-col-inventory"' in html
-    assert 'id="aiv-row-details-data"' in html
     import json
     import re
 
     script_match = re.search(
-        r'<script id="aiv-row-details-data" type="application/json">(.*?)</script>',
+        r'<script id="aiv-list-data" type="application/json">(.*?)</script>',
         html,
         re.DOTALL,
     )
     assert script_match is not None
-    details = json.loads(script_match.group(1))
-    assert isinstance(details, dict)
-    assert "1|0" in details
+    payload = json.loads(script_match.group(1))
+    assert isinstance(payload, dict)
+    assert payload.get("managementId") == "1"
+    assert "rowDetails" in payload
     assert "棚卸結果" in html and "差異" in html and "行の色" in html
     assert "緑: 一致" not in html
     assert "aiv-sort-priority" in html
     assert "プレート作成" in html
     assert '<select name="site"' in html
-    assert 'onchange="this.form.submit()"' in html
+    assert 'name="assetNumber"' in html
+    assert 'list="aiv-asset-number-options"' in html
+    assert "aiv-filter-asset-number" in html
+    assert 'id="aiv-list-data"' in html
+    assert 'onchange="this.form.submit()"' not in html.split("aiv-filter-panel")[1].split("aiv-table-toolbar")[0]
+
+
+@pytest.mark.django_db
+def test_TC_AIV_API_010_list_client_payload_embedded(client, general_affairs_user, monkeypatch):
+    client.force_login(general_affairs_user)
+    session = client.session
+    session["desknet_access_key"] = "test-key"
+    session.save()
+
+    monkeypatch.setattr(
+        "apps.asset_inventory.views.list_page_usecase",
+        lambda: type(
+            "U",
+            (),
+            {"execute": lambda self, access_key, query, session=None: _sample_list_result()},
+        )(),
+    )
+
+    response = client.get("/app/general-affairs/asset-inventory?managementId=1")
+    assert response.status_code == 200
+    html = response.content.decode("utf-8")
+    assert 'id="aiv-list-data"' in html
+    assert "exportCsvPath" in html
+    assert "rowDetails" in html
 
 
 @pytest.mark.django_db
@@ -231,7 +266,12 @@ def test_TC_AIV_API_004_export_csv_bom(client, general_affairs_user, monkeypatch
         lambda: type(
             "U",
             (),
-            {"execute_safe": lambda self, access_key, query: (render_export_csv((row,)), None)},
+            {
+                "execute_safe": lambda self, access_key, query, session=None: (
+                    render_export_csv((row,)),
+                    None,
+                )
+            },
         )(),
     )
 

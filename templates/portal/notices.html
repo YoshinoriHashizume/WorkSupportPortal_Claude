@@ -1,10 +1,14 @@
 {% extends "base.html" %}
 {% block title %}お知らせ{% endblock %}
+{% block body_class %}portal-menu-page{% endblock %}
 {% block content %}
 <section class="notice-management">
   <div class="portal-section-head">
-    <h1>お知らせ</h1>
-    <p>ポータルに表示するお知らせを追加・編集・削除できます。</p>
+    <div class="portal-page-title-row">
+      <h1>お知らせ</h1>
+      {% include "includes/page_favorite_toggle.html" %}
+      <p class="portal-page-description">ポータルに表示するお知らせを追加・編集・削除できます。</p>
+    </div>
   </div>
 
   <form class="notice-form card" method="post">

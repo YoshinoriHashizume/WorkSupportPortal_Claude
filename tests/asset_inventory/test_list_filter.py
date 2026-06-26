@@ -2,12 +2,21 @@ from __future__ import annotations
 
 from apps.asset_inventory.domain.list_filter import (
     apply_filters,
+    extract_asset_numbers_from_rows,
     extract_site_names_from_assets,
+    filter_asset_number_options,
+    matches_asset_number_filter,
 )
 from apps.asset_inventory.domain.ports import MatchStatus, ReconcileRow, RowTone
 
 
-def _row(site: str, status: MatchStatus, plate_code: str = "", plate_label: str = "") -> ReconcileRow:
+def _row(
+    site: str,
+    status: MatchStatus,
+    plate_code: str = "",
+    plate_label: str = "",
+    asset_number: str = "1",
+) -> ReconcileRow:
     labels = {
         MatchStatus.MATCHED: "棚卸済み",
         MatchStatus.ASSET_ONLY: "未棚卸",
@@ -18,7 +27,7 @@ def _row(site: str, status: MatchStatus, plate_code: str = "", plate_label: str 
         row_tone=RowTone.NONE,
         status_label=labels[status],
         tone_label="未突合",
-        asset_number="1",
+        asset_number=asset_number,
         branch_number="0",
         site_name=site,
         manufacturer="",
@@ -76,3 +85,51 @@ def test_TC_AIV_DOM_075_plate_filter():
     filtered = apply_filters(rows, status_filter="all", site_filter="all", plate_filter="1")
     assert len(filtered) == 1
     assert filtered[0].plate_created_code == "1"
+
+
+def test_TC_AIV_DOM_076_asset_number_filter_prefix_match():
+    rows = (
+        _row("宮崎工場", MatchStatus.MATCHED, asset_number="5262"),
+        _row("本社", MatchStatus.MATCHED, asset_number="3043"),
+    )
+    filtered = apply_filters(rows, status_filter="all", site_filter="all", plate_filter="all", asset_number_filter="52")
+    assert len(filtered) == 1
+    assert filtered[0].asset_number == "5262"
+
+    filtered_middle = apply_filters(
+        rows, status_filter="all", site_filter="all", plate_filter="all", asset_number_filter="26"
+    )
+    assert len(filtered_middle) == 0
+
+
+def test_TC_AIV_DOM_077_asset_number_filter_l_prefix_normalized():
+    rows = (_row("宮崎工場", MatchStatus.MATCHED, asset_number="L5262"),)
+    assert matches_asset_number_filter("L5262", "5262") is True
+    assert matches_asset_number_filter("L5262", "52") is True
+    filtered = apply_filters(rows, status_filter="all", site_filter="all", plate_filter="all", asset_number_filter="5262")
+    assert len(filtered) == 1
+
+
+def test_TC_AIV_DOM_078_extract_asset_numbers_from_rows():
+    rows = (
+        _row("宮崎工場", MatchStatus.MATCHED, asset_number="2"),
+        _row("本社", MatchStatus.MATCHED, asset_number="1"),
+        _row("本社", MatchStatus.MATCHED, asset_number="1"),
+    )
+    assert extract_asset_numbers_from_rows(rows) == ("1", "2")
+
+
+def test_TC_AIV_DOM_078a_extract_asset_numbers_normalizes_l_prefix():
+    rows = (
+        _row("宮崎工場", MatchStatus.MATCHED, asset_number="L5262"),
+        _row("本社", MatchStatus.MATCHED, asset_number="5262"),
+        _row("本社", MatchStatus.INVENTORY_ONLY, asset_number="L9999"),
+    )
+    assert extract_asset_numbers_from_rows(rows) == ("5262", "9999")
+
+
+def test_TC_AIV_DOM_078b_filter_asset_number_options_prefix_l_normalized():
+    options = ("1", "5262", "9999")
+    assert filter_asset_number_options(options, "52") == ("5262",)
+    assert filter_asset_number_options(options, "L52") == ("5262",)
+    assert filter_asset_number_options(options, "") == options

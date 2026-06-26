@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from apps.asset_inventory.domain.list_filter import apply_filters, count_rows, extract_site_names_from_assets
+from apps.asset_inventory.domain.list_filter import apply_filters, count_rows
 from apps.asset_inventory.domain.ports import (
     DEFAULT_PAGE_SIZE,
     PAGE_SIZE_OPTIONS,
@@ -11,7 +11,8 @@ from apps.asset_inventory.domain.ports import (
     ListPageResult,
     ManagementRow,
 )
-from apps.asset_inventory.domain.reconcile import reconcile_records
+from apps.asset_inventory.domain.reconcile_cache import clear_reconcile_cache
+from apps.asset_inventory.domain.reconcile_data import load_reconciled_data
 from apps.asset_inventory.domain.table_display import (
     DEFAULT_SORT_SPECS,
     TableDisplayParams,
@@ -19,10 +20,7 @@ from apps.asset_inventory.domain.table_display import (
     parse_table_display_params,
     sort_rows,
 )
-from apps.asset_inventory.domain.desknet_data import (
-    fetch_reconcile_source_data,
-    list_management_rows,
-)
+from apps.asset_inventory.domain.desknet_data import list_management_rows
 from apps.asset_inventory.domain.errors import DesknetAccessKeyMissingError, DesknetApiError
 
 
@@ -32,6 +30,7 @@ class ListPageQuery:
     status: str
     site_filter: str
     plate_filter: str
+    asset_number_filter: str
     table_params: TableDisplayParams
 
 
@@ -48,6 +47,7 @@ def parse_list_page_query(params: dict[str, str], sites: list[str] | None = None
         status=(params.get("status") or "all").strip() or "all",
         site_filter=site_filter,
         plate_filter=plate_filter,
+        asset_number_filter=(params.get("assetNumber") or "").strip(),
         table_params=parse_table_display_params(params),
     )
 
@@ -56,7 +56,7 @@ class ListPageUsecase:
     def __init__(self, list_all: ListAllRecordsFn) -> None:
         self._list_all = list_all
 
-    def execute(self, access_key: str, query: ListPageQuery) -> ListPageResult:
+    def execute(self, access_key: str, query: ListPageQuery, session: dict | None = None) -> ListPageResult:
         if not access_key:
             return _empty_result(error_message="desknet's のアクセスキーがありません。再ログインしてください。")
 
@@ -71,29 +71,41 @@ class ListPageUsecase:
             return _empty_result(management_rows=(), error_message="棚卸データ管理が登録されていません。")
 
         if not query.management_id:
+            if session is not None:
+                clear_reconcile_cache(session)
             return _management_only_result(management_rows)
 
         selected = _select_management_row(management_rows, query.management_id)
         if selected is None:
+            if session is not None:
+                clear_reconcile_cache(session)
             return _management_only_result(
                 management_rows,
                 error_message="選択した棚卸が見つかりません。",
             )
 
         try:
-            assets, inventory, sites = fetch_reconcile_source_data(self._list_all, access_key, selected)
+            reconciled = load_reconciled_data(
+                self._list_all,
+                access_key,
+                selected,
+                session=session,
+            )
         except DesknetAccessKeyMissingError as exc:
             return _empty_result(management_rows=management_rows, error_message=str(exc))
         except DesknetApiError as exc:
             return _empty_result(management_rows=management_rows, error_message=str(exc))
 
-        all_rows, counts = reconcile_records(assets, inventory, sites)
-        site_options = extract_site_names_from_assets(assets)
+        all_rows = reconciled.rows
+        counts = reconciled.counts
+        site_options = reconciled.site_options
+        asset_number_options = reconciled.asset_number_options
         filtered = apply_filters(
             all_rows,
             status_filter=query.status,
             site_filter=query.site_filter,
             plate_filter=query.plate_filter,
+            asset_number_filter=query.asset_number_filter,
         )
         filtered_counts = count_rows(filtered)
         table_params = query.table_params
@@ -104,13 +116,16 @@ class ListPageUsecase:
             management_rows=management_rows,
             selected_management_id=selected.data_id,
             rows=paginated.rows,
+            all_rows=all_rows,
             filtered_rows=sorted_rows,
             counts=counts,
             filtered_counts=filtered_counts,
             site_options=site_options,
+            asset_number_options=asset_number_options,
             site_filter=query.site_filter,
             status_filter=query.status,
             plate_filter=query.plate_filter,
+            asset_number_filter=query.asset_number_filter,
             page=paginated.page,
             page_size=paginated.page_size,
             total_pages=paginated.total_pages,
@@ -140,13 +155,16 @@ def _management_only_result(
         management_rows=management_rows,
         selected_management_id="",
         rows=(),
+        all_rows=(),
         filtered_rows=(),
         counts=count_rows(()),
         filtered_counts=count_rows(()),
         site_options=(),
+        asset_number_options=(),
         site_filter="all",
         status_filter="all",
         plate_filter="all",
+        asset_number_filter="",
         page=1,
         page_size=DEFAULT_PAGE_SIZE,
         total_pages=1,

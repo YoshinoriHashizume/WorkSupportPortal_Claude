@@ -7,6 +7,7 @@
   <div class="portal-page-title-row">
     <h1>在庫発注アラート</h1>
     {% include "includes/page_favorite_toggle.html" with menu_key="inventory-order-alert" menu_title="在庫発注アラート" is_favorite=is_inventory_order_alert_favorite %}
+    <p class="portal-page-description">SLIMS 在庫と基幹入出荷から、仕入先確認が必要な品目を一覧します。</p>
   </div>
 </div>
 
@@ -61,19 +62,20 @@
   {% endif %}
 
   {% if has_list_data %}
-  <form method="get" class="ioa-filter-panel">
-    <h3 class="ioa-filter-panel-title">フィルター</h3>
+  <div class="ioa-filter-panel">
     <div class="ioa-filter-panel-fields">
-      <label>担当者コード
-        <select name="cust_chrg_psn_cd" class="ioa-filter-select" onchange="this.form.submit()">
+      <label class="ioa-filter-field">
+        <span class="ioa-filter-field-label">担当者コード</span>
+        <select name="cust_chrg_psn_cd" class="ioa-filter-select ioa-filter-control">
           <option value="">すべて</option>
           {% for option in filter_options.cust_chrg_psn_options %}
             <option value="{{ option.value }}" {% if list_filter.cust_chrg_psn_cd == option.value %}selected{% endif %}>{{ option.label }}</option>
           {% endfor %}
         </select>
       </label>
-      <label>得意先コード
-        <select name="cust_code" class="ioa-filter-select" onchange="this.form.submit()">
+      <label class="ioa-filter-field">
+        <span class="ioa-filter-field-label">得意先コード</span>
+        <select name="cust_code" class="ioa-filter-select ioa-filter-control">
           <option value="">すべて</option>
           {% for option in filter_options.cust_options %}
             <option value="{{ option.value }}" {% if list_filter.cust_code == option.value %}selected{% endif %}>{{ option.label }}</option>
@@ -81,21 +83,17 @@
         </select>
       </label>
     </div>
-    <input type="hidden" name="sort" value="{{ table_params.sort_param }}">
-    <input type="hidden" name="dir" value="{{ table_params.dir_param }}">
-    <input type="hidden" name="page" value="1">
-    <input type="hidden" name="page_size" value="{{ table_params.page_size }}">
-  </form>
+  </div>
 
   <div class="ioa-table-toolbar">
     <button type="button" class="button-link ioa-sort-open" aria-haspopup="dialog" aria-controls="ioa-sort-dialog">
-      並び替え{% if sort_spec_labels %}（{{ sort_spec_labels|join:" → " }}）{% endif %}
+      並び替え
     </button>
     <div class="ioa-table-counts">
       <p class="ioa-table-counts-left">重点 {{ counts.critical }} 件 / 警告（出荷あり） {{ counts.warning_ship }} 件 / 警告（出荷なし） {{ counts.warning_incoming }} 件 / アラート無し {{ counts.alert_none }} 件</p>
       <div class="ioa-table-counts-right-wrap">
         <p class="ioa-table-counts-right">確認済み {{ counts.confirmed }} 件 / 確認中 {{ counts.in_progress }} 件 / 未確認 {{ counts.unconfirmed }} 件</p>
-        <button type="button" class="button-link ioa-confirmation-reset" {% if not can_reset_confirmations %}disabled{% endif %}>確認状態リセット</button>
+        <button type="button" class="button-link ioa-confirmation-reset" {% if not can_reset_confirmations %}disabled{% endif %}>リセット</button>
       </div>
     </div>
   </div>
@@ -147,29 +145,17 @@
     </table>
   </div>
 
-  <form method="get" class="ioa-table-footer">
-    <input type="hidden" name="sort" value="{{ table_params.sort_param }}">
-    <input type="hidden" name="dir" value="{{ table_params.dir_param }}">
-    {% if list_filter.cust_code %}<input type="hidden" name="cust_code" value="{{ list_filter.cust_code }}">{% endif %}
-    {% if list_filter.cust_chrg_psn_cd %}<input type="hidden" name="cust_chrg_psn_cd" value="{{ list_filter.cust_chrg_psn_cd }}">{% endif %}
+  <form method="get" class="ioa-table-footer"{% if not paginated.total_count %} hidden{% endif %}>
     <div class="ioa-table-footer-left">
       <label class="ioa-page-size-label" for="ioa-page-size">表示件数</label>
-      <select id="ioa-page-size" name="page_size" class="ioa-page-size-select" onchange="this.form.submit()">
+      <select id="ioa-page-size" name="page_size" class="ioa-page-size-select">
         {% for size in page_size_options %}
           <option value="{{ size }}" {% if table_params.page_size == size %}selected{% endif %}>{{ size }} 件</option>
         {% endfor %}
       </select>
       <nav class="ioa-pagination" aria-label="一覧ページ移動">
-        {% if paginated.has_previous %}
-          <a class="button-link" href="{{ prev_href }}">前へ</a>
-        {% else %}
-          <span class="button-link is-disabled">前へ</span>
-        {% endif %}
-        {% if paginated.has_next %}
-          <a class="button-link" href="{{ next_href }}">次へ</a>
-        {% else %}
-          <span class="button-link is-disabled">次へ</span>
-        {% endif %}
+        <button type="button" class="button-link ioa-pagination-prev"{% if not paginated.has_previous %} disabled{% endif %}>前へ</button>
+        <button type="button" class="button-link ioa-pagination-next"{% if not paginated.has_next %} disabled{% endif %}>次へ</button>
       </nav>
       {% if paginated.total_count %}
         <p class="muted ioa-table-range">{{ paginated.start_index }}–{{ paginated.end_index }} 件目を表示（{{ paginated.page }} / {{ paginated.total_pages }} ページ）</p>
@@ -178,7 +164,7 @@
   </form>
 
   <dialog id="ioa-sort-dialog" class="ioa-sort-dialog">
-    <form method="get" class="ioa-sort-form">
+    <form class="ioa-sort-form">
       <h3 class="ioa-sort-dialog-title">並び替え</h3>
       <p class="ioa-sort-dialog-help muted">上から順に優先されます（最大 5 条件）。番号をドラッグして順序を変更できます。</p>
       <div class="ioa-sort-rows">
@@ -205,12 +191,6 @@
           <button type="submit" class="button-link">適用</button>
         </div>
       </div>
-      <input type="hidden" name="sort" value="{{ table_params.sort_param }}">
-      <input type="hidden" name="dir" value="{{ table_params.dir_param }}">
-      <input type="hidden" name="page" value="1">
-      <input type="hidden" name="page_size" value="{{ table_params.page_size }}">
-      {% if list_filter.cust_code %}<input type="hidden" name="cust_code" value="{{ list_filter.cust_code }}">{% endif %}
-      {% if list_filter.cust_chrg_psn_cd %}<input type="hidden" name="cust_chrg_psn_cd" value="{{ list_filter.cust_chrg_psn_cd }}">{% endif %}
     </form>
     <template id="ioa-sort-row-template">
       <div class="ioa-sort-row">
@@ -230,6 +210,10 @@
   </dialog>
   {% endif %}
 </section>
+
+{% if list_client_payload %}
+  {{ list_client_payload|json_script:"ioa-list-data" }}
+{% endif %}
 
 <div id="ioa-import-overlay" class="ioa-import-overlay" hidden aria-live="polite" aria-busy="false">
   <div class="ioa-import-spinner" aria-hidden="true"></div>
@@ -351,5 +335,8 @@
     </div>
   </div>
 </dialog>
-<script src="/static/js/inventory-order-alert-list.js?v=20260619-1300" defer></script>
+<script src="/static/js/portal-list-core.js?v=20260627-portal-list" defer></script>
+<script src="/static/js/portal-list-sort-dialog.js?v=20260627-portal-list" defer></script>
+<script src="/static/js/inventory-order-alert-list-client.js?v=20260627-portal-list" defer></script>
+<script src="/static/js/inventory-order-alert-list.js?v=20260627-portal-list" defer></script>
 {% endblock %}

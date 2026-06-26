@@ -4,6 +4,7 @@ import math
 from dataclasses import dataclass
 from urllib.parse import urlencode
 
+from apps.asset_inventory.domain.dates import parse_asset_acquisition_date
 from apps.asset_inventory.domain.ports import (
     DEFAULT_PAGE_SIZE,
     MatchStatus,
@@ -178,6 +179,20 @@ def _sort_value(row: ReconcileRow, column: str) -> object:
     return (value == "", str(value).lower())
 
 
+def _sort_rows_by_acquisition_date(
+    rows: list[ReconcileRow],
+    *,
+    reverse: bool,
+) -> list[ReconcileRow]:
+    dated_rows = [row for row in rows if parse_asset_acquisition_date(row.asset_acquisition_date)]
+    empty_rows = [row for row in rows if not parse_asset_acquisition_date(row.asset_acquisition_date)]
+    dated_rows.sort(
+        key=lambda row: parse_asset_acquisition_date(row.asset_acquisition_date) or "",
+        reverse=reverse,
+    )
+    return dated_rows + empty_rows
+
+
 def sort_rows(
     rows: tuple[ReconcileRow, ...],
     sort_specs: tuple[SortSpec, ...],
@@ -187,6 +202,9 @@ def sort_rows(
     sorted_rows = list(rows)
     for spec in reversed(sort_specs):
         reverse = spec.direction == "desc"
+        if spec.column == "asset_acquisition_date":
+            sorted_rows = _sort_rows_by_acquisition_date(sorted_rows, reverse=reverse)
+            continue
         sorted_rows.sort(key=lambda row: _sort_value(row, spec.column), reverse=reverse)
     return tuple(sorted_rows)
 

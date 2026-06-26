@@ -86,9 +86,6 @@ def build_row_detail_payload(
         for item in row.field_comparisons
     ]
     return {
-        "title": f"{row.asset_number} / {row.branch_number}",
-        "status_label": row.status_label,
-        "tone_label": row.tone_label,
         "photos": photos,
         "field_comparisons": field_comparisons,
     }

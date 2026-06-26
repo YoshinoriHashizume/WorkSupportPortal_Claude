@@ -4,37 +4,37 @@
 {% block content %}
 <section class="receipt-comparison{% if results_panel_active %} receipt-comparison--results-panel{% endif %}">
   <div class="portal-section-head receipt-head">
-    <div>
-      <div class="portal-page-title-row">
-        <h1>検収書比較（{{ comparison_type_page_label }}）</h1>
-        {% include "includes/page_favorite_toggle.html" with menu_key=favorite_menu_key menu_title=favorite_menu_title is_favorite=is_comparison_favorite %}
-      </div>
-      <p>取引先受領書と MARI のデータを比較します。</p>
+    <div class="portal-page-title-row">
+      <h1>検収書比較（{{ comparison_type_page_label }}）</h1>
+      {% include "includes/page_favorite_toggle.html" with menu_key=favorite_menu_key menu_title=favorite_menu_title is_favorite=is_comparison_favorite %}
+      <p class="portal-page-description">取引先受領書と MARI のデータを比較します。</p>
     </div>
     {% if show_settings %}
       <a class="button secondary-button" href="{% url 'receipt_comparison:settings' %}?type={{ type_slug }}">設定</a>
     {% endif %}
   </div>
 
-  <form class="receipt-filter card" method="get">
-    <input type="hidden" name="type" value="{{ type_slug }}">
-    <input type="hidden" name="display" value="1">
-    <label>得意先
-      <select name="supplier_id" required>
-        <option value="">選択してください</option>
-        {% for item in suppliers %}
-          <option value="{{ item.id }}" {% if supplier and item.id == supplier.id %}selected{% endif %}>{{ item.primary_code }} - {{ item.name }}</option>
-        {% endfor %}
-      </select>
-    </label>
-    <label>開始日
-      <input type="date" name="start_date" value="{{ start_date }}" required>
-    </label>
-    <label>終了日
-      <input type="date" name="end_date" value="{{ end_date }}" required>
-    </label>
-    <button type="submit">表示</button>
-  </form>
+  {% include "includes/portal_search_disclosure_open.html" with disclosure_id="receipt-comparison-search-disclosure" storage_key=search_disclosure_storage_key %}
+    <form class="receipt-filter" method="get">
+      <input type="hidden" name="type" value="{{ type_slug }}">
+      <input type="hidden" name="display" value="1">
+      <label>得意先
+        <select name="supplier_id" required>
+          <option value="">選択してください</option>
+          {% for item in suppliers %}
+            <option value="{{ item.id }}" {% if supplier and item.id == supplier.id %}selected{% endif %}>{{ item.primary_code }} - {{ item.name }}</option>
+          {% endfor %}
+        </select>
+      </label>
+      <label>開始日
+        <input type="date" name="start_date" value="{{ start_date }}" required>
+      </label>
+      <label>終了日
+        <input type="date" name="end_date" value="{{ end_date }}" required>
+      </label>
+      <button type="submit">表示</button>
+    </form>
+  {% include "includes/portal_search_disclosure_close.html" %}
 
   {% if supplier and results_panel_active %}
     <form id="receipt-results-compare-form" class="receipt-results-compare-form" method="post" enctype="multipart/form-data">

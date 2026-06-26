@@ -6,21 +6,36 @@ from django.http import HttpRequest, HttpResponse, HttpResponseForbidden
 from django.shortcuts import render
 from django.urls import reverse
 
+from apps.identity.domain.errors import DesknetAuthError
+
 from apps.asset_inventory.composition import export_csv_usecase, list_page_usecase
 from apps.asset_inventory.domain.attachment_proxy import fetch_attachment_content, is_allowed_attachment_url
 from apps.asset_inventory.domain.errors import DesknetApiError
+from apps.asset_inventory.infrastructure.desknet.service_access_key import resolve_asset_inventory_access_key
+from apps.asset_inventory.domain.list_client_data import build_list_client_payload
 from apps.asset_inventory.domain.list_query import build_list_page_query_string
 from apps.asset_inventory.domain.ports import PAGE_SIZE_OPTIONS, PLATE_FILTER_OPTIONS, STATUS_FILTER_OPTIONS
 from apps.asset_inventory.domain.row_color_rules import build_row_color_rule_rows
 from apps.asset_inventory.domain.row_detail import build_row_details_index
 from apps.asset_inventory.domain.sort_headers import build_table_headers
 from apps.asset_inventory.domain.table_display import sort_spec_label
-from apps.asset_inventory.usecase.usecase_list_page import parse_list_page_query
+from apps.asset_inventory.usecase.usecase_list_page import _empty_result, parse_list_page_query
 from apps.portal.favorites import is_menu_favorited
 
 
-def _access_key(request: HttpRequest) -> str:
-    return str(request.session.get("desknet_access_key") or "").strip()
+def _resolve_access_key(request: HttpRequest) -> tuple[str, str | None]:
+    session_key = str(request.session.get("desknet_access_key") or "").strip()
+    try:
+        access_key = resolve_asset_inventory_access_key(session_key)
+    except DesknetAuthError:
+        return (
+            "",
+            "desknet's サービス連携アカウントでログインできません。"
+            "管理者に DESKNETS_ASSET_INVENTORY_LOGIN_ID の設定をご確認ください。",
+        )
+    if not access_key:
+        return "", "desknet's のアクセスキーがありません。再ログインしてください。"
+    return access_key, None
 
 
 def _query_params(request: HttpRequest) -> dict[str, str]:
@@ -33,8 +48,13 @@ def _query_sites(request: HttpRequest) -> list[str]:
 
 @login_required
 def list_page(request: HttpRequest) -> HttpResponse:
-    query = parse_list_page_query(_query_params(request), _query_sites(request))
-    result = list_page_usecase().execute(_access_key(request), query)
+    access_key, access_error = _resolve_access_key(request)
+    query_params = _query_params(request)
+    query = parse_list_page_query(query_params, _query_sites(request))
+    if access_error:
+        result = _empty_result(error_message=access_error)
+    else:
+        result = list_page_usecase().execute(access_key, query, session=request.session)
     table_params = query.table_params
 
     selected_row = next(
@@ -46,6 +66,7 @@ def list_page(request: HttpRequest) -> HttpResponse:
         "status": result.status_filter,
         "site_filter": result.site_filter,
         "plate_filter": result.plate_filter,
+        "asset_number_filter": result.asset_number_filter,
         "sort_specs": result.sort_specs,
         "page_size": result.page_size,
     }
@@ -61,6 +82,7 @@ def list_page(request: HttpRequest) -> HttpResponse:
         status=result.status_filter,
         site_filter=result.site_filter,
         plate_filter=result.plate_filter,
+        asset_number_filter=result.asset_number_filter,
     )
     export_csv_href = (
         "?"
@@ -69,6 +91,7 @@ def list_page(request: HttpRequest) -> HttpResponse:
             status=result.status_filter,
             site_filter=result.site_filter,
             plate_filter=result.plate_filter,
+            asset_number_filter=result.asset_number_filter,
             sort_specs=result.sort_specs,
             page=1,
             page_size=result.page_size,
@@ -77,9 +100,21 @@ def list_page(request: HttpRequest) -> HttpResponse:
     has_list_data = bool(result.selected_management_id) and result.error_message is None
     attachment_proxy_base_path = reverse("asset_inventory:attachment")
     row_details_index = (
-        build_row_details_index(result.rows, attachment_proxy_base_path=attachment_proxy_base_path)
+        build_row_details_index(result.all_rows, attachment_proxy_base_path=attachment_proxy_base_path)
         if has_list_data
         else {}
+    )
+    list_client_payload = (
+        build_list_client_payload(
+            all_rows=result.all_rows,
+            row_details_index=row_details_index,
+            management_id=result.selected_management_id,
+            site_options=result.site_options,
+            asset_number_options=result.asset_number_options,
+            export_csv_path=reverse("asset_inventory:export_csv"),
+        )
+        if has_list_data
+        else None
     )
     return render(
         request,
@@ -97,6 +132,9 @@ def list_page(request: HttpRequest) -> HttpResponse:
             "status_filter_options": STATUS_FILTER_OPTIONS,
             "plate_filter": result.plate_filter,
             "plate_filter_options": PLATE_FILTER_OPTIONS,
+            "asset_number_filter": result.asset_number_filter,
+            "asset_number_options": result.asset_number_options,
+            "list_client_payload": list_client_payload,
             "table_headers": table_headers,
             "table_params": table_params,
             "sort_spec_labels": [sort_spec_label(spec) for spec in result.sort_specs],
@@ -116,7 +154,6 @@ def list_page(request: HttpRequest) -> HttpResponse:
             "error_message": result.error_message,
             "is_asset_inventory_favorite": is_menu_favorited(request.user, "asset-inventory"),
             "filtered_total": len(result.filtered_rows),
-            "row_details_index": row_details_index,
         },
     )
 
@@ -127,13 +164,9 @@ def attachment_proxy(request: HttpRequest) -> HttpResponse:
     if not source_url or not is_allowed_attachment_url(source_url, settings.DESKNETS_LOGIN_URL):
         return HttpResponseForbidden("invalid attachment source")
 
-    access_key = _access_key(request)
-    if not access_key:
-        return HttpResponse(
-            "desknet's のアクセスキーがありません。再ログインしてください。",
-            status=503,
-            content_type="text/plain; charset=utf-8",
-        )
+    access_key, access_error = _resolve_access_key(request)
+    if access_error:
+        return HttpResponse(access_error, status=503, content_type="text/plain; charset=utf-8")
 
     try:
         content, content_type = fetch_attachment_content(
@@ -154,15 +187,11 @@ def export_csv(request: HttpRequest) -> HttpResponse:
     from datetime import datetime
 
     query = parse_list_page_query(_query_params(request), _query_sites(request))
-    access_key = _access_key(request)
-    if not access_key:
-        return HttpResponse(
-            "desknet's のアクセスキーがありません。再ログインしてください。",
-            status=503,
-            content_type="text/plain; charset=utf-8",
-        )
+    access_key, access_error = _resolve_access_key(request)
+    if access_error:
+        return HttpResponse(access_error, status=503, content_type="text/plain; charset=utf-8")
 
-    content, error = export_csv_usecase().execute_safe(access_key, query)
+    content, error = export_csv_usecase().execute_safe(access_key, query, session=request.session)
     if error:
         return HttpResponse(error, status=502, content_type="text/plain; charset=utf-8")
 
