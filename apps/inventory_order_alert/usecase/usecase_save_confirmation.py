@@ -2,7 +2,11 @@ from __future__ import annotations
 
 from collections.abc import Callable
 
-from apps.inventory_order_alert.domain.list_filter import ListFilterParams, apply_list_filters
+from apps.inventory_order_alert.domain.list_filter import (
+    ListFilterParams,
+    apply_list_filters,
+    list_filter_params_from_client_payload,
+)
 from apps.inventory_order_alert.domain.confirmation import ConfirmationInput, parse_confirmation_payload
 from apps.inventory_order_alert.domain.ports import LoadSummary
 from apps.inventory_order_alert.domain.alert_level import ALERT_NONE, lookup_alert_level_for_row
@@ -75,10 +79,7 @@ class SaveConfirmationUsecase:
             confirmed_by=confirmed_by,
             alert_level=alert_level,
         )
-        filter_params = ListFilterParams(
-            cust_code=str(payload.get("custCodeFilter") or "").strip(),
-            cust_chrg_psn_cd=str(payload.get("custChrgPsnCdFilter") or "").strip(),
-        )
+        filter_params = list_filter_params_from_client_payload(payload)
         summary = self._load_summary()
         return _build_save_result(
             input_data,

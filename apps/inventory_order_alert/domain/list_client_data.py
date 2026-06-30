@@ -48,7 +48,7 @@ def _sort_specs_to_payload(specs: tuple[SortSpec, ...]) -> list[dict[str, str]]:
     return [{"column": spec.column, "direction": spec.direction} for spec in specs]
 
 
-def _filter_options_to_payload(options: ListFilterOptions) -> dict[str, list[dict[str, str]]]:
+def _filter_options_to_payload(options: ListFilterOptions) -> dict[str, object]:
     return {
         "custOptions": [
             {"value": option.value, "label": option.label} for option in options.cust_options
@@ -69,6 +69,8 @@ def build_list_client_payload(
     return {
         "rows": [row_to_client_dict(row) for row in all_rows],
         "filterOptions": _filter_options_to_payload(filter_options),
+        "itemCdOptions": list(filter_options.item_cd_options),
+        "level1ItemCdOptions": list(filter_options.level1_item_cd_options),
         "confirmationStatusChoices": [
             {"value": value, "label": label} for value, label in confirmation_status_choices
         ],

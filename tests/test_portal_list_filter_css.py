@@ -51,5 +51,13 @@ def test_asset_inventory_filter_template_uses_stacked_labels():
     html = AIV_TEMPLATE_PATH.read_text(encoding="utf-8")
     filter_block = html.split('class="aiv-filter-panel"', 1)[1].split("aiv-table-toolbar", 1)[0]
     assert 'class="aiv-filter-field-label">棚卸結果</span>' in filter_block
-    assert 'class="aiv-filter-field-label">資産番号</span>' in filter_block
+    assert 'label="資産番号"' in filter_block
+    assert "portal_prefix_filter_field.html" in filter_block
     assert 'class="aiv-filter-control' in filter_block
+
+
+def test_asset_inventory_asset_number_filter_matches_select_height():
+    source = CSS_PATH.read_text(encoding="utf-8")
+    height_block = source.split("body.portal-app-page .portal-filter-select,", 1)[1].split("}", 1)[0]
+    assert "body.portal-app-page .aiv-filter-asset-number," in height_block
+    assert "var(--portal-control-height)" in height_block

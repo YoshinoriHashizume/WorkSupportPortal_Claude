@@ -2,7 +2,10 @@ from __future__ import annotations
 
 from collections.abc import Callable
 
-from apps.inventory_order_alert.domain.list_filter import ListFilterParams, apply_list_filters
+from apps.inventory_order_alert.domain.list_filter import (
+    apply_list_filters,
+    list_filter_params_from_client_payload,
+)
 from apps.inventory_order_alert.domain.ports import LoadSummary
 from apps.inventory_order_alert.domain.row_counts import RowCounts, count_rows
 
@@ -31,10 +34,7 @@ class ResetConfirmationsUsecase:
         self._reset_all_confirmations = reset_all_confirmations
 
     def execute(self, payload: dict[str, object]) -> dict[str, object]:
-        filter_params = ListFilterParams(
-            cust_code=str(payload.get("custCodeFilter") or "").strip(),
-            cust_chrg_psn_cd=str(payload.get("custChrgPsnCdFilter") or "").strip(),
-        )
+        filter_params = list_filter_params_from_client_payload(payload)
         reset_count = self._reset_all_confirmations()
         summary = self._load_summary()
         filtered_rows = apply_list_filters(summary.rows if summary else [], filter_params)

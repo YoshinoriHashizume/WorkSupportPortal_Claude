@@ -1,0 +1,294 @@
+{% extends "base.html" %}
+{% block title %}出荷トレンド一覧{% endblock %}
+{% block body_class %}shipment-trend-page{% endblock %}
+{% block content %}
+<div class="portal-section-head">
+  <div class="portal-page-title-row">
+    <h1>出荷トレンド一覧</h1>
+    {% include "includes/page_favorite_toggle.html" with menu_key=menu_key menu_title=menu_title is_favorite=is_favorite %}
+    <p class="portal-page-description">得意先×品番ごとの出荷トレンドを把握し、客先アクションの優先度を判断します。</p>
+  </div>
+</div>
+
+{% if refresh_message %}
+  <p class="info-banner">{{ refresh_message }}</p>
+{% endif %}
+{% if error_message %}
+  <p class="error">{{ error_message }}</p>
+{% endif %}
+
+<section class="card st-table-card">
+  <div class="portal-section-head st-table-head">
+    <div class="st-table-head-main">
+      <h2>
+        {% if as_of_label %}
+          {{ as_of_label }} 時点の集計結果
+        {% else %}
+          一覧
+        {% endif %}
+      </h2>
+    </div>
+    <div class="st-table-actions">
+      <button type="button" class="button-link st-alert-rules-open" aria-haspopup="dialog" aria-controls="st-alert-rules-dialog">
+        警告条件
+      </button>
+      <form method="post" class="st-refresh-form">
+        {% csrf_token %}
+        <input type="hidden" name="action" value="refresh">
+        <button type="submit" class="button-link">データ更新</button>
+      </form>
+      {% if has_list_data %}
+        <a class="button-link st-export-csv-link" href="{% url 'shipment_trend:export_csv' %}">CSV 出力</a>
+      {% endif %}
+    </div>
+  </div>
+
+  {% if not has_summary %}
+    <p class="st-empty-note muted">「データ更新」を実行すると Oracle から出荷データを集計して一覧を表示します。</p>
+  {% endif %}
+
+  {% if has_list_data %}
+  <div class="st-filter-panel">
+    <div class="st-filter-panel-fields">
+      <label class="st-filter-field">
+        <span class="st-filter-field-label">担当者コード</span>
+        <select name="cust_chrg_psn_cd" class="st-filter-select st-filter-control">
+          <option value="">すべて</option>
+          {% for option in filter_options.cust_chrg_psn_options %}
+            <option value="{{ option.value }}" {% if list_filter.cust_chrg_psn_cd == option.value %}selected{% endif %}>{{ option.label }}</option>
+          {% endfor %}
+        </select>
+      </label>
+      <label class="st-filter-field">
+        <span class="st-filter-field-label">得意先コード</span>
+        <select name="cust_code" class="st-filter-select st-filter-control">
+          <option value="">すべて</option>
+          {% for option in visible_cust_options %}
+            <option value="{{ option.value }}" {% if list_filter.cust_code == option.value %}selected{% endif %}>{{ option.label }}</option>
+          {% endfor %}
+        </select>
+      </label>
+      {% include "includes/portal_prefix_filter_field.html" with label="得意先品番" name="item_cd" value=list_filter.item_cd datalist_id="st-item-cd-options" placeholder="得意先品番" field_class="st-filter-field" label_class="st-filter-field-label" input_class="st-filter-control st-filter-item-cd" options=filter_options.item_cd_options %}
+    </div>
+  </div>
+
+  <div class="st-table-toolbar">
+    <button type="button" class="button-link st-sort-open" aria-haspopup="dialog" aria-controls="st-sort-dialog">
+      並び替え
+    </button>
+    <div class="st-table-counts">
+      <p class="st-table-counts-left">全 {{ summary_total }} 件 / 表示対象 {{ filtered_total }} 件</p>
+    </div>
+  </div>
+
+  <div class="st-table-wrap">
+    <table class="st-table">
+      <thead>
+        <tr>
+          {% for header in table_headers %}
+            <th scope="col" class="{% if header.sorted %}is-sorted is-sorted--{{ header.direction }}{% endif %}">
+              <a href="{{ header.href }}">
+                {% if header.sort_index %}<span class="st-sort-priority">{{ header.sort_index }}</span>{% endif %}
+                {{ header.label }}{% if header.sorted %}{% if header.direction == 'asc' %} ▲{% else %} ▼{% endif %}{% endif %}
+              </a>
+            </th>
+          {% endfor %}
+        </tr>
+      </thead>
+      <tbody id="st-table-body">
+        {% for row in rows %}
+        <tr class="st-data-row {{ row.alert_row_class }}"
+            data-cust-code="{{ row.cust_code }}"
+            data-cust-name="{{ row.cust_name|default:'' }}"
+            data-item-cd="{{ row.item_cd }}">
+          <td>{{ row.cust_chrg_psn_cd }}</td>
+          <td>{{ row.cust_code }}</td>
+          <td>{{ row.cust_name }}</td>
+          <td>{{ row.item_cd }}</td>
+          <td>{{ row.display_first_fiscal_year }}</td>
+          <td>{{ row.display_first_fy_total }}</td>
+          <td>{{ row.display_prev_fy_total }}</td>
+          <td>{{ row.display_current_fy_with_forecast_total }}</td>
+          <td>{{ row.display_change_rate_pct }}</td>
+          <td>{{ row.display_change_qty }}</td>
+        </tr>
+        {% empty %}
+        <tr>
+          <td colspan="{{ table_headers|length }}" class="st-table-empty">表示する行がありません。</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+
+  <form method="get" class="st-table-footer"{% if not paginated.total_count %} hidden{% endif %}>
+    <div class="st-table-footer-left">
+      <label class="st-page-size-label" for="st-page-size">表示件数</label>
+      <select id="st-page-size" name="page_size" class="st-page-size-select">
+        {% for size in page_size_options %}
+          <option value="{{ size }}" {% if paginated.page_size == size %}selected{% endif %}>{{ size }} 件</option>
+        {% endfor %}
+      </select>
+      <nav class="st-pagination" aria-label="一覧ページ移動">
+        <button type="button" class="button-link st-pagination-prev"{% if not paginated.has_previous %} disabled{% endif %}>前へ</button>
+        <button type="button" class="button-link st-pagination-next"{% if not paginated.has_next %} disabled{% endif %}>次へ</button>
+      </nav>
+      {% if paginated.total_count %}
+        <p class="muted st-table-range">{{ paginated.start_index }}–{{ paginated.end_index }} 件目を表示（{{ paginated.page }} / {{ paginated.total_pages }} ページ）</p>
+      {% endif %}
+    </div>
+  </form>
+
+  <dialog id="st-sort-dialog" class="st-sort-dialog">
+    <form class="st-sort-form">
+      <h3 class="st-sort-dialog-title">並び替え</h3>
+      <p class="st-sort-dialog-help muted">上から順に優先されます（最大 5 条件）。番号をドラッグして順序を変更できます。</p>
+      <div class="st-sort-rows">
+        {% for spec in sort_specs %}
+        <div class="st-sort-row">
+          <span class="st-sort-row-order">{{ forloop.counter }}</span>
+          <select class="st-sort-column" aria-label="並び替え列">
+            {% for header in table_headers %}
+              <option value="{{ header.key }}" {% if header.key == spec.column %}selected{% endif %}>{{ header.label }}</option>
+            {% endfor %}
+          </select>
+          <select class="st-sort-direction" aria-label="並び順">
+            <option value="asc" {% if spec.direction == "asc" %}selected{% endif %}>昇順</option>
+            <option value="desc" {% if spec.direction == "desc" %}selected{% endif %}>降順</option>
+          </select>
+          <button type="button" class="button-link st-sort-remove">削除</button>
+        </div>
+        {% endfor %}
+      </div>
+      <div class="st-sort-dialog-actions">
+        <button type="button" class="button-link st-sort-add">条件を追加</button>
+        <div class="st-sort-dialog-submit">
+          <button type="button" class="button-link st-sort-cancel">キャンセル</button>
+          <button type="submit" class="button-link">適用</button>
+        </div>
+      </div>
+    </form>
+    <template id="st-sort-row-template">
+      <div class="st-sort-row">
+        <span class="st-sort-row-order"></span>
+        <select class="st-sort-column" aria-label="並び替え列">
+          {% for header in table_headers %}
+            <option value="{{ header.key }}">{{ header.label }}</option>
+          {% endfor %}
+        </select>
+        <select class="st-sort-direction" aria-label="並び順">
+          <option value="asc">昇順</option>
+          <option value="desc">降順</option>
+        </select>
+        <button type="button" class="button-link st-sort-remove">削除</button>
+      </div>
+    </template>
+  </dialog>
+  {% endif %}
+</section>
+
+{% if list_client_payload %}
+  {{ list_client_payload|json_script:"st-list-data" }}
+{% endif %}
+
+<dialog id="st-alert-rules-dialog" class="st-alert-rules-dialog">
+  <div class="st-alert-rules-content">
+    <h3 class="st-alert-rules-title">警告色の条件</h3>
+    <p class="st-alert-rules-help muted">初年度と今年度（予測込み）の出荷合計から算出した変動率で行の背景色を付けます。</p>
+    <div class="st-alert-rules-settings">
+      <label class="st-alert-rules-setting portal-alert-rules-setting">
+        減少（強）
+        <select id="st-decrease-threshold" class="portal-alert-rules-select" aria-label="減少の閾値">
+          {% for value in threshold_options %}
+            <option value="{{ value }}" {% if decrease_threshold_pct == value %}selected{% endif %}>{{ value }}%</option>
+          {% endfor %}
+        </select>
+      </label>
+      <label class="st-alert-rules-setting portal-alert-rules-setting">
+        増加（強）
+        <select id="st-increase-threshold" class="portal-alert-rules-select" aria-label="増加の閾値">
+          {% for value in threshold_options %}
+            <option value="{{ value }}" {% if increase_threshold_pct == value %}selected{% endif %}>{{ value }}%</option>
+          {% endfor %}
+        </select>
+      </label>
+    </div>
+    <div class="st-alert-rules-table-wrap">
+      <table class="st-alert-rules-table">
+        <colgroup>
+          <col class="st-alert-rules-col-condition">
+          <col class="st-alert-rules-col-color">
+        </colgroup>
+        <thead>
+          <tr><th scope="col">条件</th><th scope="col">色</th></tr>
+        </thead>
+        <tbody>
+          {% for rule in alert_rule_rows %}
+            <tr class="st-alert-rules-row st-alert-rules-row--{{ rule.class_key }}">
+              <td>{{ rule.condition }}</td>
+              <td>
+                <span class="st-alert-rules-color-label">
+                  <span class="st-alert-rules-color-swatch" aria-hidden="true"></span>
+                  {{ rule.color }}
+                </span>
+              </td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    <div class="st-alert-rules-actions">
+      <button type="button" class="button-link st-alert-rules-cancel">閉じる</button>
+      <button type="button" class="button-link st-alert-rules-save">保存</button>
+    </div>
+  </div>
+</dialog>
+
+<dialog id="st-detail-dialog" class="st-detail-dialog">
+  <div class="st-detail-content">
+    <div class="st-detail-head">
+      <h3 class="st-detail-title"></h3>
+      <button type="button" class="dialog-close-button st-detail-close" aria-label="閉じる">×</button>
+    </div>
+    <p class="st-detail-meta muted"></p>
+    <section class="st-detail-metrics-section">
+      <h4 class="st-detail-section-title">年度別出荷</h4>
+      <div class="st-detail-metrics-table-wrap">
+        <table class="st-detail-metrics-table">
+          <thead>
+            <tr>
+              <th scope="col">年度</th>
+              <th scope="col">出荷合計</th>
+              <th scope="col">予測込み合計</th>
+              <th scope="col">初年度比変動数</th>
+              <th scope="col">初年度比変動率</th>
+            </tr>
+          </thead>
+          <tbody class="st-detail-metrics-table-body"></tbody>
+        </table>
+      </div>
+    </section>
+    <section class="st-detail-chart-section">
+      <h4 class="st-detail-section-title">出荷推移</h4>
+      <div class="st-chart-legend">
+        <span class="st-legend-actual">実績</span>
+        <span class="st-legend-forecast">予測（今年残月・出荷平均）</span>
+      </div>
+      <div class="st-chart-canvas-wrap" aria-live="polite"></div>
+    </section>
+    <p class="st-detail-error error" hidden></p>
+  </div>
+</dialog>
+
+<div id="st-refresh-overlay" class="st-refresh-overlay" hidden aria-live="polite" aria-busy="false">
+  <div class="st-refresh-spinner" aria-hidden="true"></div>
+  <p class="st-refresh-overlay-message">Oracle から出荷データを集計中...</p>
+</div>
+
+<script src="/static/js/portal-list-core.js?v=20260629-prefix-sync" defer></script>
+<script src="/static/js/portal-list-prefix-filter.js?v=20260629-dependent-cust" defer></script>
+<script src="/static/js/portal-list-dependent-cust-filter.js?v=20260629-dependent-cust" defer></script>
+<script src="/static/js/portal-list-sort-dialog.js?v=20260629-dependent-cust" defer></script>
+<script src="/static/js/shipment-trend-list-client.js?v=20260629-chrg-cust-reset" defer></script>
+<script src="/static/js/shipment-trend-list.js?v=20260629-dependent-cust" defer></script>
+{% endblock %}

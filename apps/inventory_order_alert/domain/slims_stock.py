@@ -11,14 +11,13 @@ from pathlib import Path
 
 
 REQUIRED_KEY_FIELDS = ("WSHOCD", "WLOCCD")
-STOCK_QTY_FIELDS = ("WKATQT", "WRSOQT")
+STOCK_QTY_FIELD = "WKSBQT"
 
 
 def resolve_stock_qty_field(header_index: dict[str, int]) -> str:
-    for field in STOCK_QTY_FIELDS:
-        if field in header_index:
-            return field
-    raise ValueError(f"必須列がありません: {' または '.join(STOCK_QTY_FIELDS)}")
+    if STOCK_QTY_FIELD not in header_index:
+        raise ValueError(f"必須列がありません: {STOCK_QTY_FIELD}")
+    return STOCK_QTY_FIELD
 
 
 def validate_slims_headers(header_index: dict[str, int]) -> str:

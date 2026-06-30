@@ -7,6 +7,7 @@ from apps.asset_inventory.domain.ports import (
     ReconcileRow,
     Record,
 )
+from apps.portal.domain.prefix_filter import extract_distinct_values, filter_prefix_options, matches_prefix_filter
 
 
 def extract_site_names_from_assets(asset_records: list[Record]) -> tuple[str, ...]:
@@ -28,43 +29,25 @@ def extract_site_names_from_rows(rows: tuple[ReconcileRow, ...]) -> tuple[str, .
 
 
 def extract_asset_numbers_from_rows(rows: tuple[ReconcileRow, ...]) -> tuple[str, ...]:
-    numbers: set[str] = set()
-    for row in rows:
-        display = (row.asset_number or "").strip()
-        if not display:
-            continue
-        normalized = normalize_asset_number(display)
-        if normalized:
-            numbers.add(normalized)
-    return tuple(sorted(numbers))
+    return extract_distinct_values(
+        (row.asset_number for row in rows),
+        normalize=normalize_asset_number,
+    )
 
 
 def filter_asset_number_options(
     options: tuple[str, ...],
     query: str,
 ) -> tuple[str, ...]:
-    query_norm = normalize_asset_number(query)
-    if not query_norm:
-        return options
-    return tuple(
-        option
-        for option in options
-        if normalize_asset_number(option).startswith(query_norm)
-    )
+    return filter_prefix_options(options, query, normalize=normalize_asset_number)
 
 
 def matches_asset_number_filter(asset_number: str, asset_number_filter: str) -> bool:
-    query = (asset_number_filter or "").strip()
-    if not query:
-        return True
-    row_display = (asset_number or "").strip()
-    if not row_display:
-        return False
-    query_norm = normalize_asset_number(query)
-    row_norm = normalize_asset_number(row_display)
-    if not query_norm:
-        return True
-    return row_norm.startswith(query_norm)
+    return matches_prefix_filter(
+        asset_number,
+        asset_number_filter,
+        normalize=normalize_asset_number,
+    )
 
 
 def apply_filters(

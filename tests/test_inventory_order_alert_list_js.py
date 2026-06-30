@@ -122,6 +122,11 @@ def test_inventory_order_alert_list_js_import_overlay_has_spinner_css():
     assert "body.inventory-order-alert-page .ioa-detail-memo-col-content" not in css
     table_rule = css.split("body.inventory-order-alert-page .ioa-alert-rules-table,")[1].split("}")[0]
     assert "ioa-location-table" in table_rule
+    assert "ioa-alert-rules-color-swatch" in css
+    assert "td:last-child" not in css.split("ioa-alert-rules-row--critical")[1].split("ioa-alert-rules-actions", 1)[0]
+    shared_block = css.split("/* ポータル共通: 一覧・警告条件ダイアログの行背景色 */", 1)[1]
+    assert "body.inventory-order-alert-page .ioa-alert-rules-row--critical" in shared_block
+    assert ".shipment-trend-page .st-row-decrease-strong," in shared_block
 
 
 def test_inventory_order_alert_list_js_updates_confirmation_without_reload():
@@ -131,6 +136,7 @@ def test_inventory_order_alert_list_js_updates_confirmation_without_reload():
     assert "getListFilterParams" in source
     assert "IoaListClient" in source
     save_block = source.split("async function saveConfirmationStatus", 1)[1].split("function initConfirmationStatusSelects", 1)[0]
+    assert "itemCdFilter" in save_block or "getListFilterParams" in save_block
     assert "reloadInventoryOrderAlertPage" not in save_block
     assert "saveConfirmation(row," in save_block
     assert "updateRowFromConfirmation" in source
@@ -141,6 +147,10 @@ def test_inventory_order_alert_list_client_js_exists():
     assert client_path.is_file()
     source = client_path.read_text(encoding="utf-8")
     assert "window.IoaListClient" in source
+    assert "createPrefixColumnFilter" in source or "matchesPrefixFilter" in source
+    assert "ioa-filter-item-cd" in source
+    assert "ioa-filter-level1-item-cd" in source
+    assert "level1ItemCdFilter" in source
     assert "ioa-list-data" in source
     assert "Core.replaceUrl" in source
     assert "onchange=\"this.form.submit()\"" not in source
@@ -151,5 +161,30 @@ def test_inventory_order_alert_list_template_loads_portal_list_scripts():
         Path(__file__).resolve().parents[1] / "templates" / "inventory_order_alert" / "list.html"
     ).read_text(encoding="utf-8")
     assert "portal-list-core.js" in template
+    assert "portal-list-prefix-filter.js" in template
+    assert "portal-list-dependent-cust-filter.js" in template
     assert "portal-list-sort-dialog.js" in template
+    assert "ioa-item-cd-options" in template
+    assert "ioa-level1-item-cd-options" in template
     assert template.index("portal-list-core.js") < template.index("inventory-order-alert-list-client.js")
+
+
+def test_inventory_order_alert_list_client_js_clears_part_number_filters_on_cust_change():
+    source = (
+        Path(__file__).resolve().parents[1] / "static" / "js" / "inventory-order-alert-list-client.js"
+    ).read_text(encoding="utf-8")
+    chrg_block = source.split("custChrgSelect?.addEventListener", 1)[1].split("custCodeSelect?.addEventListener", 1)[0]
+    cust_block = source.split("custCodeSelect?.addEventListener", 1)[1].split("Core.bindPaginationControls", 1)[0]
+    assert 'itemCd: ""' in chrg_block
+    assert 'level1ItemCd: ""' in chrg_block
+    assert 'itemCd: ""' in cust_block
+    assert 'level1ItemCd: ""' in cust_block
+
+
+def test_inventory_order_alert_list_client_js_resets_cust_code_on_chrg_change():
+    source = (
+        Path(__file__).resolve().parents[1] / "static" / "js" / "inventory-order-alert-list-client.js"
+    ).read_text(encoding="utf-8")
+    chrg_block = source.split("custChrgSelect?.addEventListener", 1)[1].split("custCodeSelect?.addEventListener", 1)[0]
+    assert "state.custCode" not in chrg_block
+    assert chrg_block.count('""') >= 3

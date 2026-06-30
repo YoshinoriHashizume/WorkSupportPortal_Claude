@@ -8,6 +8,7 @@ from django.shortcuts import render
 from django.views.decorators.http import require_http_methods
 
 from apps.inventory_order_alert.domain.list_client_data import build_list_client_payload
+from apps.inventory_order_alert.domain.list_filter import visible_cust_options
 from apps.inventory_order_alert.composition import (
     confirmation_memos_usecase,
     export_csv_usecase,
@@ -54,6 +55,10 @@ def list_page(request: HttpRequest) -> HttpResponse:
             "sort_spec_labels": context.sort_spec_labels,
             "list_filter": context.list_filter,
             "filter_options": context.filter_options,
+            "visible_cust_options": visible_cust_options(
+                context.filter_options,
+                context.list_filter.cust_chrg_psn_cd,
+            ),
             "summary_total": context.summary_total,
             "filtered_total": context.filtered_total,
             "table_headers": context.table_headers,

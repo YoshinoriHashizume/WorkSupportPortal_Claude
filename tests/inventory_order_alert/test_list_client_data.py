@@ -50,4 +50,6 @@ def test_TC_IOA_DOM_07H_build_list_client_payload():
     assert payload["defaultSortSpecs"] == [{"column": "alert_level", "direction": "asc"}]
     assert len(payload["sortableColumns"]) >= 10
     assert payload["filterOptions"]["custOptions"][0]["value"] == "112"
+    assert payload["itemCdOptions"] == ["90249-10112", "ITEM-2"]
+    assert payload["level1ItemCdOptions"] == ["90249-10112-9209"]
     assert payload["confirmationStatusChoices"][0]["value"] == "unconfirmed"

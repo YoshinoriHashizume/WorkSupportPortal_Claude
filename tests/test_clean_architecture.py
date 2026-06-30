@@ -13,6 +13,7 @@ BUSINESS_APPS = (
     "receipt_comparison",
     "inventory_order_alert",
     "asset_inventory",
+    "shipment_trend",
     "portal",
     "identity",
 )
@@ -65,7 +66,7 @@ def test_usecase_does_not_import_infrastructure(app_name: str):
         assert not any(module.startswith(forbidden) for module in imports), path
 
 
-@pytest.mark.parametrize("app_name", ("gonenkukumi", "receipt_comparison", "inventory_order_alert", "asset_inventory", "portal", "identity"))
+@pytest.mark.parametrize("app_name", ("gonenkukumi", "receipt_comparison", "inventory_order_alert", "asset_inventory", "shipment_trend", "portal", "identity"))
 def test_domain_does_not_import_django_or_outer_layers(app_name: str):
     forbidden_prefixes = (
         "django",
@@ -149,6 +150,20 @@ def test_inventory_order_alert_has_domain_ports_and_summary():
     assert (ROOT / "apps/inventory_order_alert/domain/ports.py").is_file()
     assert (ROOT / "apps/inventory_order_alert/domain/summary.py").is_file()
     assert (ROOT / "apps/inventory_order_alert/domain/list_rows.py").is_file()
+
+
+def test_shipment_trend_usecase_only_has_usecase_files():
+    app_dir = ROOT / "apps/shipment_trend/usecase"
+    for path in app_dir.glob("*.py"):
+        if path.name == "__init__.py":
+            continue
+        assert path.name.startswith("usecase_"), path
+
+
+def test_shipment_trend_has_domain_ports_and_summary():
+    assert (ROOT / "apps/shipment_trend/domain/ports.py").is_file()
+    assert (ROOT / "apps/shipment_trend/domain/summary.py").is_file()
+    assert (ROOT / "apps/shipment_trend/domain/trend_metrics.py").is_file()
 
 
 def test_portal_usecase_has_usecase_modules():

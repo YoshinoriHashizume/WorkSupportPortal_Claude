@@ -1,0 +1,17 @@
+<label class="{{ field_class }}">
+  <span class="{{ label_class }}">{{ label }}</span>
+  <input
+    type="text"
+    name="{{ name }}"
+    class="{{ input_class }}"
+    value="{{ value }}"
+    list="{{ datalist_id }}"
+    placeholder="{{ placeholder }}"
+    autocomplete="off"
+  >
+</label>
+<datalist id="{{ datalist_id }}">
+  {% for option in options %}
+    <option value="{{ option }}"></option>
+  {% endfor %}
+</datalist>

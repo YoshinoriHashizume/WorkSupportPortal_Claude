@@ -1,12 +1,12 @@
 (function () {
   const Core = window.PortalListCore;
-  if (!Core) {
+  const PrefixFilter = window.PortalListPrefixFilter;
+  if (!Core || !PrefixFilter) {
     return;
   }
 
   const STATUS_SORT_ORDER = { matched: 0, asset_only: 1, inventory_only: 2 };
   const TONE_SORT_ORDER = { MATCH_CLEAN: 0, MATCH_FACTORY: 1, MATCH_DIFF: 2, NONE: 3 };
-  const ASSET_NUMBER_DEBOUNCE_MS = 600;
 
   function normalizeAssetNumber(value) {
     let text = String(value || "").trim();
@@ -15,6 +15,11 @@
     }
     return text;
   }
+
+  const assetNumberColumnFilter = PrefixFilter.createPrefixColumnFilter({
+    getValue: (row) => row.asset_number,
+    normalizeValue: normalizeAssetNumber,
+  });
 
   function parseAcquisitionDate(value) {
     const text = String(value || "").trim();
@@ -56,20 +61,7 @@
   }
 
   function matchesAssetNumberFilter(assetNumber, filterValue) {
-    const query = String(filterValue || "").trim();
-    if (!query) {
-      return true;
-    }
-    const rowDisplay = String(assetNumber || "").trim();
-    if (!rowDisplay) {
-      return false;
-    }
-    const queryNorm = normalizeAssetNumber(query);
-    const rowNorm = normalizeAssetNumber(rowDisplay);
-    if (!queryNorm) {
-      return true;
-    }
-    return rowNorm.startsWith(queryNorm);
+    return assetNumberColumnFilter.matchesRow({ asset_number: assetNumber }, filterValue);
   }
 
   function applyFilters(rows, state) {
@@ -208,8 +200,12 @@
     }
 
     let state = readStateFromUrl(defaults);
-    let assetNumberDebounceTimer = null;
-    let isComposing = false;
+    const assetNumberAutocomplete = assetNumberColumnFilter.bind(
+      assetNumberInput,
+      datalist,
+      assetNumberOptions,
+      (value) => setState({ assetNumber: value, page: 1 }),
+    );
 
     function syncControlsFromState() {
       if (statusSelect) {
@@ -227,27 +223,6 @@
       if (paginationElements.pageSizeSelect) {
         paginationElements.pageSizeSelect.value = String(state.pageSize);
       }
-    }
-
-    function filterAssetNumberOptions(query) {
-      const queryNorm = normalizeAssetNumber(query);
-      if (!queryNorm) {
-        return assetNumberOptions;
-      }
-      return assetNumberOptions.filter((option) => normalizeAssetNumber(option).startsWith(queryNorm));
-    }
-
-    function updateDatalistOptions(query) {
-      if (!datalist) {
-        return;
-      }
-      const matches = filterAssetNumberOptions(query);
-      datalist.replaceChildren();
-      matches.forEach((value) => {
-        const option = document.createElement("option");
-        option.value = value;
-        datalist.appendChild(option);
-      });
     }
 
     function updateUrl() {
@@ -316,24 +291,12 @@
       renderTableBody(pagination.rows);
       Core.renderPagination(paginationElements, pagination);
       updateUrl();
-      updateDatalistOptions(state.assetNumber);
+      assetNumberAutocomplete.sync(state.assetNumber);
     }
 
     function setState(patch) {
       state = { ...state, ...patch };
       render();
-    }
-
-    function scheduleAssetNumberRender() {
-      if (assetNumberDebounceTimer !== null) {
-        window.clearTimeout(assetNumberDebounceTimer);
-      }
-      assetNumberDebounceTimer = window.setTimeout(() => {
-        assetNumberDebounceTimer = null;
-        if (!isComposing) {
-          setState({ assetNumber: assetNumberInput?.value || "", page: 1 });
-        }
-      }, ASSET_NUMBER_DEBOUNCE_MS);
     }
 
     statusSelect?.addEventListener("change", () => {
@@ -350,32 +313,6 @@
       () => state.page,
       (patch) => setState({ ...patch, pageSize: patch.pageSize || state.pageSize }),
     );
-
-    assetNumberInput?.addEventListener("compositionstart", () => {
-      isComposing = true;
-    });
-    assetNumberInput?.addEventListener("compositionend", () => {
-      isComposing = false;
-      scheduleAssetNumberRender();
-    });
-    assetNumberInput?.addEventListener("input", () => {
-      updateDatalistOptions(assetNumberInput.value);
-      if (isComposing) {
-        return;
-      }
-      scheduleAssetNumberRender();
-    });
-    assetNumberInput?.addEventListener("keydown", (event) => {
-      if (event.key !== "Enter") {
-        return;
-      }
-      event.preventDefault();
-      if (assetNumberDebounceTimer !== null) {
-        window.clearTimeout(assetNumberDebounceTimer);
-        assetNumberDebounceTimer = null;
-      }
-      setState({ assetNumber: assetNumberInput.value, page: 1 });
-    });
 
     syncControlsFromState();
     render();

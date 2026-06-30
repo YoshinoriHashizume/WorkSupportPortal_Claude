@@ -85,7 +85,7 @@ def test_list_page_requires_login(client):
 @patch("apps.inventory_order_alert.infrastructure.persistence.slims_stock_repository.run_summary_aggregation")
 def test_list_page_post_imports_slims_csv(mock_aggregate, client, production_user):
     mock_aggregate.return_value = ("", 0)
-    fixture = Path("tests/fixtures/slims_stock_sample.csv")
+    fixture = Path("tests/fixtures/slims_stock_sample_wkatqt.csv")
     client.force_login(production_user)
     before_count = SlimsStockImport.objects.count()
 

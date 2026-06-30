@@ -83,6 +83,8 @@
     return {
       custCodeFilter: params.get("cust_code") || "",
       custChrgPsnCdFilter: params.get("cust_chrg_psn_cd") || "",
+      itemCdFilter: params.get("item_cd") || "",
+      level1ItemCdFilter: params.get("level1_item_cd") || "",
     };
   }
 

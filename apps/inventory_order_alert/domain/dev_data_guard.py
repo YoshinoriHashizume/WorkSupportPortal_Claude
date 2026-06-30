@@ -5,7 +5,6 @@ import re
 KNOWN_TEST_IMPORT_FILE_NAMES = frozenset(
     {
         "sample.csv",
-        "slims_stock_sample.csv",
         "slims_stock_sample_wkatqt.csv",
     }
 )

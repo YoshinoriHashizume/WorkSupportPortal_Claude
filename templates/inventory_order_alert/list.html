@@ -77,11 +77,13 @@
         <span class="ioa-filter-field-label">得意先コード</span>
         <select name="cust_code" class="ioa-filter-select ioa-filter-control">
           <option value="">すべて</option>
-          {% for option in filter_options.cust_options %}
+          {% for option in visible_cust_options %}
             <option value="{{ option.value }}" {% if list_filter.cust_code == option.value %}selected{% endif %}>{{ option.label }}</option>
           {% endfor %}
         </select>
       </label>
+      {% include "includes/portal_prefix_filter_field.html" with label="得意先品番" name="item_cd" value=list_filter.item_cd datalist_id="ioa-item-cd-options" placeholder="得意先品番" field_class="ioa-filter-field" label_class="ioa-filter-field-label" input_class="ioa-filter-control ioa-filter-item-cd" options=filter_options.item_cd_options %}
+      {% include "includes/portal_prefix_filter_field.html" with label="仕入先品番" name="level1_item_cd" value=list_filter.level1_item_cd datalist_id="ioa-level1-item-cd-options" placeholder="仕入先品番" field_class="ioa-filter-field" label_class="ioa-filter-field-label" input_class="ioa-filter-control ioa-filter-level1-item-cd" options=filter_options.level1_item_cd_options %}
     </div>
   </div>
 
@@ -227,17 +229,17 @@
       最終入荷日以降の出荷有無と、設定した月数で判定します。
     </p>
     <div class="ioa-alert-rules-settings">
-      <label class="ioa-alert-rules-setting">
+      <label class="ioa-alert-rules-setting portal-alert-rules-setting">
         出荷あり
-        <select id="ioa-warning-shipment-months" class="ioa-alert-rules-month-select" aria-label="出荷ありの月数">
+        <select id="ioa-warning-shipment-months" class="portal-alert-rules-select" aria-label="出荷ありの月数">
           {% for month in warning_month_options %}
             <option value="{{ month }}" {% if warning_shipment_months == month %}selected{% endif %}>{{ month }}か月</option>
           {% endfor %}
         </select>
       </label>
-      <label class="ioa-alert-rules-setting">
+      <label class="ioa-alert-rules-setting portal-alert-rules-setting">
         出荷なし
-        <select id="ioa-warning-incoming-months" class="ioa-alert-rules-month-select" aria-label="出荷なしの月数">
+        <select id="ioa-warning-incoming-months" class="portal-alert-rules-select" aria-label="出荷なしの月数">
           {% for month in warning_month_options %}
             <option value="{{ month }}" {% if warning_incoming_months == month %}selected{% endif %}>{{ month }}か月</option>
           {% endfor %}
@@ -263,7 +265,12 @@
         <tr class="ioa-alert-rules-row ioa-alert-rules-row--{{ rule.level_key }}">
           <td>{{ rule.has_incoming }}</td>
           <td>{{ rule.has_shipment }}</td>
-          <td>{{ rule.level }}</td>
+          <td>
+            <span class="ioa-alert-rules-level-label">
+              <span class="ioa-alert-rules-color-swatch" aria-hidden="true"></span>
+              {{ rule.level }}
+            </span>
+          </td>
         </tr>
         {% endfor %}
       </tbody>
@@ -335,8 +342,10 @@
     </div>
   </div>
 </dialog>
-<script src="/static/js/portal-list-core.js?v=20260627-portal-list" defer></script>
-<script src="/static/js/portal-list-sort-dialog.js?v=20260627-portal-list" defer></script>
-<script src="/static/js/inventory-order-alert-list-client.js?v=20260627-portal-list" defer></script>
-<script src="/static/js/inventory-order-alert-list.js?v=20260627-portal-list" defer></script>
+<script src="/static/js/portal-list-core.js?v=20260629-prefix-sync" defer></script>
+<script src="/static/js/portal-list-prefix-filter.js?v=20260629-dependent-cust" defer></script>
+<script src="/static/js/portal-list-dependent-cust-filter.js?v=20260629-dependent-cust" defer></script>
+<script src="/static/js/portal-list-sort-dialog.js?v=20260629-dependent-cust" defer></script>
+<script src="/static/js/inventory-order-alert-list-client.js?v=20260629-chrg-cust-reset" defer></script>
+<script src="/static/js/inventory-order-alert-list.js?v=20260629-dependent-cust" defer></script>
 {% endblock %}

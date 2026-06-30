@@ -20,12 +20,11 @@ from apps.inventory_order_alert.domain.slims_stock import (
     total_stock_qty,
 )
 
-FIXTURE = Path("tests/fixtures/slims_stock_sample.csv")
-FIXTURE_WKATQT = Path("tests/fixtures/slims_stock_sample_wkatqt.csv")
+FIXTURE = Path("tests/fixtures/slims_stock_sample_wkatqt.csv")
 
 
-def test_parse_slims_stock_csv_reads_wkatqt_format():
-    lines = parse_slims_stock_csv(read_csv_text(FIXTURE_WKATQT))
+def test_parse_slims_stock_csv_reads_wksbqt_format():
+    lines = parse_slims_stock_csv(read_csv_text(FIXTURE))
     assert len(lines) == 5
     assert lines[0].item_cd == "43522-D1020-00"
     assert lines[0].wloccd == "2D0-03-5"
@@ -33,18 +32,9 @@ def test_parse_slims_stock_csv_reads_wkatqt_format():
     assert lines[0].wnyudt == "20161228"
 
 
-def test_resolve_stock_qty_field_prefers_wkatqt():
-    header_index = {"WSHOCD": 1, "WLOCCD": 4, "WKATQT": 7, "WRSOQT": 29}
-    assert resolve_stock_qty_field(header_index) == "WKATQT"
-
-
-def test_parse_slims_stock_csv_reads_wloccd_and_wrsoqt():
-    lines = parse_slims_stock_csv(read_csv_text(FIXTURE))
-    assert len(lines) == 3
-    assert lines[0].item_cd == "43522-D1020-00"
-    assert lines[0].wloccd == "2D0-03-5"
-    assert lines[0].stock_qty == Decimal("90")
-    assert lines[0].wnyudt == "20161228"
+def test_resolve_stock_qty_field_requires_wksbqt():
+    header_index = {"WSHOCD": 1, "WLOCCD": 4, "WKATQT": 7, "WKSBQT": 8}
+    assert resolve_stock_qty_field(header_index) == "WKSBQT"
 
 
 def test_parse_slims_stock_csv_keeps_duplicate_locations_as_separate_lines():
@@ -101,18 +91,18 @@ def test_format_location_detail_csv_sorts_by_incoming_date_asc():
 
 
 def test_parse_slims_stock_csv_requires_wloccd_column():
-    csv_text = "WSHOCD,WKATQT\n商品コード,在庫\nA,1\n"
+    csv_text = "WSHOCD,WKSBQT\n商品コード,在庫\nA,1\n"
     with pytest.raises(ValueError, match="WLOCCD"):
         parse_slims_stock_csv(csv_text)
 
 
-def test_parse_slims_stock_csv_excludes_invalid_location_from_fixture_extension():
+def test_parse_slims_stock_csv_excludes_invalid_location():
     extra_row = (
-        "20161228,10,丸栄本社,1,MARUEI,10,丸栄倉庫,0000000307,INVALID,43522-D1020-00,"
-        "43522-D1020-00,,,1000,0,,43522-D1020-00,,,,,,,,A,出荷可,0100,トヨタ車体,,99,99,0\n"
+        "10,43522-D1020-00,43522-D1020-00,,INVALID,0,0,99.000,99,0,0,99.000,99,"
+        "20161228,,43522-D1020-00,,,,,,,,,,,,A,出荷可,0100,\n"
     )
     lines = parse_slims_stock_csv(read_csv_text(FIXTURE) + extra_row)
-    assert len(lines) == 3
+    assert len(lines) == 5
     assert total_stock_qty(group_locations_by_item(lines)["43522-D1020-00"]) == Decimal("100")
 
 
@@ -123,33 +113,23 @@ def test_is_target_wloccd_matches_slims_format():
     assert is_target_wloccd("2D0-3-5") is False
 
 
-def test_parse_slims_stock_csv_uses_wkatqt_not_wbatqt():
+def test_parse_slims_stock_csv_uses_wksbqt_not_wkatqt():
     csv_text = (
-        "WLOCCD,WSHOCD,WMFGLT,WKATQT,WBATQT\n"
-        "ロケーション,商品コード,製造ロット,引当可能バラ数,実在庫バラ数\n"
-        "2D0-03-5,43522-D1020-00,43522-D1020-00,90,999\n"
+        "WLOCCD,WSHOCD,WMFGLT,WKATQT,WKSBQT\n"
+        "ロケーション,商品コード,製造ロット,引当可能バラ数,引当可能総バラ数\n"
+        "2D0-03-5,43522-D1020-00,43522-D1020-00,90,120\n"
     )
     lines = parse_slims_stock_csv(csv_text)
-    assert lines[0].stock_qty == Decimal("90")
-
-
-def test_parse_slims_stock_csv_uses_wrsoqt_not_wsojqt():
-    csv_text = (
-        "WLOCCD,WSHOCD,WMFGLT,WRSOQT,WSOJQT\n"
-        "ロケーション,商品コード,製造ロット,理論在庫総バラ数,実在庫総バラ数\n"
-        "2D0-03-5,43522-D1020-00,43522-D1020-00,90,999\n"
-    )
-    lines = parse_slims_stock_csv(csv_text)
-    assert lines[0].stock_qty == Decimal("90")
+    assert lines[0].stock_qty == Decimal("120")
 
 
 def test_parse_slims_stock_csv_filters_non_target_wloccd():
     csv_text = (
-        "WLOCCD,WSHOCD,WMFGLT,WRSOQT,WSOJQT\n"
-        "ロケーション,商品コード,製造ロット,理論在庫総バラ数,実在庫総バラ数\n"
-        "2D0-03-5,43522-D1020-00,43522-D1020-00,90,90\n"
-        "INVALID,43522-D1020-00,43522-D1020-00,50,50\n"
-        "2D0-3-5,43522-D1020-00,43522-D1020-00,30,30\n"
+        "WLOCCD,WSHOCD,WMFGLT,WKSBQT\n"
+        "ロケーション,商品コード,製造ロット,引当可能総バラ数\n"
+        "2D0-03-5,43522-D1020-00,43522-D1020-00,90\n"
+        "INVALID,43522-D1020-00,43522-D1020-00,50\n"
+        "2D0-3-5,43522-D1020-00,43522-D1020-00,30\n"
     )
     lines = parse_slims_stock_csv(csv_text)
     assert len(lines) == 1
@@ -158,8 +138,8 @@ def test_parse_slims_stock_csv_filters_non_target_wloccd():
 
 def test_parse_slims_stock_csv_parses_wmfglt():
     csv_text = (
-        "WLOCCD,WSHOCD,WMFGLT,WRSOQT\n"
-        "ロケーション,商品コード,製造ロット,理論在庫\n"
+        "WLOCCD,WSHOCD,WMFGLT,WKSBQT\n"
+        "ロケーション,商品コード,製造ロット,引当可能総バラ数\n"
         "2D0-03-5,43522-D1020-00,43522-D1020-00,90\n"
     )
     lines = parse_slims_stock_csv(csv_text)
@@ -168,7 +148,7 @@ def test_parse_slims_stock_csv_parses_wmfglt():
 
 def test_parse_slims_stock_csv_requires_stock_qty_column():
     csv_text = "WSHOCD,WLOCCD,WSOJQT\n商品コード,ロケーション,実在庫\nA,2D0-03-5,1\n"
-    with pytest.raises(ValueError, match="WKATQT"):
+    with pytest.raises(ValueError, match="WKSBQT"):
         parse_slims_stock_csv(csv_text)
 
 

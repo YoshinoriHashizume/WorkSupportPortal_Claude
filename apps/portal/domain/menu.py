@@ -64,6 +64,12 @@ MENU_ITEMS = [
         group_key="production",
     ),
     PortalMenuItem(
+        key="shipment-trend-list",
+        title="出荷トレンド一覧",
+        href="/app/sales/shipment-trend",
+        group_key="sales",
+    ),
+    PortalMenuItem(
         key="asset-inventory",
         title="資産棚卸結果",
         href="/app/general-affairs/asset-inventory",

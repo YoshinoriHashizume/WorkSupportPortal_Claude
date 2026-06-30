@@ -116,4 +116,20 @@ class AccessApprovalMiddleware:
                 status=403,
             )
 
+        if request.path.startswith("/app/sales/shipment-trend") and not can_access_menu_item(
+            request.user, "shipment-trend-list"
+        ):
+            return HttpResponse("権限がありません。", status=403)
+
+        if request.path.startswith("/api/shipment-trend/") and not can_access_menu_item(
+            request.user, "shipment-trend-list"
+        ):
+            return JsonResponse(
+                {
+                    "success": False,
+                    "error": {"message": "権限がありません。"},
+                },
+                status=403,
+            )
+
         return None

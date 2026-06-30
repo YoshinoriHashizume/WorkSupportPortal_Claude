@@ -10,7 +10,7 @@ from django.core.management.base import CommandError
 from apps.inventory_order_alert.models import SlimsStockImport, SlimsStockSnapshot
 
 
-FIXTURE = Path("tests/fixtures/slims_stock_sample.csv")
+FIXTURE = Path("tests/fixtures/slims_stock_sample_wkatqt.csv")
 
 
 @pytest.mark.django_db

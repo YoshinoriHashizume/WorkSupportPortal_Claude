@@ -38,7 +38,7 @@ def test_export_headers_are_japanese():
     assert EXPORT_HEADER_LABELS["last_incoming_date"] == "最終入荷日"
     assert EXPORT_HEADER_LABELS["item_cd"] == "得意先品番"
     assert EXPORT_HEADER_LABELS["cust_chrg_psn_cd"] == "担当者コード"
-    assert EXPORT_HEADER_LABELS["level1_item_cd"] == "仕入れ先品番"
+    assert EXPORT_HEADER_LABELS["level1_item_cd"] == "仕入先品番"
     assert EXPORT_HEADER_LABELS["alert_level"] == "アラート"
     assert "stock_location_summary" not in EXPORT_HEADER_LABELS
 

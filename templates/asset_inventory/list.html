@@ -76,23 +76,7 @@
             {% endfor %}
           </select>
         </label>
-        <label class="aiv-filter-field">
-          <span class="aiv-filter-field-label">資産番号</span>
-          <input
-            type="text"
-            name="assetNumber"
-            class="aiv-filter-control aiv-filter-asset-number"
-            value="{{ asset_number_filter }}"
-            list="aiv-asset-number-options"
-            placeholder="資産番号"
-            autocomplete="off"
-          >
-        </label>
-        <datalist id="aiv-asset-number-options">
-          {% for asset_number in asset_number_options %}
-            <option value="{{ asset_number }}"></option>
-          {% endfor %}
-        </datalist>
+        {% include "includes/portal_prefix_filter_field.html" with label="資産番号" name="assetNumber" value=asset_number_filter datalist_id="aiv-asset-number-options" placeholder="資産番号" field_class="aiv-filter-field" label_class="aiv-filter-field-label" input_class="aiv-filter-control aiv-filter-asset-number" options=asset_number_options %}
       </div>
     </div>
 
@@ -302,8 +286,9 @@
     </div>
   </div>
 </dialog>
-<script src="/static/js/portal-list-core.js?v=20260627-portal-list" defer></script>
+<script src="/static/js/portal-list-core.js?v=20250713-portal-prefix-filter" defer></script>
+<script src="/static/js/portal-list-prefix-filter.js?v=20250713-portal-prefix-filter" defer></script>
 <script src="/static/js/portal-list-sort-dialog.js?v=20260627-portal-list" defer></script>
-<script src="/static/js/asset-inventory-list-client.js?v=20260627-portal-list" defer></script>
+<script src="/static/js/asset-inventory-list-client.js?v=20250713-portal-prefix-filter" defer></script>
 <script src="/static/js/asset-inventory-list.js?v=20260627-portal-list" defer></script>
 {% endblock %}

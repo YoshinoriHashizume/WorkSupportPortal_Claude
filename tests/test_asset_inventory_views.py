@@ -204,6 +204,7 @@ def test_TC_AIV_API_003_general_affairs_user_ok(client, general_affairs_user, mo
     assert '<select name="site"' in html
     assert 'name="assetNumber"' in html
     assert 'list="aiv-asset-number-options"' in html
+    assert 'portal-list-prefix-filter.js' in html
     assert "aiv-filter-asset-number" in html
     assert 'id="aiv-list-data"' in html
     assert 'onchange="this.form.submit()"' not in html.split("aiv-filter-panel")[1].split("aiv-table-toolbar")[0]

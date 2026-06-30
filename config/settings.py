@@ -60,6 +60,7 @@ INSTALLED_APPS = [
     "apps.receipt_comparison",
     "apps.inventory_order_alert",
     "apps.asset_inventory",
+    "apps.shipment_trend",
 ]
 
 MIDDLEWARE = [

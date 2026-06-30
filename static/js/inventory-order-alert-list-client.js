@@ -1,8 +1,35 @@
 (function () {
   const Core = window.PortalListCore;
-  if (!Core) {
+  const CustFilter = window.PortalListDependentCustFilter;
+  if (!Core || !CustFilter) {
     return;
   }
+
+  const createPrefixColumnFilter =
+    window.PortalListPrefixFilter?.createPrefixColumnFilter ||
+    function createPrefixColumnFilterFallback(config) {
+      const { getValue, normalizeValue } = config;
+      return {
+        matchesRow(row, filterValue) {
+          return Core.matchesPrefixFilter(getValue(row), filterValue, normalizeValue);
+        },
+        bind(input, datalistElement, options, onValueChange) {
+          return Core.bindPrefixFilterInput(input, {
+            datalistElement,
+            options,
+            normalizeValue,
+            onValueChange,
+          });
+        },
+      };
+    };
+
+  const itemCdColumnFilter = createPrefixColumnFilter({
+    getValue: (row) => row.item_cd,
+  });
+  const level1ItemCdColumnFilter = createPrefixColumnFilter({
+    getValue: (row) => row.level1_item_cd,
+  });
 
   const ALERT_NONE = "アラート無し";
   const ALERT_RANK = {
@@ -40,15 +67,21 @@
     return "asc";
   }
 
-  function readStateFromUrl(defaults) {
+  function readStateFromUrl(defaults, allRows) {
     const params = new URLSearchParams(window.location.search);
-    const custCode = params.get("cust_code") || "";
-    const custChrgPsnCd = params.get("cust_chrg_psn_cd") || "";
-    const validCust = new Set((defaults.filterOptions.custOptions || []).map((option) => option.value));
+    const allCustOptions = defaults.filterOptions.custOptions || [];
+    const custChrgCustIndex = CustFilter.buildCustChrgCustIndex(allRows);
+    const custChrgPsnCdRaw = params.get("cust_chrg_psn_cd") || "";
     const validChrg = new Set((defaults.filterOptions.custChrgPsnOptions || []).map((option) => option.value));
+    const custChrgPsnCd = custChrgPsnCdRaw && validChrg.has(custChrgPsnCdRaw) ? custChrgPsnCdRaw : "";
+    const visibleCustOptions = CustFilter.custOptionsForChrg(allCustOptions, custChrgCustIndex, custChrgPsnCd);
+    const validCust = new Set(visibleCustOptions.map((option) => option.value));
+    const custCodeRaw = params.get("cust_code") || "";
     return {
-      custCode: custCode && validCust.has(custCode) ? custCode : "",
-      custChrgPsnCd: custChrgPsnCd && validChrg.has(custChrgPsnCd) ? custChrgPsnCd : "",
+      custCode: custCodeRaw && validCust.has(custCodeRaw) ? custCodeRaw : "",
+      custChrgPsnCd,
+      itemCd: params.get("item_cd") || "",
+      level1ItemCd: params.get("level1_item_cd") || "",
       ...Core.readBaseStateFromUrl(defaults, defaultDirectionForColumn),
     };
   }
@@ -108,6 +141,12 @@
         return false;
       }
       if (state.custChrgPsnCd && String(row.cust_chrg_psn_cd || "").trim() !== state.custChrgPsnCd) {
+        return false;
+      }
+      if (!itemCdColumnFilter.matchesRow(row, state.itemCd)) {
+        return false;
+      }
+      if (!level1ItemCdColumnFilter.matchesRow(row, state.level1ItemCd)) {
         return false;
       }
       return true;
@@ -196,6 +235,8 @@
       filterOptions: payload.filterOptions || { custOptions: [], custChrgPsnOptions: [] },
     };
     const allRows = Array.isArray(payload.rows) ? payload.rows : [];
+    const allCustOptions = defaults.filterOptions?.custOptions || [];
+    const custChrgCustIndex = CustFilter.buildCustChrgCustIndex(allRows);
     const sortableColumns = Array.isArray(payload.sortableColumns) ? payload.sortableColumns : [];
     const confirmationStatusChoices = Array.isArray(payload.confirmationStatusChoices)
       ? payload.confirmationStatusChoices
@@ -204,6 +245,12 @@
     const filterPanel = pageRoot.querySelector(".ioa-filter-panel");
     const custChrgSelect = filterPanel?.querySelector('select[name="cust_chrg_psn_cd"]');
     const custCodeSelect = filterPanel?.querySelector('select[name="cust_code"]');
+    const itemCdInput = filterPanel?.querySelector(".ioa-filter-item-cd");
+    const level1ItemCdInput = filterPanel?.querySelector(".ioa-filter-level1-item-cd");
+    const itemCdDatalist = document.getElementById("ioa-item-cd-options");
+    const level1ItemCdDatalist = document.getElementById("ioa-level1-item-cd-options");
+    const itemCdOptions = Array.isArray(payload.itemCdOptions) ? payload.itemCdOptions : [];
+    const level1ItemCdOptions = Array.isArray(payload.level1ItemCdOptions) ? payload.level1ItemCdOptions : [];
     const tableBody = pageRoot.querySelector(".ioa-table tbody");
     const tableHead = pageRoot.querySelector(".ioa-table thead");
     const countsLeft = pageRoot.querySelector(".ioa-table-counts-left");
@@ -220,7 +267,20 @@
       return null;
     }
 
-    let state = readStateFromUrl(defaults);
+    let state = readStateFromUrl(defaults, allRows);
+
+    const itemCdAutocomplete = itemCdColumnFilter.bind(
+      itemCdInput,
+      itemCdDatalist,
+      itemCdOptions,
+      (value) => setState({ itemCd: value, page: 1 }),
+    );
+    const level1ItemCdAutocomplete = level1ItemCdColumnFilter.bind(
+      level1ItemCdInput,
+      level1ItemCdDatalist,
+      level1ItemCdOptions,
+      (value) => setState({ level1ItemCd: value, page: 1 }),
+    );
 
     function findRow(custCode, itemCd) {
       return allRows.find(
@@ -232,8 +292,18 @@
       if (custChrgSelect) {
         custChrgSelect.value = state.custChrgPsnCd;
       }
-      if (custCodeSelect) {
-        custCodeSelect.value = state.custCode;
+      CustFilter.renderCustCodeSelect(
+        custCodeSelect,
+        allCustOptions,
+        custChrgCustIndex,
+        state.custChrgPsnCd,
+        state.custCode,
+      );
+      if (itemCdInput) {
+        itemCdInput.value = state.itemCd || "";
+      }
+      if (level1ItemCdInput) {
+        level1ItemCdInput.value = state.level1ItemCd || "";
       }
       if (paginationElements.pageSizeSelect) {
         paginationElements.pageSizeSelect.value = String(state.pageSize);
@@ -247,6 +317,12 @@
       }
       if (state.custChrgPsnCd) {
         params.set("cust_chrg_psn_cd", state.custChrgPsnCd);
+      }
+      if (state.itemCd && String(state.itemCd).trim()) {
+        params.set("item_cd", String(state.itemCd).trim());
+      }
+      if (state.level1ItemCd && String(state.level1ItemCd).trim()) {
+        params.set("level1_item_cd", String(state.level1ItemCd).trim());
       }
       Core.appendSortQueryParams(params, state.sortSpecs, state.page, state.pageSize);
       Core.replaceUrl(window.location.pathname, params.toString());
@@ -327,6 +403,8 @@
       renderTableBody(pagination.rows);
       Core.renderPagination(paginationElements, pagination);
       updateUrl();
+      itemCdAutocomplete.sync(state.itemCd);
+      level1ItemCdAutocomplete.sync(state.level1ItemCd);
     }
 
     function setState(patch) {
@@ -335,10 +413,23 @@
     }
 
     custChrgSelect?.addEventListener("change", () => {
-      setState({ custChrgPsnCd: custChrgSelect.value, page: 1 });
+      const custCode = CustFilter.renderCustCodeSelect(
+        custCodeSelect,
+        allCustOptions,
+        custChrgCustIndex,
+        custChrgSelect.value,
+        "",
+      );
+      setState({
+        custChrgPsnCd: custChrgSelect.value,
+        custCode,
+        itemCd: "",
+        level1ItemCd: "",
+        page: 1,
+      });
     });
     custCodeSelect?.addEventListener("change", () => {
-      setState({ custCode: custCodeSelect.value, page: 1 });
+      setState({ custCode: custCodeSelect.value, itemCd: "", level1ItemCd: "", page: 1 });
     });
     Core.bindPaginationControls(
       paginationElements,
@@ -365,6 +456,8 @@
         return {
           custCodeFilter: state.custCode,
           custChrgPsnCdFilter: state.custChrgPsnCd,
+          itemCdFilter: String(state.itemCd || "").trim(),
+          level1ItemCdFilter: String(state.level1ItemCd || "").trim(),
         };
       },
       updateRowFromConfirmation(custCode, itemCd, payload) {

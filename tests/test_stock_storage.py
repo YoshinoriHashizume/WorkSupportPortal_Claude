@@ -14,7 +14,7 @@ from apps.inventory_order_alert.infrastructure.persistence.slims_stock_repositor
 from apps.inventory_order_alert.domain.slims_stock import read_csv_text
 from apps.inventory_order_alert.models import SlimsStockImport, SlimsStockSnapshot
 
-FIXTURE = Path("tests/fixtures/slims_stock_sample.csv")
+FIXTURE = Path("tests/fixtures/slims_stock_sample_wkatqt.csv")
 
 
 @pytest.fixture
@@ -29,9 +29,9 @@ def test_import_slims_csv_text_replaces_snapshot(mock_aggregate, user):
     text = read_csv_text(FIXTURE)
     info = import_slims_csv_text(text, user=user, file_name="sample.csv")
 
-    assert info.row_count == 3
+    assert info.row_count == 5
     assert SlimsStockImport.objects.count() == 1
-    assert SlimsStockSnapshot.objects.count() == 3
+    assert SlimsStockSnapshot.objects.count() == 5
     mock_aggregate.assert_called_once()
 
     lines, loaded = load_latest_stock_lines()
@@ -50,6 +50,6 @@ def test_import_slims_csv_text_replaces_previous_snapshot(mock_aggregate, user):
     import_slims_csv_text(text, user=user, file_name="second.csv")
 
     assert SlimsStockImport.objects.count() == 2
-    assert SlimsStockSnapshot.objects.count() == 3
+    assert SlimsStockSnapshot.objects.count() == 5
     latest = SlimsStockImport.objects.order_by("-imported_at").first()
     assert latest.file_name == "second.csv"

@@ -226,6 +226,117 @@
     });
   }
 
+  function normalizePrefixFilterValue(value) {
+    return String(value || "").trim();
+  }
+
+  function filterPrefixOptions(options, query, normalizeValue) {
+    const normalize = normalizeValue || normalizePrefixFilterValue;
+    const queryNorm = normalize(query);
+    if (!queryNorm) {
+      return options;
+    }
+    return options.filter((option) => normalize(option).startsWith(queryNorm));
+  }
+
+  function matchesPrefixFilter(targetValue, filterValue, normalizeValue) {
+    const normalize = normalizeValue || normalizePrefixFilterValue;
+    const query = normalize(filterValue);
+    if (!query) {
+      return true;
+    }
+    const rowValue = normalize(targetValue);
+    if (!rowValue) {
+      return false;
+    }
+    return rowValue.startsWith(query);
+  }
+
+  function updatePrefixDatalist(datalistElement, options, query, normalizeValue) {
+    if (!datalistElement) {
+      return;
+    }
+    const matches = filterPrefixOptions(options, query, normalizeValue);
+    datalistElement.replaceChildren();
+    matches.forEach((value) => {
+      const option = document.createElement("option");
+      option.value = value;
+      datalistElement.appendChild(option);
+    });
+  }
+
+  function bindPrefixFilterInput(input, config) {
+    const {
+      datalistElement,
+      options,
+      debounceMs = 600,
+      normalizeValue,
+      onValueChange,
+    } = config;
+    if (!input) {
+      return {
+        sync() {},
+      };
+    }
+    let debounceTimer = null;
+    let isComposing = false;
+
+    function scheduleChange() {
+      if (debounceTimer !== null) {
+        window.clearTimeout(debounceTimer);
+      }
+      debounceTimer = window.setTimeout(() => {
+        debounceTimer = null;
+        if (!isComposing) {
+          onValueChange(input.value);
+        }
+      }, debounceMs);
+    }
+
+    input.addEventListener("compositionstart", () => {
+      isComposing = true;
+    });
+    input.addEventListener("compositionend", () => {
+      isComposing = false;
+      scheduleChange();
+    });
+    input.addEventListener("input", () => {
+      updatePrefixDatalist(datalistElement, options, input.value, normalizeValue);
+      if (isComposing) {
+        return;
+      }
+      scheduleChange();
+    });
+    input.addEventListener("focus", () => {
+      updatePrefixDatalist(datalistElement, options, input.value, normalizeValue);
+    });
+    input.addEventListener("keydown", (event) => {
+      if (event.key !== "Enter") {
+        return;
+      }
+      event.preventDefault();
+      if (debounceTimer !== null) {
+        window.clearTimeout(debounceTimer);
+        debounceTimer = null;
+      }
+      onValueChange(input.value);
+    });
+
+    return {
+      sync(value) {
+        if (debounceTimer !== null) {
+          window.clearTimeout(debounceTimer);
+          debounceTimer = null;
+        }
+        const normalized = value == null ? "" : String(value);
+        if (input.value !== normalized) {
+          input.value = normalized;
+        }
+        updatePrefixDatalist(datalistElement, options, normalized, normalizeValue);
+      },
+    };
+  }
+
   window.PortalListCore = {
     MAX_SORT_SPECS,
     escapeHtml,
@@ -240,5 +351,10 @@
     renderTableHeaders,
     renderPagination,
     bindPaginationControls,
+    normalizePrefixFilterValue,
+    filterPrefixOptions,
+    matchesPrefixFilter,
+    updatePrefixDatalist,
+    bindPrefixFilterInput,
   };
 })();

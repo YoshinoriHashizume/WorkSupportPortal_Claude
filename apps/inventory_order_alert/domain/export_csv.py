@@ -13,7 +13,7 @@ EXPORT_COLUMNS: list[tuple[str, str]] = [
     ("item_cd", "得意先品番"),
     ("level1_vend_cd", "仕入先コード"),
     ("level1_vend_name", "仕入先名"),
-    ("level1_item_cd", "仕入れ先品番"),
+    ("level1_item_cd", "仕入先品番"),
     ("last_incoming_date", "最終入荷日"),
     ("last_ship_date", "最終出荷日"),
     ("post_shipment_count", "最終入荷日以降の出荷回数"),
