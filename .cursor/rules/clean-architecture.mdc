@@ -1,6 +1,6 @@
 ---
 description: Django app のクリーンアーキテクチャ（5年9組型）レイヤー規約
-globs: apps/**/*
+globs: applications/**/*
 alwaysApply: true
 ---
 
@@ -11,7 +11,7 @@ alwaysApply: true
 ## フォルダ構成（必須）
 
 ```text
-apps/<app>/
+applications/<app>/
   domain/              # ビジネスルール・値オブジェクト・ports.py
   usecase/             # usecase_*.py のみ（__init__.py 可）
   infrastructure/      # oracle/, persistence/, session/ 等
@@ -56,5 +56,5 @@ apps/<app>/
 2. ユースケースは `usecase_*.py` + `*Usecase` クラス
 3. `composition.py` でインフラを注入
 4. `views.py` はユースケース呼び出しと HTTP のみ
-5. `tests/test_clean_architecture.py` に app 名を追加し pytest 実行
+5. `config/tests/test_clean_architecture.py` に app 名を追加し pytest 実行
 6. 変更内容を `Document/` に記載し、単体テストを追加

@@ -54,13 +54,13 @@ INSTALLED_APPS = [
     "django.contrib.sessions",
     "django.contrib.messages",
     "django.contrib.staticfiles",
-    "apps.identity",
-    "apps.portal",
-    "apps.gonenkukumi",
-    "apps.receipt_comparison",
-    "apps.inventory_order_alert",
-    "apps.asset_inventory",
-    "apps.shipment_trend",
+    "applications.identity",
+    "applications.portal",
+    "applications.gonenkukumi",
+    "applications.receipt_comparison",
+    "applications.inventory_order_alert",
+    "applications.asset_inventory",
+    "applications.shipment_trend",
 ]
 
 MIDDLEWARE = [
@@ -69,7 +69,7 @@ MIDDLEWARE = [
     "django.middleware.common.CommonMiddleware",
     "django.middleware.csrf.CsrfViewMiddleware",
     "django.contrib.auth.middleware.AuthenticationMiddleware",
-    "apps.portal.middleware.AccessApprovalMiddleware",
+    "applications.portal.middleware.AccessApprovalMiddleware",
     "django.contrib.messages.middleware.MessageMiddleware",
     "django.middleware.clickjacking.XFrameOptionsMiddleware",
 ]
@@ -91,7 +91,7 @@ TEMPLATES = [
                 "django.contrib.auth.context_processors.auth",
                 "django.contrib.messages.context_processors.messages",
                 "django.template.context_processors.csrf",
-                "apps.portal.context_processors.portal_menu",
+                "applications.portal.context_processors.portal_menu",
             ],
         },
     },

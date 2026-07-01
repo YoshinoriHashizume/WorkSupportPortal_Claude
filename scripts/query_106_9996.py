@@ -4,7 +4,7 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT)); os.chdir(ROOT)
 os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'config.settings')
 import django; django.setup()
-from apps.gonenkukumi.infrastructure.oracle.client import oracle_connection
+from applications.gonenkukumi.infrastructure.oracle.client import oracle_connection
 
 with oracle_connection() as conn:
     cur = conn.cursor()

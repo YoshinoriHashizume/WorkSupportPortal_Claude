@@ -1,1 +1,0 @@
-from apps.gonenkukumi.domain.search_params import search_params_from_mapping as search_params_from_url

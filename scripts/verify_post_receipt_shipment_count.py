@@ -27,16 +27,16 @@ import django
 
 django.setup()
 
-from apps.gonenkukumi.infrastructure.oracle.client import (  # noqa: E402
+from applications.gonenkukumi.infrastructure.oracle.client import (  # noqa: E402
     OracleNotConfiguredError,
     OracleQueryError,
     oracle_connection,
     use_mock,
 )
-from apps.inventory_order_alert.composition import ListQuery, build_list_rows  # noqa: E402
-from apps.inventory_order_alert.domain.dates import parse_optional_ymd  # noqa: E402
-from apps.inventory_order_alert.domain.export_csv import render_export_csv  # noqa: E402
-from apps.inventory_order_alert.domain.slims_stock import read_csv_text  # noqa: E402
+from applications.inventory_order_alert.composition import ListQuery, build_list_rows  # noqa: E402
+from applications.inventory_order_alert.domain.dates import parse_optional_ymd  # noqa: E402
+from applications.inventory_order_alert.domain.export_csv import render_export_csv  # noqa: E402
+from applications.inventory_order_alert.domain.slims_stock import read_csv_text  # noqa: E402
 
 
 def parse_args() -> argparse.Namespace:

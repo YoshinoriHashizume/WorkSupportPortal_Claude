@@ -15,7 +15,7 @@ import django
 
 django.setup()
 
-from apps.gonenkukumi.infrastructure.oracle.client import oracle_connection, rows_as_dicts
+from applications.gonenkukumi.infrastructure.oracle.client import oracle_connection, rows_as_dicts
 
 ITEM_CD = "265623-0492"
 TARGET_DATE = "2026/06/19"
