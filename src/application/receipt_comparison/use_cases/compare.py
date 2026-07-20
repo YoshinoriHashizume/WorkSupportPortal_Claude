@@ -15,7 +15,6 @@ from application.receipt_comparison.domain.repositories.ports import (
     PendingComparisonStore,
     SupplierLookup,
 )
-from application.receipt_comparison.models import SuppliedPartsReceiptSupplier
 from application.receipt_comparison.use_cases.comparison_page import ComparisonPageContext, ComparisonPage
 
 

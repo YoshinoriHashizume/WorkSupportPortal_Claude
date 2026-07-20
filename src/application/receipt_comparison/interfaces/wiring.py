@@ -14,6 +14,7 @@ from application.receipt_comparison.infrastructure.persistence.comparison_result
 from application.receipt_comparison.infrastructure.persistence.settings_repository import DjangoSettingsRepository
 from application.receipt_comparison.infrastructure.persistence.supplier_lookup import DjangoSupplierLookup
 from application.receipt_comparison.infrastructure.persistence.model_registry import (
+    get_supplier,
     list_suppliers,
     list_suppliers_for_settings,
     supplier_model,
@@ -93,3 +94,8 @@ def slug_to_comparison_type(slug: str) -> str:
         from django.http import Http404
 
         raise Http404 from exc
+
+
+def resolve_supplier(comparison_type: str, supplier_id: object):
+    """取引先を取得。見つからなければ None。"""
+    return get_supplier(comparison_type, supplier_id)

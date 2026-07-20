@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from django.utils import timezone
 
-from application.gonenkukumi.infrastructure.oracle.client import (
+from application.sales.infrastructure.oracle.client import (
     OracleNotConfiguredError,
     OracleQueryError,
     oracle_connection,

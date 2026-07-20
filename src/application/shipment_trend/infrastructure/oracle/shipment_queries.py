@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from application.gonenkukumi.infrastructure.oracle.client import rows_as_dicts
+from application.sales.infrastructure.oracle.client import rows_as_dicts
 from application.shipment_trend.domain.value_objects.trend_builder import MonthlyShipmentRecord
 
 

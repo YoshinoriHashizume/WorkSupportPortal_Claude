@@ -14,7 +14,7 @@ from application.receipt_comparison.domain.value_objects.file_parser import (
     parse_supplied_parts_qty,
 )
 from application.receipt_comparison.domain.value_objects.records import MariReceiptRow, ReceiptFileRow
-from application.gonenkukumi.infrastructure.oracle.customers import (
+from application.sales.infrastructure.oracle.customers import (
     customer_code_digit_pattern,
     list_customers_by_digit_length,
 )

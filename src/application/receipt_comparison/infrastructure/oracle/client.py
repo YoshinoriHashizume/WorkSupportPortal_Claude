@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from datetime import date
 
-from application.gonenkukumi.infrastructure.oracle.client import oracle_connection, rows_as_dicts, use_mock
+from application.sales.infrastructure.oracle.client import oracle_connection, rows_as_dicts, use_mock
 from application.receipt_comparison.domain.value_objects.comparison import normalize_qty
 from application.receipt_comparison.domain.value_objects.records import MariReceiptRow
 from application.receipt_comparison.models import (

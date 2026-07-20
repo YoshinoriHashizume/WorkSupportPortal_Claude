@@ -60,10 +60,13 @@ def test_docker_compose_devcontainer_uses_src_layout():
     assert ".env" in source
 
 
-def test_docker_compose_devcontainer_passes_oracle_password_with_default():
+def test_docker_compose_devcontainer_oracle_env_has_no_known_host_defaults():
+    """誤接続防止: compose に社内ホスト／パスワード既知フォールバックを置かない。"""
     source = read_repo("docker-compose.devcontainer.yaml")
-    assert "ORACLE_PASSWORD: ${ORACLE_PASSWORD:-EXPJ}" in source
-    assert "ORACLE_HOST:" in source
+    assert "ORACLE_PASSWORD: ${ORACLE_PASSWORD:-}" in source
+    assert "ORACLE_HOST: ${ORACLE_HOST:-}" in source
+    assert "192.168.3.204" not in source
+    assert "ORACLE_PASSWORD: ${ORACLE_PASSWORD:-EXPJ}" not in source
 
 
 def test_docker_compose_production_exists():

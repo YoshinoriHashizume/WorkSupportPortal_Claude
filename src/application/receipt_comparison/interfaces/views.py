@@ -7,7 +7,7 @@ from typing import TYPE_CHECKING
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
 from django.http import Http404, HttpRequest, HttpResponse
-from django.shortcuts import get_object_or_404, redirect, render
+from django.shortcuts import redirect, render
 from django.urls import reverse
 from django.utils.http import content_disposition_header
 from django.views.decorators.http import require_http_methods
@@ -19,15 +19,15 @@ from application.receipt_comparison.interfaces.wiring import (
     export_csv_usecase,
     pending_comparison_store,
     register_comparison_usecase,
+    resolve_supplier,
     settings_page_usecase,
     settings_post_usecase,
     slug_to_comparison_type,
-    supplier_model,
     update_results_usecase,
 )
 from application.receipt_comparison.domain.value_objects.comparison_type import UnknownComparisonTypeError, comparison_type_from_slug
 from application.receipt_comparison.domain.value_objects.comparison_urls import append_query, comparison_url_path, parse_date
-from application.receipt_comparison.models import ReceiptFlag
+from application.receipt_comparison.domain.value_objects.receipt_flag import ReceiptFlag
 
 if TYPE_CHECKING:
     from application.receipt_comparison.use_cases.compare import FlashMessage
@@ -119,7 +119,9 @@ def comparison_page(request: HttpRequest) -> HttpResponse:
 
     supplier = None
     if supplier_id:
-        supplier = get_object_or_404(supplier_model(comparison_type), id=supplier_id)
+        supplier = resolve_supplier(comparison_type, supplier_id)
+        if supplier is None:
+            raise Http404
 
     pending_store = pending_comparison_store(request)
 
@@ -272,7 +274,9 @@ def export_csv(request: HttpRequest) -> HttpResponse:
     if type_slug is None:
         raise Http404
     comparison_type = slug_to_comparison_type(type_slug)
-    supplier = get_object_or_404(supplier_model(comparison_type), id=request.GET.get("supplier_id"))
+    supplier = resolve_supplier(comparison_type, request.GET.get("supplier_id"))
+    if supplier is None:
+        raise Http404
     start_date = parse_date(request.GET.get("start_date")) or date.today()
     end_date = parse_date(request.GET.get("end_date")) or start_date
     page_usecase = comparison_page_usecase()

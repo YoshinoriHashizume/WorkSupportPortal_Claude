@@ -58,8 +58,12 @@ def comparison_result_model(comparison_type: str) -> ComparisonResultModel:
 def get_supplier(
     comparison_type: str,
     supplier_id: object,
-) -> FinishedProductReceiptSupplier | SuppliedPartsReceiptSupplier:
-    return supplier_model(comparison_type).objects.get(id=supplier_id)
+) -> FinishedProductReceiptSupplier | SuppliedPartsReceiptSupplier | None:
+    model = supplier_model(comparison_type)
+    try:
+        return model.objects.get(id=supplier_id)
+    except (model.DoesNotExist, ValueError, TypeError):
+        return None
 
 
 def list_suppliers(comparison_type: str) -> models.QuerySet[Any]:

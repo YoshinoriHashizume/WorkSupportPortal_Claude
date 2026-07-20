@@ -3,6 +3,12 @@ from __future__ import annotations
 from django.conf import settings
 from django.db import models
 
+from application.portal.domain.value_objects.access_status import (
+    ACCESS_STATUS_APPROVED,
+    ACCESS_STATUS_PENDING,
+    ACCESS_STATUS_REJECTED,
+)
+
 
 class UserFavoriteMenu(models.Model):
     user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="favorite_menus")
@@ -22,9 +28,9 @@ class UserFavoriteMenu(models.Model):
 
 class UserAccessRequest(models.Model):
     class Status(models.TextChoices):
-        PENDING = "pending", "承認待ち"
-        APPROVED = "approved", "許可"
-        REJECTED = "rejected", "拒否"
+        PENDING = ACCESS_STATUS_PENDING, "承認待ち"
+        APPROVED = ACCESS_STATUS_APPROVED, "許可"
+        REJECTED = ACCESS_STATUS_REJECTED, "拒否"
 
     user = models.OneToOneField(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="access_request")
     status = models.CharField(max_length=20, choices=Status.choices, default=Status.PENDING)

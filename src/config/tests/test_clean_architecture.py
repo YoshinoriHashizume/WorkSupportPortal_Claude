@@ -105,10 +105,21 @@ def test_views_do_not_import_own_infrastructure(app_name: str):
 @pytest.mark.parametrize("app_name", BUSINESS_APPS)
 def test_use_cases_do_not_import_django_or_own_infrastructure(app_name: str):
     forbidden_infra = f"application.{app_name}.infrastructure"
+    forbidden_models = f"application.{app_name}.models"
     for path in _python_files_under(f"application/{app_name}/use_cases"):
         imports = _imports_in_file(path)
         assert not _has_django_import(imports), path
         assert not any(module.startswith(forbidden_infra) for module in imports), path
+        assert not any(module == forbidden_models or module.startswith(forbidden_models + ".") for module in imports), path
+
+
+@pytest.mark.parametrize("app_name", BUSINESS_APPS)
+def test_views_do_not_import_own_models(app_name: str):
+    """views は ORM モデルを直 import しない（wiring / domain 経由）。"""
+    views_path = ROOT / "application" / app_name / "interfaces" / "views.py"
+    imports = _imports_in_file(views_path)
+    forbidden = f"application.{app_name}.models"
+    assert not any(module == forbidden or module.startswith(forbidden + ".") for module in imports), views_path
 
 
 @pytest.mark.parametrize("app_name", BUSINESS_APPS)

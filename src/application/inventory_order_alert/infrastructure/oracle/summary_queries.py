@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from datetime import date
 
-from application.gonenkukumi.infrastructure.oracle.client import rows_as_dicts
+from application.sales.infrastructure.oracle.client import rows_as_dicts
 
 from application.inventory_order_alert.domain.value_objects.dates import to_date
 from application.inventory_order_alert.domain.value_objects.internal_item import resolve_cust_code, resolve_internal_item_cd

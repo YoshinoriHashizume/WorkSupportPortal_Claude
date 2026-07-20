@@ -4,7 +4,7 @@ from django.http import HttpRequest, HttpResponse, JsonResponse
 from django.shortcuts import redirect
 
 from .favorites import can_access_menu_item, is_portal_admin, receipt_comparison_type_from_path
-from application.portal.models import UserAccessRequest
+from application.portal.domain.value_objects.access_status import ACCESS_STATUS_APPROVED
 
 
 ALLOWED_PATHS = {
@@ -33,7 +33,7 @@ class AccessApprovalMiddleware:
     def __call__(self, request: HttpRequest) -> HttpResponse:
         if self.requires_approval_gate(request):
             access_request = getattr(request.user, "access_request", None)
-            if access_request and access_request.status != UserAccessRequest.Status.APPROVED:
+            if access_request and access_request.status != ACCESS_STATUS_APPROVED:
                 if request.path.startswith("/api/"):
                     return JsonResponse(
                         {

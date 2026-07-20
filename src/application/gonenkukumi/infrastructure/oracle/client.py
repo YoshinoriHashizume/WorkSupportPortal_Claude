@@ -20,7 +20,9 @@ from application.gonenkukumi.domain.value_objects.errors import OracleNotConfigu
 
 
 def use_mock() -> bool:
-    return os.environ.get("ORACLE_USE_MOCK", "false").lower() != "false"
+    """ORACLE_USE_MOCK が明示的な真値のときだけモック。typo や空白では実接続にする。"""
+    raw = str(os.environ.get("ORACLE_USE_MOCK", "false") or "").strip().lower()
+    return raw in {"true", "1", "yes", "on"}
 
 
 def oracle_connect_timeout_seconds() -> float:

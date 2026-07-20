@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from application.gonenkukumi.infrastructure.oracle.client import (
+from application.sales.infrastructure.oracle.client import (
     OracleNotConfiguredError,
     OracleQueryError,
     oracle_connection,

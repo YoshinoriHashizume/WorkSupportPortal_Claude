@@ -8,10 +8,10 @@ from django.urls import reverse
 
 from application.asset_inventory.interfaces.wiring import (
     export_csv_usecase,
+    fetch_attachment_usecase,
     list_page_usecase,
     resolve_access_key_usecase,
 )
-from application.asset_inventory.domain.value_objects.attachment_proxy import fetch_attachment_content, is_allowed_attachment_url
 from application.asset_inventory.domain.value_objects.errors import DesknetApiError
 from application.asset_inventory.domain.value_objects.list_client_data import build_list_client_payload
 from application.asset_inventory.domain.value_objects.list_query import (
@@ -155,15 +155,12 @@ def list_page(request: HttpRequest) -> HttpResponse:
 @login_required
 def attachment_proxy(request: HttpRequest) -> HttpResponse:
     source_url = (request.GET.get("src") or "").strip()
-    if not source_url or not is_allowed_attachment_url(source_url, settings.DESKNETS_LOGIN_URL):
-        return HttpResponseForbidden("invalid attachment source")
-
     access_key, access_error = _resolve_access_key(request)
     if access_error:
         return HttpResponse(access_error, status=503, content_type="text/plain; charset=utf-8")
 
     try:
-        content, content_type = fetch_attachment_content(
+        fetched = fetch_attachment_usecase().execute(
             source_url=source_url,
             access_key=access_key,
             timeout=float(settings.DESKNETS_TIMEOUT_SECONDS),
@@ -171,6 +168,10 @@ def attachment_proxy(request: HttpRequest) -> HttpResponse:
     except DesknetApiError as exc:
         return HttpResponse(str(exc), status=502, content_type="text/plain; charset=utf-8")
 
+    if fetched is None:
+        return HttpResponseForbidden("invalid attachment source")
+
+    content, content_type = fetched
     response = HttpResponse(content, content_type=content_type)
     response["Cache-Control"] = "private, max-age=300"
     return response
