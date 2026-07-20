@@ -1,0 +1,85 @@
+{
+  "name": "WorkSupportPortal Dev",
+  "dockerComposeFile": "../docker-compose.devcontainer.yaml",
+  "service": "web-app",
+  "workspaceFolder": "/django_app/src",
+  "customizations": {
+    "vscode": {
+      "extensions": [
+        "ms-python.python",
+        "anysphere.cursorpyright",
+        "ms-python.debugpy",
+        "charliermarsh.ruff",
+        "littlefoxteam.vscode-python-test-adapter",
+        "hbenl.vscode-test-explorer",
+        "ms-vscode.test-adapter-converter",
+        "vscode.json-language-features",
+        "ms-vscode.vscode-typescript",
+        "dbaeumer.vscode-eslint",
+        "redhat.vscode-yaml",
+        "mhutchie.git-graph",
+        "ms-azuretools.vscode-docker"
+      ],
+      "settings": {
+        "terminal.integrated.enableBell": true,
+        "python.defaultInterpreterPath": "/usr/bin/python3",
+        "editor.defaultFormatter": "charliermarsh.ruff",
+        "editor.formatOnSave": true,
+        "editor.codeActionsOnSave": {
+          "source.fixAll.ruff": "explicit",
+          "source.organizeImports.ruff": "explicit"
+        },
+        "extensions.gallery": {
+          "serviceUrl": "https://open-vsx.org/vscode/gallery",
+          "itemUrl": "https://open-vsx.org/vscode/item"
+        },
+        "telemetry.telemetryLevel": "off",
+        "python.analysis.autoImportCompletions": true,
+        "python.analysis.typeCheckingMode": "basic",
+        "python.testing.pytestEnabled": true,
+        "python.testing.unittestEnabled": false,
+        "python.testing.nosetestsEnabled": false,
+        "workbench.colorCustomizations": {
+          "tab.activeBorderTop": "#ffffff"
+        }
+      }
+    }
+  },
+  "forwardPorts": [8990, 5440],
+  "portsAttributes": {
+    "8990": {
+      "label": "Django App",
+      "onAutoForward": "notify"
+    },
+    "5440": {
+      "label": "PostgreSQL DB",
+      "onAutoForward": "silent"
+    }
+  },
+  // ホスト個人の .ssh はマウントしない（他開発者で起動失敗・秘密鍵露出を避ける）。
+  // GitHub 等は HTTPS またはホスト側の SSH agent / gh auth を利用する。
+  // Claude Code 設定のみ名前付きボリュームで永続化。
+  "mounts": [
+    "source=claude-code-config-${devcontainerId},target=/home/vscode/.claude,type=volume"
+  ],
+  "containerEnv": {
+    "PYTHONPATH": "/django_app/src",
+    "DJANGO_SETTINGS_MODULE": "config.settings.development",
+    "PYTHONUNBUFFERED": "1",
+    "DJANGO_DEBUG": "True",
+    "DISABLE_AUTOUPDATER": "1",
+    "GIT_AUTHOR_NAME": "${localEnv:GIT_AUTHOR_NAME}",
+    "GIT_AUTHOR_EMAIL": "${localEnv:GIT_AUTHOR_EMAIL}",
+    "GIT_COMMITTER_NAME": "${localEnv:GIT_AUTHOR_NAME}",
+    "GIT_COMMITTER_EMAIL": "${localEnv:GIT_AUTHOR_EMAIL}",
+    "GIT_CONFIG_GLOBAL": "/home/vscode/.gitconfig-container"
+  },
+  "remoteUser": "vscode",
+  "features": {
+    "ghcr.io/devcontainers/features/git:1": {},
+    "ghcr.io/devcontainers/features/github-cli:1": {}
+  },
+  "initializeCommand": "echo 'Initializing Django development environment...'",
+  "postCreateCommand": "sudo chown -R vscode:vscode /home/vscode/.claude && git config --file ~/.gitconfig-container core.autocrlf input",
+  "shutdownAction": "stopCompose"
+}

@@ -1,0 +1,4 @@
+# 互換エントリ。Docker ビルドの正はリポジトリルートの requirements-docker.txt
+# ホストからこのパスを指定する場合:
+#   pip install -r docker/django/requirements.txt
+-r ../../requirements-docker.txt

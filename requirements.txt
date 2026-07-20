@@ -1,10 +1,2 @@
-﻿Django
-Authlib
-requests
-psycopg[binary]
-oracledb
-openpyxl
-gunicorn
-pytest
-pytest-django
-pytest-playwright
+# ローカル／互換用。実体は requirements-docker.txt（prod + gunicorn + dev）
+-r requirements-docker.txt

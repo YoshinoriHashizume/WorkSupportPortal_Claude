@@ -1,0 +1,16 @@
+{
+  "permissions": {
+    "allow": [
+      "Skill(generate-claude-md)",
+      "Skill(generate-claude-md:*)",
+      "Bash(ls /django_app/src/config/ 2>&1; echo \"---\"; ls /django_app/src/accounts/ 2>&1; echo \"---\"; ls /django_app/src/docs/ 2>&1; echo \"---\"; cat /django_app/README.md 2>&1 | head -40)",
+      "Read(//django_app/**)",
+      "Bash(ls -la /home/vscode/.claude/projects/ 2>/dev/null; ls -la /home/vscode/.claude/projects/-django-app-src/ 2>/dev/null)",
+      "Read(//home/vscode/.claude/projects/**)",
+      "Bash(echo \"---return $?---\")",
+      "Bash(python manage.py check)",
+      "Bash(python -c \"from django.urls import get_resolver; r = get_resolver\\(\\); print\\('OK:', r.url_patterns\\)\")",
+      "Bash(python -c ' *)"
+    ]
+  }
+}

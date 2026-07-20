@@ -1,0 +1,139 @@
+﻿from __future__ import annotations
+
+from pathlib import Path
+
+from config.repo_paths import repo_root
+
+
+SRC_ROOT = Path(__file__).resolve().parents[2]
+REPO_ROOT = repo_root(Path(__file__).resolve())
+
+
+def read_repo(path: str) -> str:
+    return (REPO_ROOT / path).read_text(encoding="utf-8")
+
+
+def read_src(path: str) -> str:
+    return (SRC_ROOT / path).read_text(encoding="utf-8")
+
+
+def test_django_dockerfile_includes_oracle_and_requirements():
+    source = read_repo("docker/django/Dockerfile")
+    assert "requirements-docker.txt" in source or "requirements-prod.txt" in source
+    assert "instantclient" in source.lower() or "ORACLE" in source
+    assert "python:3.12" in source
+
+
+def test_django_dockerfile_fixes_libaio_symlink_for_thick_mode():
+    source = read_repo("docker/django/Dockerfile")
+    assert "libaio.so.1.0.2" in source or "libaio.so.1t64" in source
+    assert "ln -sfn" in source
+    # 自己参照リンクは禁止（DPI-1047 / Too many levels of symbolic links）
+    assert "ln -sf /usr/lib/x86_64-linux-gnu/libaio.so.1 /usr/lib/x86_64-linux-gnu/libaio.so.1" not in source
+
+
+def test_entrypoint_migrates_and_supports_dev_bootstrap():
+    source = read_repo("entrypoint.sh")
+    assert "migrate" in source
+    assert "collectstatic" in source
+    assert "runserver" in source or "gunicorn" in source
+    assert "bootstrap_local_dev" in source
+    assert "DB 接続待ち" in source or "ensure_connection" in source
+    assert "DJANGO_DEBUG" in source
+    assert "exec python manage.py runserver" in source
+    assert "exec gunicorn" in source
+
+
+def test_docker_compose_devcontainer_runs_entrypoint_as_main_with_healthcheck():
+    source = read_repo("docker-compose.devcontainer.yaml")
+    assert 'command: ["sh", "/django_app/entrypoint.sh"]' in source
+    assert "& sleep infinity" not in source
+    assert "healthcheck:" in source
+    assert "8880/login" in source
+
+
+def test_docker_compose_devcontainer_uses_src_layout():
+    source = read_repo("docker-compose.devcontainer.yaml")
+    assert "docker/django/Dockerfile" in source or "dockerfile: docker/django/Dockerfile" in source
+    assert "8990:8880" in source
+    assert "5440:5432" in source
+    assert ".env" in source
+
+
+def test_docker_compose_devcontainer_passes_oracle_password_with_default():
+    source = read_repo("docker-compose.devcontainer.yaml")
+    assert "ORACLE_PASSWORD: ${ORACLE_PASSWORD:-EXPJ}" in source
+    assert "ORACLE_HOST:" in source
+
+
+def test_docker_compose_production_exists():
+    source = read_repo("docker-compose.production.yaml")
+    assert "production" in source.lower() or "gunicorn" in source.lower() or "nginx" in source.lower()
+    assert ".env.production" in source or "env_file" in source
+
+
+def test_env_production_example_disables_debug_and_dev_mode():
+    source = read_repo(".env.production.example")
+    assert "DEBUG=False" in source or "DJANGO_DEBUG=false" in source
+    assert "AUTH_DEV_MODE=false" in source
+    assert "DJANGO_SETTINGS_MODULE=config.settings.production" in source
+
+
+def test_env_example_includes_oracle_and_desknet_keys_from_legacy():
+    """旧 WorkSupportPortal の .env.example 相当キーが現行テンプレートにあること。"""
+    source = read_repo(".env.example")
+    for key in (
+        "ORACLE_USE_MOCK",
+        "ORACLE_HOST",
+        "ORACLE_PORT",
+        "ORACLE_SID",
+        "ORACLE_USER",
+        "ORACLE_PASSWORD",
+        "DESKNETS_LOGIN_URL",
+        "DESKNETS_TIMEOUT_SECONDS",
+        "AUTH_MICROSOFT_ENTRA_ID_ID",
+        "POSTGRES_HOST",
+        "AUTH_URL=http://localhost:8990",
+    ):
+        assert key in source, f".env.example missing {key}"
+
+
+def test_env_production_example_includes_oracle_and_gunicorn_keys():
+    source = read_repo(".env.production.example")
+    for key in (
+        "ORACLE_HOST",
+        "ORACLE_CONNECT_TIMEOUT_SECONDS",
+        "DESKNETS_ASSET_INVENTORY_LOGIN_ID",
+        "GUNICORN_WORKERS",
+        "GUNICORN_TIMEOUT_SECONDS",
+        "DJANGO_ALLOWED_HOSTS=192.168.3.196",
+    ):
+        assert key in source, f".env.production.example missing {key}"
+
+
+def test_requirements_include_runtime_dependencies():
+    source = read_repo("requirements-prod.txt")
+    assert "Django" in source or "django" in source.lower()
+    assert "oracledb" in source
+    assert "whitenoise" in source
+    docker = read_repo("requirements-docker.txt")
+    assert "gunicorn" in docker
+    assert "-r requirements-prod.txt" in docker
+
+
+def test_docker_compose_production_uses_web_app_db_nginx_without_source_bind():
+    source = read_repo("docker-compose.production.yaml")
+    assert "web-app:" in source
+    assert "nginx:" in source
+    assert "- .:/django_app" not in source
+    assert ".env.production" in source
+    assert 'command: ["sh", "/django_app/entrypoint.sh"]' in source
+    assert "& sleep infinity" not in source
+    assert "8000/login" in source
+    assert "condition: service_healthy" in source
+
+
+def test_settings_enables_whitenoise_when_debug_false():
+    source = read_src("config/settings/base.py")
+    assert "if not DEBUG:" in source
+    assert "whitenoise.middleware.WhiteNoiseMiddleware" in source

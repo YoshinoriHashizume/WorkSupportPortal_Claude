@@ -1,0 +1,5 @@
+# Docker イメージ用（ランタイム + gunicorn + 開発依存）
+# インストールの正: リポジトリルートで本ファイルを指定する
+-r requirements-prod.txt
+gunicorn>=22.0.0,<24.0
+-r requirements-dev.txt

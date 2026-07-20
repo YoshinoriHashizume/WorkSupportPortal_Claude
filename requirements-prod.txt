@@ -1,8 +1,9 @@
-Django
-Authlib
-requests
-psycopg[binary]
-oracledb
-openpyxl
-gunicorn
-whitenoise
+# 本番・開発共通のランタイム依存（サーバー実装は含めない）
+# Docker: requirements-docker.txt / Windows 直実行: requirements-windows-prod.txt
+Django==5.2
+Authlib>=1.3.0
+requests>=2.31.0
+psycopg2-binary>=2.9.9
+oracledb>=1.4.0
+openpyxl>=3.1.5
+whitenoise>=6.6.0

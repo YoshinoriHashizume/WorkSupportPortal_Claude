@@ -1,0 +1,78 @@
+services:
+  db:
+    container_name: db-postgres-${PROJECT_NAME:-worksupportportal}
+    build: ./docker/postgre_sql
+    volumes:
+      - db-store:/var/lib/postgresql/data
+    env_file:
+      - .env
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB}
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      PGPORT: ${POSTGRES_PORT:-5432}
+      TZ: ${TZ}
+    command: postgres -c config_file=/etc/postgresql/postgresql.conf
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-django} -d ${POSTGRES_DB:-django-db}"]
+      interval: 15s
+      retries: 5
+    ports:
+      - "5440:5432"  # ホスト側5440 → コンテナ側5432
+
+  web-app:
+    container_name: web-app-${PROJECT_NAME:-worksupportportal}
+    platform: linux/amd64
+    build:
+      context: .
+      dockerfile: docker/django/Dockerfile
+    # entrypoint を PID 1 相当で起動（失敗時にコンテナを落とす。sleep infinity は使わない）
+    # Windows バインドマウントでは +x が付かないことがあるため sh 経由で実行し、内部で exec する
+    command: ["sh", "/django_app/entrypoint.sh"]
+    volumes:
+      - .:/django_app  # プロジェクト全体をマウント
+
+    ports:
+      - "8990:8880"  # ホスト側8990 → コンテナ側8880
+    env_file:
+      - .env
+    environment:
+      SECRET_KEY: ${SECRET_KEY}
+      DEBUG: ${DEBUG}
+      ALLOWED_HOSTS: ${ALLOWED_HOSTS}
+      TZ: ${TZ}
+      PYTHONPATH: ${PYTHONPATH}
+      DJANGO_SETTINGS_MODULE: ${DJANGO_SETTINGS_MODULE}
+
+      # PostgreSQL接続情報
+      POSTGRES_DB: ${POSTGRES_DB}
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_HOST: ${POSTGRES_HOST:-db}
+      POSTGRES_PORT: ${POSTGRES_PORT:-5432}
+
+      # Oracle（旧 compose と同様、未設定時は EXPJ）
+      ORACLE_USE_MOCK: ${ORACLE_USE_MOCK:-false}
+      ORACLE_HOST: ${ORACLE_HOST:-192.168.3.204}
+      ORACLE_PORT: ${ORACLE_PORT:-1521}
+      ORACLE_SID: ${ORACLE_SID:-EXPJ}
+      ORACLE_USER: ${ORACLE_USER:-EXPJ}
+      ORACLE_PASSWORD: ${ORACLE_PASSWORD:-EXPJ}
+      ORACLE_THICK_MODE: ${ORACLE_THICK_MODE:-true}
+      ORACLE_CLIENT_LIB_DIR: ${ORACLE_CLIENT_LIB_DIR:-/opt/oracle/instantclient}
+      ORACLE_CONNECT_TIMEOUT_SECONDS: ${ORACLE_CONNECT_TIMEOUT_SECONDS:-5}
+    depends_on:
+      db:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://127.0.0.1:8880/login >/dev/null || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 90s
+    tty: true
+    stdin_open: true
+    user: vscode  # devcontainer用のユーザー設定
+
+volumes:
+  db-store:

@@ -1,0 +1,105 @@
+現時点の最終版です。
+
+```
+.claude/skills/
+│
+├── sdd/                                    # SDDワークフロー ← 作成済み
+│   ├── SKILL.md
+│   └── references/
+│       ├── sdd-workflow-guideline.md
+│       └── ddd-brainstorming-guideline.md
+│
+├── skill-tester/                           # スキルテスター ← 作成済み
+│   ├── SKILL.md
+│   └── references/
+│       └── test-procedure.md
+│
+├── generate-claude-md/                     # CLAUDE.md生成 ← 作成済み
+│   ├── SKILL.md
+│   └── references/
+│       └── claude-md-template.md
+│
+├── strategic-design-review-l1/             # BMCレビュー ← 作成済み
+│   └── SKILL.md
+│
+├── strategic-design-review-l2/             # Event Stormingレビュー ← 作成済み
+│   └── SKILL.md
+│
+├── strategic-design-review-l3/             # サブドメイン+コンテキストレビュー ← 作成済み
+│   └── SKILL.md
+│
+├── requirements-review-l1/                 # 形式・用語・構造チェック ← 未作成
+│   └── SKILL.md
+│
+├── requirements-review-l2/                 # 用語再定義 ← 未作成
+│   └── SKILL.md
+│
+├── requirements-review-l3/                 # 妥当性・網羅性チェック ← 未作成
+│   └── SKILL.md
+│
+├── make-design/                            # 機能設計書の作成 ← 作成済み
+│   ├── SKILL.md
+│   └── references/
+│       ├── swift-clean-architecture.md
+│       ├── django-clean-architecture.md
+│       └── csharp-clean-architecture.md
+│
+├── make-test-design/                       # テスト設計書の作成 ← SKILL.md作成済み、references未作成
+│   ├── SKILL.md
+│   └── references/
+│       ├── test-strategy.md                    # テスト戦略（言語非依存）
+│       ├── swift-xctest.md                     # Swift + XCTest
+│       ├── django-pytest.md                    # Django + pytest
+│       └── csharp-nunit.md                     # C# + NUnit
+│
+├── design-review-l1/                       # 機能設計レビュー ← 作成済み(v2)
+│   ├── SKILL.md
+│   └── references/                             # make-designと同内容のコピー
+│       ├── swift-clean-architecture.md
+│       ├── django-clean-architecture.md
+│       └── csharp-clean-architecture.md
+│
+├── design-review-l2/                       # テスト設計レビュー ← 未作成
+│   ├── SKILL.md
+│   └── references/                             # make-test-designと同内容のコピー
+│       └── test-strategy.md
+│
+├── design-review-l3/                       # 実装レビュー ← 作成済み(v2)
+│   ├── SKILL.md
+│   └── references/
+│       ├── swift-clean-architecture.md         # make-designと同内容のコピー
+│       ├── django-clean-architecture.md        # make-designと同内容のコピー
+│       ├── csharp-clean-architecture.md        # make-designと同内容のコピー
+│       ├── swift-coding-rules.md               # Swift固有コーディング規約
+│       ├── django-coding-rules.md              # Django固有コーディング規約
+│       └── csharp-coding-rules.md              # C#固有コーディング規約
+│
+├── make-ubiquitous-language/               # ユビキタス言語作成 ← 未作成
+│   └── SKILL.md
+│
+├── make-drawio-context-map/                # コンテキストマップ作成 ← 作成済み
+│   └── SKILL.md
+│
+├── make-drawio-bmc/                        # BMC作成 ← 作成済み
+│   └── SKILL.md
+│
+└── make-plantuml-sequence/                 # シーケンス図作成 ← 未作成
+    └── SKILL.md
+```
+
+### referenceのバージョン管理対象
+
+| referenceファイル | コピーを持つスキル | バージョンチェック |
+|-----------------|-----------------|----------------|
+| swift-clean-architecture.md | make-design, design-review-l1, design-review-l3 | 3箇所の一致を確認 |
+| django-clean-architecture.md | make-design, design-review-l1, design-review-l3 | 3箇所の一致を確認 |
+| csharp-clean-architecture.md | make-design, design-review-l1, design-review-l3 | 3箇所の一致を確認 |
+| test-strategy.md | make-test-design, design-review-l2 | 2箇所の一致を確認 |
+
+### 作成状況サマリー
+
+| 状態 | スキル数 |
+|------|---------|
+| 作成済み | 12 |
+| 未作成 | 7（requirements-review L1/L2/L3、design-review-l2、make-ubiquitous-language、make-plantuml-sequence、make-test-designのreferences） |
+| **合計** | **19スキル** |

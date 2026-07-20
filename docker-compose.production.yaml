@@ -1,0 +1,79 @@
+# 本番 Compose。起動例（補間に必須）:
+#   docker compose -f docker-compose.production.yaml --env-file .env.production up -d --build
+# サービス: db (PostgreSQL) / web-app (Django+gunicorn:8000) / nginx (:80 → web-app)
+services:
+  db:
+    container_name: db-postgres-${PROJECT_NAME:-worksupportportal}
+    build: ./docker/postgre_sql
+    restart: unless-stopped
+    volumes:
+      - db-store:/var/lib/postgresql/data
+      - ./backups:/backups
+    env_file:
+      - .env.production
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB}
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      PGPORT: ${POSTGRES_PORT:-5432}
+      TZ: ${TZ}
+    command: postgres -c config_file=/etc/postgresql/postgresql.conf
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-django} -d ${POSTGRES_DB:-django-db}"]
+      interval: 15s
+      retries: 5
+
+  web-app:
+    container_name: web-app-${PROJECT_NAME:-worksupportportal}
+    platform: linux/amd64
+    build:
+      context: .
+      dockerfile: docker/django/Dockerfile
+    restart: unless-stopped
+    # 本番はイメージ内ソースを正とする（開発用の .:/django_app マウントはしない）
+    # entrypoint を PID 1 相当で起動（gunicorn は entrypoint 内で exec）
+    command: ["sh", "/django_app/entrypoint.sh"]
+    volumes:
+      - static:/django_app/staticfiles
+      - ./src/logs:/django_app/src/logs
+    env_file:
+      - .env.production
+    environment:
+      SECRET_KEY: ${SECRET_KEY}
+      DEBUG: "False"
+      DJANGO_DEBUG: "false"
+      AUTH_DEV_MODE: "false"
+      ALLOWED_HOSTS: ${ALLOWED_HOSTS}
+      TZ: ${TZ}
+      PYTHONPATH: ${PYTHONPATH:-/django_app/src}
+      DJANGO_SETTINGS_MODULE: config.settings.production
+      POSTGRES_DB: ${POSTGRES_DB}
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_HOST: ${POSTGRES_HOST:-db}
+      POSTGRES_PORT: ${POSTGRES_PORT:-5432}
+    depends_on:
+      db:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://127.0.0.1:8000/login >/dev/null || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 90s
+
+  nginx:
+    container_name: nginx-${PROJECT_NAME:-worksupportportal}
+    build: ./docker/nginx
+    restart: unless-stopped
+    volumes:
+      - static:/staticfiles
+    ports:
+      - "80:80"
+    depends_on:
+      web-app:
+        condition: service_healthy
+
+volumes:
+  db-store:
+  static:
