@@ -43,6 +43,8 @@ services:
       TZ: ${TZ}
       PYTHONPATH: ${PYTHONPATH}
       DJANGO_SETTINGS_MODULE: ${DJANGO_SETTINGS_MODULE}
+      # DEBUG=false でもホスト 8990→8880 と healthcheck を一致させる
+      WEB_BIND_PORT: ${WEB_BIND_PORT:-8880}
 
       # PostgreSQL接続情報
       POSTGRES_DB: ${POSTGRES_DB}
@@ -65,7 +67,8 @@ services:
       db:
         condition: service_healthy
     healthcheck:
-      test: ["CMD-SHELL", "curl -fsS http://127.0.0.1:8880/login >/dev/null || exit 1"]
+      # WEB_BIND_PORT 既定 8880。万一 8000 で起動しても healthy 判定できるように両方試す
+      test: ["CMD-SHELL", "curl -fsS http://127.0.0.1:8880/login >/dev/null || curl -fsS http://127.0.0.1:8000/login >/dev/null || exit 1"]
       interval: 15s
       timeout: 5s
       retries: 5

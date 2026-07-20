@@ -1,5 +1,6 @@
 # Docker イメージ用（ランタイム + gunicorn + 開発依存）
-# インストールの正: リポジトリルートで本ファイルを指定する
+# 宣言の正。イメージへのインストールは requirements-docker.lock.txt を使う。
+# lock 再生成: bash scripts/generate_requirements_lock.sh
 -r requirements-prod.txt
 gunicorn>=22.0.0,<24.0
 -r requirements-dev.txt

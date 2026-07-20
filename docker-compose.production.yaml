@@ -47,6 +47,7 @@ services:
       TZ: ${TZ}
       PYTHONPATH: ${PYTHONPATH:-/django_app/src}
       DJANGO_SETTINGS_MODULE: config.settings.production
+      WEB_BIND_PORT: ${WEB_BIND_PORT:-8000}
       POSTGRES_DB: ${POSTGRES_DB}
       POSTGRES_USER: ${POSTGRES_USER}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}

@@ -60,8 +60,9 @@ RUN npm install -g @anthropic-ai/claude-code
 # 必要なディレクトリを作成
 RUN mkdir -p /django_app/src /django_app/static
 
-# 依存パッケージ（ランタイム単一ソース + Docker / 開発用）
-COPY ./requirements-prod.txt ./requirements-dev.txt ./requirements-docker.txt /django_app/
+# 依存パッケージ（宣言ファイル + 再現用 lock。イメージには lock をインストール）
+COPY ./requirements-prod.txt ./requirements-dev.txt ./requirements-docker.txt \
+     ./requirements-prod.lock.txt ./requirements-docker.lock.txt /django_app/
 
 # 作業ディレクトリの設定
 WORKDIR /django_app
@@ -70,7 +71,8 @@ WORKDIR /django_app
 ENV PATH="/root/.local/bin:${PATH}"
 
 # uvを使用してパッケージをインストール（pip互換モードで高速インストール）
-RUN uv pip install --system --no-cache -r requirements-docker.txt
+# 再現性のため lock を正とする（宣言側を変えたら scripts/generate_requirements_lock.sh で再生成）
+RUN uv pip install --system --no-cache -r requirements-docker.lock.txt
 
 # Oracle Instant Clientのダウンロードとインストール（64ビット版）
 RUN set -eux; \

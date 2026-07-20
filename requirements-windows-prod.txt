@@ -1,3 +1,4 @@
 # Windows 本番直実行（waitress）。gunicorn は含めない
+# 宣言の正。ピン留めは requirements-windows-prod.lock.txt
 -r requirements-prod.txt
 waitress>=3.0.0

@@ -49,9 +49,10 @@ def test_requirements_windows_prod_uses_waitress_not_gunicorn():
 
 def test_dockerfile_installs_requirements_docker_from_repo_root():
     source = read_repo("docker/django/Dockerfile")
-    assert "requirements-docker.txt" in source
+    assert "requirements-docker.lock.txt" in source
     assert "requirements-prod.txt" in source
     assert "uv pip install" in source
+    assert "-r requirements-docker.lock.txt" in source
     assert "docker/django/requirements.txt" not in source or "COPY ./requirements" in source
 
 

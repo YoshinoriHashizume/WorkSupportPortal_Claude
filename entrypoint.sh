@@ -92,18 +92,29 @@ echo "[$(date '+%Y-%m-%d %H:%M:%S')] サーバー起動処理開始" >> /django_
 
 # DEBUG / DJANGO_DEBUG のどちらかが真なら開発サーバー
 # exec により runserver / gunicorn が PID 1 になり、停止・ヘルスチェックと連動する
+# WEB_BIND_PORT があれば優先（devcontainer は常に 8880 にしてホスト 8990 と揃える）
 _DEBUG_FLAG=$(printf '%s' "${DEBUG:-${DJANGO_DEBUG:-false}}" | tr '[:upper:]' '[:lower:]')
 if [ "$_DEBUG_FLAG" = "true" ] || [ "$_DEBUG_FLAG" = "1" ]; then
+    _DEFAULT_BIND_PORT=8880
+else
+    _DEFAULT_BIND_PORT=8000
+fi
+_BIND_PORT=$(printf '%s' "${WEB_BIND_PORT:-$_DEFAULT_BIND_PORT}" | tr -d '[:space:]')
+if [ -z "$_BIND_PORT" ]; then
+    _BIND_PORT="$_DEFAULT_BIND_PORT"
+fi
+
+if [ "$_DEBUG_FLAG" = "true" ] || [ "$_DEBUG_FLAG" = "1" ]; then
     echo "開発サーバー起動中..."
-    echo "アクセスURL（コンテナ内）: http://localhost:8880"
-    echo "アクセスURL（ホストから）: http://localhost:8990 （ポートフォワード 8990->8880）"
+    echo "アクセスURL（コンテナ内）: http://localhost:${_BIND_PORT}"
+    echo "アクセスURL（ホストから）: http://localhost:8990 （ポートフォワード 8990->${_BIND_PORT}）"
     echo "=========================================="
     echo "[$(date '+%Y-%m-%d %H:%M:%S')] 開発サーバー起動開始" >> /django_app/src/logs/django.log
-    exec python manage.py runserver 0.0.0.0:8880
+    exec python manage.py runserver "0.0.0.0:${_BIND_PORT}"
 else
     echo "本番サーバー起動中..."
-    echo "アクセスURL: http://localhost:8000"
+    echo "アクセスURL: http://localhost:${_BIND_PORT}"
     echo "=========================================="
     echo "[$(date '+%Y-%m-%d %H:%M:%S')] 本番サーバー起動開始" >> /django_app/src/logs/django.log
-    exec gunicorn config.wsgi:application --bind 0.0.0.0:8000 --chdir /django_app/src --workers 3 --timeout 120
+    exec gunicorn config.wsgi:application --bind "0.0.0.0:${_BIND_PORT}" --chdir /django_app/src --workers 3 --timeout 120
 fi
