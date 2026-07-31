@@ -11,3 +11,9 @@ staticfiles/
 .env.production
 *.log
 var/
+
+# Claude Code の個人ローカル設定（共有すると他の開発者の環境を上書きするため）
+**/.claude/settings.local.json
+
+# 編集時のバックアップ
+*.bak
