@@ -15,7 +15,7 @@ class Command(BaseCommand):
 
     def add_arguments(self, parser):
         parser.add_argument("--cust-code", required=True, help="得意先コード")
-        parser.add_argument("--item-cd", required=True, help="品番")
+        parser.add_argument("--item-cd", required=True, help="得意先品番")
         parser.add_argument(
             "--last-ship-date",
             help="最終出荷日（YYYY/MM/DD, YYYYMMDD, today）",

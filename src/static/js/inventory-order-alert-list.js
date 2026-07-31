@@ -132,7 +132,7 @@
       itemCd: String(itemCd || "").trim(),
     };
     if (!keys.custCode || !keys.itemCd) {
-      throw new Error("行の得意先コードまたは品番を取得できませんでした。ページを再読み込みしてください。");
+      throw new Error("行の得意先コードまたは得意先品番を取得できませんでした。ページを再読み込みしてください。");
     }
 
     const response = await fetch(CONFIRMATION_API, {
@@ -420,7 +420,7 @@
       const locations = parseLocationDetail(row.dataset.stockLocationDetail || "");
       const customerLabel = custName ? `${custCode} - ${custName}` : custCode;
 
-      meta.textContent = `得意先: ${customerLabel} / 品番: ${itemCd}${
+      meta.textContent = `得意先: ${customerLabel} / 得意先品番: ${itemCd}${
         stockQty ? ` / 在庫数合計: ${formatStockQty(stockQty)}` : ""
       }`;
 
