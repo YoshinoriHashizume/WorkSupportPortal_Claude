@@ -131,13 +131,21 @@ def test_apply_list_filters_item_cd_prefix():
 
 
 def test_apply_list_filters_level1_item_cd_prefix():
+    """仕入先品番は前方一致（機能仕様書 §4.1.3a、TC-IOA-FLT-008）。
+
+    共通の接頭辞 `90249-10112` は両行に一致するため、絞り込みには
+    分岐後まで含めた接頭辞を与える。
+    """
     rows = [
         _row(level1_item_cd="90249-10112-9209"),
         _row(level1_item_cd="90249-10112-9999"),
     ]
-    filtered = apply_list_filters(rows, ListFilterParams(level1_item_cd="90249-10112"))
+    filtered = apply_list_filters(rows, ListFilterParams(level1_item_cd="90249-10112-92"))
     assert len(filtered) == 1
     assert filtered[0]["level1_item_cd"] == "90249-10112-9209"
+
+    # 共通接頭辞では両方が残る（前方一致の仕様どおり）
+    assert len(apply_list_filters(rows, ListFilterParams(level1_item_cd="90249-10112"))) == 2
 
 
 def test_matches_item_cd_filter_prefix_only():

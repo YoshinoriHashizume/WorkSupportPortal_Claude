@@ -50,10 +50,16 @@ def test_TC_AIV_DOM_072_photo_zoom_dialog():
 def test_TC_AIV_DOM_079_asset_number_filter_uses_local_client():
     client_path = Path(settings.BASE_DIR) / "static" / "js" / "asset-inventory-list-client.js"
     list_path = Path(settings.BASE_DIR) / "static" / "js" / "asset-inventory-list.js"
+    prefix_filter_path = Path(settings.BASE_DIR) / "static" / "js" / "portal-list-prefix-filter.js"
     client_source = client_path.read_text(encoding="utf-8")
     list_source = list_path.read_text(encoding="utf-8")
+    prefix_filter_source = prefix_filter_path.read_text(encoding="utf-8")
 
-    assert "ASSET_NUMBER_DEBOUNCE_MS = 600" in client_source
+    # 600ms のデバウンスは共通モジュール PortalListPrefixFilter に集約済み
+    # （テスト仕様書 TC-IOA-UI-019）。資産番号フィルタはこれを利用する。
+    assert "DEFAULT_DEBOUNCE_MS = 600" in prefix_filter_source
+    assert "PortalListPrefixFilter" in client_source
+    assert "createPrefixColumnFilter" in client_source
     assert "applyFilters" in client_source
     assert "Core.replaceUrl" in client_source
     assert "PortalListCore" in client_source

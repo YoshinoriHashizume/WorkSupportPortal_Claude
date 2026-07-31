@@ -149,10 +149,15 @@ def test_inventory_order_alert_list_js_updates_confirmation_without_reload():
     assert "updateTableCounts" in source
     assert "getListFilterParams" in source
     assert "IoaListClient" in source
+    # フィルタ条件の解決は saveConfirmation 側へ切り出し済み。
+    # saveConfirmationStatus は「リロードせずに saveConfirmation へ委譲する」ことのみ担う。
     save_block = source.split("async function saveConfirmationStatus", 1)[1].split("function initConfirmationStatusSelects", 1)[0]
-    assert "itemCdFilter" in save_block or "getListFilterParams" in save_block
     assert "reloadInventoryOrderAlertPage" not in save_block
     assert "saveConfirmation(row," in save_block
+
+    request_block = source.split("async function saveConfirmation(row", 1)[1].split("async function saveConfirmationStatus", 1)[0]
+    assert "getListFilterParams" in request_block
+    assert "reloadInventoryOrderAlertPage" not in request_block
     assert "updateRowFromConfirmation" in source
     assert "readRowKeysFromDomElement" in source
     assert "readRowKeys" in source

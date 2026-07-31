@@ -37,22 +37,35 @@ def test_portal_search_disclosure_shared_assets_exist():
     close_partial = (root / "templates" / "includes" / "portal_search_disclosure_close.html").read_text(encoding="utf-8")
 
     assert ".portal-search-disclosure {" in css
-    assert "width: 100%" in css.split(".portal-search-disclosure-toggle {")[1].split("}")[0]
-    toggle_rule = css.split(".portal-search-disclosure-toggle {")[1].split("}")[0]
+
+    def rule_body(selector: str) -> str:
+        """指定セレクタ「単独」のルール本体を返す。
+
+        `.portal-search-disclosure-panel {` は
+        `.portal-search-disclosure:not([open]) > .portal-search-disclosure-panel {`
+        にも部分一致するため、行頭からのセレクタ一致で切り出す。
+        """
+        marker = f"\n{selector} {{"
+        assert marker in css, f"{selector} のルールが app.css にありません"
+        return css.split(marker, 1)[1].split("}", 1)[0]
+
+    toggle_rule = rule_body(".portal-search-disclosure-toggle")
+    assert "width: 100%" in toggle_rule
     assert "font-size: var(--portal-font-size-caption)" in toggle_rule
     assert "padding: 6px 14px" in toggle_rule
-    panel_rule = css.split(".portal-search-disclosure-panel {")[1].split("}")[0]
+    assert "order: 2" in toggle_rule
+
+    panel_rule = rule_body(".portal-search-disclosure-panel")
     assert "padding: 16px 18px 12px" in panel_rule
+    assert "order: 1" in panel_rule
+
+    disclosure_rule = rule_body(".portal-search-disclosure")
+    assert "display: flex" in disclosure_rule
+    assert "flex-direction: column" in disclosure_rule
+
     assert 'STORAGE_PREFIX = "portal-search-disclosure:"' not in js
     assert "section.open = true" in js
     assert "localStorage" not in js
-    disclosure_rule = css.split(".portal-search-disclosure {")[1].split("}")[0]
-    assert "display: flex" in disclosure_rule
-    assert "flex-direction: column" in disclosure_rule
-    panel_rule = css.split(".portal-search-disclosure-panel {")[1].split("}")[0]
-    assert "order: 1" in panel_rule
-    toggle_rule = css.split(".portal-search-disclosure-toggle {")[1].split("}")[0]
-    assert "order: 2" in toggle_rule
     assert open_partial.index("<summary") < open_partial.index('class="portal-search-disclosure-panel"')
     assert "portal-search-disclosure.js" in base
     assert 'class="portal-search-disclosure card"' in open_partial
@@ -69,6 +82,7 @@ def test_asset_inventory_renders_search_disclosure(client, general_affairs_user,
             "management_rows": (ManagementRow("1", "2025棚卸", "2025", "", "", "415", "408"),),
             "selected_management_id": "1",
             "rows": (),
+            "all_rows": (),
             "filtered_rows": (),
             "counts": type("C", (), {"matched": 0, "asset_only": 0, "inventory_only": 0})(),
             "filtered_counts": type("C", (), {"matched": 0, "asset_only": 0, "inventory_only": 0})(),
@@ -76,6 +90,9 @@ def test_asset_inventory_renders_search_disclosure(client, general_affairs_user,
             "site_filter": "all",
             "status_filter": "all",
             "plate_filter": "all",
+            # 資産番号の前方一致フィルタ（PortalListPrefixFilter）で追加された項目
+            "asset_number_filter": "",
+            "asset_number_options": (),
             "page": 1,
             "page_size": 50,
             "total_pages": 1,
