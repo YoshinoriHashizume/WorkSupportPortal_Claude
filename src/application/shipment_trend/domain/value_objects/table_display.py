@@ -18,11 +18,11 @@ SORTABLE_COLUMNS: tuple[tuple[str, str], ...] = (
     ("cust_chrg_psn_cd", "担当者コード"),
     ("cust_code", "得意先コード"),
     ("cust_name", "得意先名"),
-    ("item_cd", "得意先品番"),
-    ("first_fiscal_year", "初年度"),
-    ("first_fy_total", "初年度出荷合計"),
-    ("prev_fy_total", "前年度出荷合計"),
-    ("current_fy_with_forecast_total", "今年度出荷+予測"),
+    ("item_cd", "内作品番"),
+    ("first_fiscal_year", "比較基準年"),
+    ("first_fy_total", "基準年出荷合計"),
+    ("prev_fy_total", "前年出荷合計"),
+    ("current_fy_with_forecast_total", "集計基準年出荷+予測"),
     ("change_rate_pct", "変動率"),
     ("change_qty", "変動数"),
 )
@@ -134,6 +134,13 @@ def format_fiscal_year(value: object) -> str:
     if value is None:
         return "—"
     return str(int(value))
+
+
+def format_baseline_fiscal_year(value: object, *, is_manual: bool = False) -> str:
+    label = format_fiscal_year(value)
+    if is_manual and label != "—":
+        return f"{label}（手動）"
+    return label
 
 
 def format_change_rate(value: object) -> str:

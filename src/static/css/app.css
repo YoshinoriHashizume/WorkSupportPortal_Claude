@@ -2833,19 +2833,24 @@ body.asset-inventory-page .aiv-photo-zoom-image {
   align-items: center;
 }
 body.portal-app-page.shipment-trend-page .st-detail-dialog {
+  box-sizing: border-box;
   width: min(calc(100vw - 16px), 1920px);
+  max-width: calc(100vw - 16px);
+  max-height: calc(100dvh - 16px);
   border: 1px solid #cbd5e1;
   border-radius: 12px;
   padding: 0;
+  overflow: hidden;
 }
 body.portal-app-page.shipment-trend-page .st-detail-dialog::backdrop {
   background: rgba(15, 23, 42, 0.35);
 }
 body.portal-app-page.shipment-trend-page .st-detail-content {
+  box-sizing: border-box;
   padding: 20px 24px 24px;
   overflow-x: hidden;
   overflow-y: auto;
-  max-height: calc(100vh - 32px);
+  max-height: calc(100dvh - 16px);
 }
 body.portal-app-page.shipment-trend-page .st-detail-head {
   display: flex;
@@ -2869,7 +2874,7 @@ body.portal-app-page.shipment-trend-page .st-detail-metrics-section {
   margin-bottom: 1.25rem;
 }
 body.portal-app-page.shipment-trend-page .st-detail-metrics-table-wrap {
-  overflow-x: auto;
+  overflow: visible;
 }
 body.portal-app-page.shipment-trend-page .st-detail-metrics-table {
   width: 100%;
@@ -2895,8 +2900,39 @@ body.portal-app-page.shipment-trend-page .st-detail-metrics-empty {
   text-align: center;
   color: #64748b;
 }
+body.portal-app-page.shipment-trend-page .st-detail-metrics-row--before-baseline td {
+  background-color: #f1f5f9;
+  background-image: repeating-linear-gradient(
+    -45deg,
+    #f1f5f9,
+    #f1f5f9 5px,
+    #e2e8f0 5px,
+    #e2e8f0 10px
+  );
+  color: #64748b;
+}
+body.portal-app-page.shipment-trend-page .st-chart-section-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 0.75rem 1rem;
+  margin-bottom: 0.35rem;
+}
+body.portal-app-page.shipment-trend-page .st-chart-section-head .st-detail-section-title {
+  margin: 0;
+}
+body.portal-app-page.shipment-trend-page .st-chart-granularity-field {
+  margin: 0;
+}
+body.portal-app-page.shipment-trend-page .st-chart-granularity-field .st-chart-granularity-select {
+  width: var(--portal-list-filter-control-width);
+  max-width: var(--portal-list-filter-control-width);
+  min-width: 0;
+}
 body.portal-app-page.shipment-trend-page .st-detail-chart-section .st-chart-legend {
   display: flex;
+  flex-wrap: wrap;
   gap: 1rem;
   margin: 0.5rem 0;
   font-size: 13px;
@@ -2932,7 +2968,8 @@ body.portal-app-page.shipment-trend-page .st-chart-marker-hit {
   cursor: pointer;
 }
 body.portal-app-page.shipment-trend-page .st-legend-actual::before,
-body.portal-app-page.shipment-trend-page .st-legend-forecast::before {
+body.portal-app-page.shipment-trend-page .st-legend-forecast::before,
+body.portal-app-page.shipment-trend-page .st-legend-regression::before {
   content: "";
   display: inline-block;
   width: 1.25rem;
@@ -2947,6 +2984,34 @@ body.portal-app-page.shipment-trend-page .st-legend-actual::before {
 }
 body.portal-app-page.shipment-trend-page .st-legend-forecast::before {
   border-top: 2px dashed #60a5fa;
+}
+body.portal-app-page.shipment-trend-page .st-legend-regression::before {
+  border-top: 2px solid #f59e0b;
+}
+body.portal-app-page.shipment-trend-page .st-regression-stats {
+  margin: 0 0 0.35rem;
+  font-size: 12px;
+}
+body.portal-app-page.shipment-trend-page .st-detail-baseline-section {
+  margin: 0.25rem 0 1rem;
+}
+body.portal-app-page.shipment-trend-page .st-detail-baseline-controls {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 0.5rem 0.75rem;
+}
+body.portal-app-page.shipment-trend-page .st-detail-baseline-field {
+  margin: 0;
+}
+body.portal-app-page.shipment-trend-page .st-detail-baseline-field .st-baseline-year-select {
+  width: var(--portal-list-filter-control-width);
+  max-width: var(--portal-list-filter-control-width);
+  min-width: 0;
+}
+body.portal-app-page.shipment-trend-page .st-baseline-revert-button:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
 }
 body.portal-app-page.shipment-trend-page .st-chart-svg {
   width: 100%;

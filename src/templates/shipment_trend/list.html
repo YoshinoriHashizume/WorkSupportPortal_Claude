@@ -6,7 +6,7 @@
   <div class="portal-page-title-row">
     <h1>出荷トレンド一覧</h1>
     {% include "includes/page_favorite_toggle.html" with menu_key=menu_key menu_title=menu_title is_favorite=is_favorite %}
-    <p class="portal-page-description">得意先×品番ごとの出荷トレンドを把握し、客先アクションの優先度を判断します。</p>
+    <p class="portal-page-description">得意先×内作品番ごとの出荷トレンドを把握し、得意先へのアクションの優先度を判断します。</p>
   </div>
 </div>
 
@@ -68,7 +68,7 @@
           {% endfor %}
         </select>
       </label>
-      {% include "includes/portal_prefix_filter_field.html" with label="得意先品番" name="item_cd" value=list_filter.item_cd datalist_id="st-item-cd-options" placeholder="得意先品番" field_class="st-filter-field" label_class="st-filter-field-label" input_class="st-filter-control st-filter-item-cd" options=filter_options.item_cd_options %}
+      {% include "includes/portal_prefix_filter_field.html" with label="内作品番" name="item_cd" value=list_filter.item_cd datalist_id="st-item-cd-options" placeholder="内作品番" field_class="st-filter-field" label_class="st-filter-field-label" input_class="st-filter-control st-filter-item-cd" options=filter_options.item_cd_options %}
     </div>
   </div>
 
@@ -194,7 +194,7 @@
 <dialog id="st-alert-rules-dialog" class="st-alert-rules-dialog">
   <div class="st-alert-rules-content">
     <h3 class="st-alert-rules-title">警告色の条件</h3>
-    <p class="st-alert-rules-help muted">初年度と今年度（予測込み）の出荷合計から算出した変動率で行の背景色を付けます。</p>
+    <p class="st-alert-rules-help muted">比較基準年と集計基準年（予測込み）の出荷合計から算出した変動率で行の背景色を付けます。</p>
     <div class="st-alert-rules-settings">
       <label class="st-alert-rules-setting portal-alert-rules-setting">
         減少（強）
@@ -251,6 +251,16 @@
       <button type="button" class="dialog-close-button st-detail-close" aria-label="閉じる">×</button>
     </div>
     <p class="st-detail-meta muted"></p>
+    <section class="st-detail-baseline-section">
+      <div class="st-detail-baseline-controls">
+        <label class="st-filter-field st-detail-baseline-field" for="st-baseline-year-select">
+          <span class="st-filter-field-label">比較基準年</span>
+          <select id="st-baseline-year-select" class="st-filter-select st-filter-control st-baseline-year-select" aria-label="比較基準年"></select>
+        </label>
+        <button type="button" class="button-link st-baseline-revert-button" disabled>自動（データ初年度）に戻す</button>
+        <span class="st-baseline-status muted" aria-live="polite"></span>
+      </div>
+    </section>
     <section class="st-detail-metrics-section">
       <h4 class="st-detail-section-title">年度別出荷</h4>
       <div class="st-detail-metrics-table-wrap">
@@ -260,8 +270,8 @@
               <th scope="col">年度</th>
               <th scope="col">出荷合計</th>
               <th scope="col">予測込み合計</th>
-              <th scope="col">初年度比変動数</th>
-              <th scope="col">初年度比変動率</th>
+              <th scope="col">基準年比変動数</th>
+              <th scope="col">基準年比変動率</th>
             </tr>
           </thead>
           <tbody class="st-detail-metrics-table-body"></tbody>
@@ -269,11 +279,23 @@
       </div>
     </section>
     <section class="st-detail-chart-section">
-      <h4 class="st-detail-section-title">出荷推移</h4>
+      <div class="st-chart-section-head">
+        <h4 class="st-detail-section-title">出荷推移</h4>
+        <label class="st-filter-field st-chart-granularity-field">
+          <span class="st-filter-field-label">表示単位</span>
+          <select class="st-filter-select st-filter-control st-chart-granularity-select" aria-label="グラフ表示単位">
+            <option value="year" selected>年</option>
+            <option value="month">月</option>
+          </select>
+        </label>
+      </div>
       <div class="st-chart-legend">
         <span class="st-legend-actual">実績</span>
-        <span class="st-legend-forecast">予測（今年残月・出荷平均）</span>
+        <span class="st-legend-forecast st-legend-forecast--month">予測（集計基準年の残月・出荷平均）</span>
+        <span class="st-legend-forecast st-legend-forecast--year" hidden>集計基準年（予測込み）</span>
+        <span class="st-legend-regression">最小二乗法</span>
       </div>
+      <p class="st-regression-stats muted" aria-live="polite"></p>
       <div class="st-chart-canvas-wrap" aria-live="polite"></div>
     </section>
     <p class="st-detail-error error" hidden></p>
@@ -289,6 +311,6 @@
 <script src="/static/js/portal-list-prefix-filter.js?v=20260629-dependent-cust" defer></script>
 <script src="/static/js/portal-list-dependent-cust-filter.js?v=20260629-dependent-cust" defer></script>
 <script src="/static/js/portal-list-sort-dialog.js?v=20260629-dependent-cust" defer></script>
-<script src="/static/js/shipment-trend-list-client.js?v=20260629-chrg-cust-reset" defer></script>
-<script src="/static/js/shipment-trend-list.js?v=20260629-dependent-cust" defer></script>
+<script src="/static/js/shipment-trend-list-client.js?v=20260720-baseline-keep" defer></script>
+<script src="/static/js/shipment-trend-list.js?v=20260720-year-month" defer></script>
 {% endblock %}

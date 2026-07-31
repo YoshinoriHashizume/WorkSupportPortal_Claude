@@ -13,7 +13,11 @@ from application.shipment_trend.domain.value_objects.list_filter import (
     build_filter_options,
     parse_list_filter_params,
 )
-from application.shipment_trend.domain.repositories.ports import LoadAppSettings, LoadLatestRows
+from application.shipment_trend.domain.repositories.ports import (
+    LoadAppSettings,
+    LoadBaselineOverrides,
+    LoadLatestRows,
+)
 from application.shipment_trend.domain.value_objects.table_display import (
     PAGE_SIZE_OPTIONS,
     apply_table_display,
@@ -61,10 +65,12 @@ class ListPage:
         self,
         load_summary: LoadLatestRows,
         load_settings: LoadAppSettings,
+        load_baseline_overrides: LoadBaselineOverrides,
         refresh_data: RefreshData,
     ) -> None:
         self._load_summary = load_summary
         self._load_settings = load_settings
+        self._load_baseline_overrides = load_baseline_overrides
         self._refresh_data = refresh_data
 
     def execute(
@@ -86,7 +92,11 @@ class ListPage:
         settings = self._load_settings()
         raw_rows = summary.rows if summary else []
         as_of_date = summary.as_of_date if summary else None
-        all_rows = hydrate_rows_metrics(raw_rows, as_of_date)
+        all_rows = hydrate_rows_metrics(
+            raw_rows,
+            as_of_date,
+            baseline_overrides=self._load_baseline_overrides(),
+        )
         if summary and summary.aggregation_error and not error_message:
             error_message = summary.aggregation_error
 

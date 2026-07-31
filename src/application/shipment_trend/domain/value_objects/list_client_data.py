@@ -14,9 +14,9 @@ from application.shipment_trend.domain.value_objects.table_display import (
     PAGE_SIZE_OPTIONS,
     SORTABLE_COLUMNS,
     SortSpec,
+    format_baseline_fiscal_year,
     format_change_qty,
     format_change_rate,
-    format_fiscal_year,
     format_quantity,
 )
 
@@ -47,7 +47,10 @@ def row_to_client_dict(row: dict[str, object], settings: AppSettings) -> dict[st
         "cust_code": str(row.get("cust_code") or ""),
         "cust_name": str(row.get("cust_name") or ""),
         "item_cd": str(row.get("item_cd") or ""),
-        "first_fiscal_year": format_fiscal_year(row.get("first_fiscal_year")),
+        "first_fiscal_year": format_baseline_fiscal_year(
+            row.get("first_fiscal_year"),
+            is_manual=bool(row.get("baseline_is_manual")),
+        ),
         "change_rate_pct": format_change_rate(row.get("change_rate_pct")),
         "change_qty": format_change_qty(row.get("change_qty")),
         "first_fy_total": format_quantity(row.get("first_fy_total")),
