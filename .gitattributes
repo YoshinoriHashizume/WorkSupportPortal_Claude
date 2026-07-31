@@ -1,0 +1,20 @@
+# Windows 側の core.autocrlf=true でチェックアウトしても、
+# Linux コンテナ内で実行されるファイルは LF を維持する。
+# CRLF になると sh が `\r` をコマンドの一部として解釈し、
+# `set: Illegal option -` / `: Permission denied` で起動に失敗する。
+
+# シェルスクリプト（entrypoint.sh・docker/・scripts/ 配下）
+*.sh text eol=lf
+
+# コンテナ内で解釈される設定ファイル
+Dockerfile      text eol=lf
+Dockerfile.*    text eol=lf
+*.conf          text eol=lf
+entrypoint.sh   text eol=lf
+
+# バイナリ（改行変換・差分表示の対象外）
+*.xlsm binary
+*.xlsx binary
+*.png  binary
+*.jpg  binary
+*.ico  binary
