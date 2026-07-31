@@ -11,14 +11,8 @@
   <div class="portal-section-head gonen-search-head">
     <div class="portal-page-title-row">
       <h1>5年9組</h1>
-      <button
-        type="button"
-        class="favorite-toggle portal-title-favorite{% if is_five_year_nine_favorite %} is-favorite{% endif %}"
-        data-menu-key="five-year-nine"
-        data-menu-title="5年9組"
-        aria-label="5年9組のお気に入りを切り替え"
-      >{% if is_five_year_nine_favorite %}♥{% else %}♡{% endif %}</button>
-      <p class="portal-page-description">得意先品目の内示・受注・出荷・仕入・入荷の推移を検索します。</p>
+      {% include "includes/page_favorite_toggle.html" with menu_key="five-year-nine" menu_title="5年9組" is_favorite=is_five_year_nine_favorite %}
+      <p class="portal-page-description">得意先品番の内示・受注・出荷・仕入・入荷の推移を検索します。</p>
     </div>
   </div>
 
@@ -34,7 +28,7 @@
         {% csrf_token %}
         <h2>検索条件</h2>
         {% include "includes/customer_select.html" with field_name="custCode" label="得意先" variant="gonen" customers=customers customers_api="/api/gonenkukumi/customers" selected_value=initial.custCode required=True select_id="custCode" %}
-        <label>得意先品目
+        <label>得意先品番
           <input class="cust-item-input" name="custItem" value="{{ initial.custItem }}" list="cust-items" autocomplete="off">
           <datalist id="cust-items"></datalist>
           <div id="cust-item-empty" class="cust-item-empty" hidden>候補がありません</div>
@@ -65,7 +59,7 @@
           <thead>
             <tr>
               <th>得意先</th>
-              <th>得意先品目</th>
+              <th>得意先品番</th>
               <th>品目任意変換値</th>
               <th>検索年月</th>
               <th>検索日時</th>

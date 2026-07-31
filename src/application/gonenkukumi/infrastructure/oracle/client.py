@@ -233,7 +233,7 @@ def list_cust_items(cust_code: str, keyword: str = "", as_of_date: date | None =
     except Exception as exc:
         if isinstance(exc, OracleNotConfiguredError):
             raise
-        raise OracleQueryError("得意先品目の取得に失敗しました。") from exc
+        raise OracleQueryError("得意先品番の取得に失敗しました。") from exc
 
     return [
         {

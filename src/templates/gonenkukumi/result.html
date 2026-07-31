@@ -18,7 +18,7 @@
       </div>
       <div class="summary-grid">
         <div><span>得意先(得意先コード)</span><strong>{{ result.customerName }}（{{ result.custCode }}）</strong></div>
-        <div><span>得意先品目</span><strong>{{ result.custItem }}</strong></div>
+        <div><span>得意先品番</span><strong>{{ result.custItem }}</strong></div>
         <div><span>品目任意変換値</span><strong>{{ result.optionChange }}</strong></div>
         <div><span>検索年月（基準）</span><strong>{{ result.yearMonth|date_slash }}</strong></div>
         <div><span>対象日付</span><strong>{{ result.asOfDate|date_slash }}</strong></div>
@@ -32,7 +32,7 @@
           {% if block.kind != 'supplier' %}
             <strong>得意先：{{ block.meta.customerName|default:result.customerName }}（{{ block.meta.custCode|default:result.custCode }}）</strong>
             <span>出荷</span>
-            <small>得意先品目：{{ block.meta.custItem|default:result.custItem }}</small>
+            <small>得意先品番：{{ block.meta.custItem|default:result.custItem }}</small>
             <small>手番：{{ block.meta.teban|default:"0" }}</small>
             <small>安全在庫：{{ block.meta.anzen|default:"0" }}</small>
           {% else %}

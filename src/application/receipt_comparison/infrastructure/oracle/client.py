@@ -25,11 +25,11 @@ def fetch_mari_rows(
         return []
     if comparison_type == ReceiptComparisonType.FINISHED_PRODUCT:
         if not isinstance(supplier, FinishedProductReceiptSupplier):
-            raise ValueError("完成品の取引先が読み込まれませんでした。")
+            raise ValueError("完成品の得意先が読み込まれませんでした。")
         return fetch_finished_product_rows(supplier, start_date, end_date, receiving_places)
     if comparison_type == ReceiptComparisonType.SUPPLIED_PARTS:
         if not isinstance(supplier, SuppliedPartsReceiptSupplier):
-            raise ValueError("支給品の取引先が読み込まれませんでした。")
+            raise ValueError("支給品の得意先が読み込まれませんでした。")
         vendor_codes = mari_vendor_codes_for_supplier(supplier)
         if not vendor_codes:
             raise ValueError("子取引先（購買取引先コード）が未登録です。設定画面で追加してください。")
