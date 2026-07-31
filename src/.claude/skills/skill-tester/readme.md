@@ -122,7 +122,7 @@ skill-testerに「Phase 2はスキップ」と伝える。
    - Claude Codeは通常「Read ツールで〇〇を読み取りました」と表示する
 3. 読み込まれたreferenceが期待通りかを確認する
 
-### 確認例（design-review-l3の場合）
+### 確認例（implement-review-l1の場合）
 
 ```
 状況1: 「Swiftプロジェクトの実装レビューをお願い」

@@ -193,7 +193,7 @@
 文書ID: DESIGN-{FEATURE}-{YEAR}-001
 作成日: YYYY/MM/DD
 更新日:
-対応文書: docs/specs/{feature}/requirements.md
+対応文書: docs/spec/{feature}/requirements.md
 
 ---
 
@@ -227,7 +227,7 @@
 文書ID: TEST-{FEATURE}-{YEAR}-001
 作成日: YYYY/MM/DD
 更新日:
-対応文書: docs/specs/{feature}/design.md
+対応文書: docs/spec/{feature}/design.md
 
 ---
 
@@ -263,7 +263,7 @@
 文書ID: TASKS-{FEATURE}-{YEAR}-001
 作成日: YYYY/MM/DD
 更新日:
-対応文書: docs/specs/{feature}/design.md
+対応文書: docs/spec/{feature}/design.md
 
 ---
 

@@ -150,7 +150,7 @@ SDDフローを開始する前に、以下を確認する:
 - 前提条件・制約事項
 - スコープ外の明記
 
-**成果物**: `application/{app_name}/docs/specs/{feature-name}/requirements.md`
+**成果物**: `application/{app_name}/docs/spec/{feature-name}/requirements.md`
 
 **→ 承認ゲート ②**
 - [ ] ビジネス要件と整合しているか
@@ -182,7 +182,7 @@ SDDフローを開始する前に、以下を確認する:
 
 **成果物（2つ）**:
 
-**機能設計書** `application/{app_name}/docs/specs/{feature-name}/design.md`:
+**機能設計書** `application/{app_name}/docs/spec/{feature-name}/design.md`:
 - アーキテクチャ概要（どの層に何を置くか）
 - ドメインモデル（エンティティ、VO、集約）
 - データモデル / テーブル設計
@@ -190,7 +190,7 @@ SDDフローを開始する前に、以下を確認する:
 - 既存コードへの変更点
 - エラーハンドリング方針
 
-**テスト設計書** `application/{app_name}/docs/specs/{feature-name}/test-design.md`:
+**テスト設計書** `application/{app_name}/docs/spec/{feature-name}/test-design.md`:
 - テスト戦略（どのレイヤーをどう検証するか）
 - テストケース一覧
 - テストデータ
@@ -208,15 +208,13 @@ SDDフローを開始する前に、以下を確認する:
 **目的**: 設計書を実装可能な粒度のタスクに分解する
 
 **やること**:
-- 承認済みの設計書に基づき、タスクリストを生成する
-- 各タスクは1つのコミット/PR相当の粒度が理想
+- **タスク分解の詳細手順は `make-tasks` スキルに委譲する。** このフェーズに入ったら
+  `make-tasks` を使用してタスクリストを生成する
+- `make-tasks` は対象アプリ（app_name）・feature を特定してから実行する
+  （引数・文脈で特定できない場合はユーザーに確認する）
+- タスクの粒度・状況チェックシート・タスク実行レポートの書式は `make-tasks` の規定に従う
 
-**タスクの粒度の目安**:
-- 1タスク = 1〜2時間で完了できる規模
-- テストとセットで定義する
-- 依存関係を明記する（どの順で実装すべきか）
-
-**成果物**: `application/{app_name}/docs/specs/{feature-name}/tasks.md`
+**成果物**: `application/{app_name}/docs/spec/{feature-name}/tasks.md`
 
 **→ 承認ゲート ④**
 - [ ] タスクの粒度が適切か
@@ -243,7 +241,9 @@ SDDフローを開始する前に、以下を確認する:
 
 ## レビュー体系
 
-SDDワークフローの中で、以下の3つの独立したレビューを実施できる。
+SDDワークフローの中で、以下の5つの独立したレビューを実施できる。
+各レビューの詳細観点・Codexクロスレビュー（L2/L4）・レビュー履歴の記録ルールは
+`references/review-system.md` を Read ツールで読み取る。
 
 ### 戦略的設計レビュー（まれに実施）
 
@@ -263,13 +263,23 @@ SDDワークフローの中で、以下の3つの独立したレビューを実�
 
 推奨フロー: L1 → L2 → L3
 
-### 設計レビュー（Phase 3/5の後）
+### 設計レビュー（Phase 3の後）
 
 | レベル | スキル | 観点 |
 |--------|--------|------|
 | L1 | `design-review-l1` | 機能設計のレビュー |
-| L2 | `design-review-l2` | テスト設計のレビュー |
-| L3 | `design-review-l3` | 実装レビュー |
+
+### テスト設計レビュー（Phase 3の後）
+
+| レベル | スキル | 観点 |
+|--------|--------|------|
+| L1 | `test-design-review-l1` | テスト設計のレビュー |
+
+### 実装レビュー（Phase 5の後）
+
+| レベル | スキル | 観点 |
+|--------|--------|------|
+| L1 | `implement-review-l1` | 実装レビュー |
 
 ## 成果物の保存先
 
@@ -280,7 +290,10 @@ docs/                                              # プロジェクト全体
 
 application/{app_name}/docs/                       # アプリケーション（コンテキスト）ごと
 ├── ubiquitous_language.md                         # ユビキタス言語（コンテキスト固有）
-└── specs/{feature-name}/
+├── issues/                                        # 運用フェーズのIssue（manage-issue）
+│   ├── README.md                                  #   台帳（一覧・ステータス）
+│   └── ISSUE-{連番}-{kebab}.md                     #   Issue本体（不具合/改善）
+└── spec/{feature-name}/
     ├── requirements.md                            # 要件定義書（問題空間: WHAT）
     ├── design.md                                  # 機能設計書（解決空間: HOW）
     ├── test-design.md                             # テスト設計書
