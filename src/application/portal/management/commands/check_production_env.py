@@ -26,11 +26,15 @@ class Command(BaseCommand):
 
     def handle(self, *args, **options):
         base_dir = Path(settings.BASE_DIR)
-        env_path = base_dir / ".env.production"
-        env_txt_path = base_dir / ".env.production.txt"
+        # `.env.production` は Docker / DevContainer のルート（= BASE_DIR の親）に置く。
+        # BASE_DIR（src/）配下を見ると常に「なし」と判定されるため REPO_ROOT を使う。
+        repo_root = Path(getattr(settings, "REPO_ROOT", base_dir.parent))
+        env_path = repo_root / ".env.production"
+        env_txt_path = repo_root / ".env.production.txt"
         failed = False
 
         self.stdout.write(f"BASE_DIR: {base_dir}")
+        self.stdout.write(f"REPO_ROOT: {repo_root}")
         self.stdout.write(f".env.production: {'あり' if env_path.is_file() else 'なし'}")
 
         if not env_path.is_file():
