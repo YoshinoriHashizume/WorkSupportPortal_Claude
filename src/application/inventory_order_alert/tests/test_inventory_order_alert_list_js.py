@@ -77,7 +77,10 @@ def test_inventory_order_alert_list_js_initializes_alert_rules_dialog():
     assert "initAlertRulesDialog" in source
     assert "ioa-alert-rules-open" in source
     assert "ioa-alert-rules-dialog" in source
-    assert "/api/inventory-order-alert/alert-settings" in source
+    # 判定ルールダイアログは読み取り専用。保存処理は撤去した（design.md §6.6.5）。
+    assert "/api/inventory-order-alert/alert-settings" not in source
+    assert "ioa-alert-rules-save" not in source
+    assert "warningShipmentMonths" not in source
 
 
 def test_inventory_order_alert_list_js_saves_confirmation_on_select_change():
@@ -99,7 +102,10 @@ def test_inventory_order_alert_list_js_updates_table_counts_label():
     source = JS_PATH.read_text(encoding="utf-8")
     assert "ioa-table-counts-left" in source
     assert "ioa-table-counts-right" in source
-    assert "重点" in source
+    assert "供給リスク品" in source
+    assert "在庫死蔵品" in source
+    assert "在庫過剰リスク品" in source
+    assert "通常流動品" in source
     assert "全件数:" not in source
     assert "確認済み" in source
     assert "ioa-confirmation-reset" in source
@@ -137,9 +143,9 @@ def test_inventory_order_alert_list_js_import_overlay_has_spinner_css():
     table_rule = css.split("body.inventory-order-alert-page .ioa-alert-rules-table,")[1].split("}")[0]
     assert "ioa-location-table" in table_rule
     assert "ioa-alert-rules-color-swatch" in css
-    assert "td:last-child" not in css.split("ioa-alert-rules-row--critical")[1].split("ioa-alert-rules-actions", 1)[0]
-    shared_block = css.split("/* ポータル共通: 一覧・警告条件ダイアログの行背景色 */", 1)[1]
-    assert "body.inventory-order-alert-page .ioa-alert-rules-row--critical" in shared_block
+    assert "td:last-child" not in css.split("ioa-alert-rules-row--supply-risk")[1].split("ioa-alert-rules-actions", 1)[0]
+    shared_block = css.split("/* ポータル共通: 一覧・判定ルールダイアログの行背景色", 1)[1]
+    assert "body.inventory-order-alert-page .ioa-alert-rules-row--supply-risk" in shared_block
     assert ".shipment-trend-page .st-row-decrease-strong," in shared_block
 
 

@@ -1,32 +1,13 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
 from datetime import date, datetime
 
+from application.receipt_comparison.domain.entities.comparison_row import ComparisonRow
 from application.receipt_comparison.domain.value_objects.receipt_flag import ReceiptFlag
 
 from .file_parser import normalize_supplied_parts_item_cd
 from .records import MariReceiptRow, ReceiptFileRow
 
-
-@dataclass
-class ComparisonRow:
-    receipt_flag: int
-    mari_item_cd: str = ""
-    mari_date: str = ""
-    mari_qty: str = ""
-    delivery_place: str = ""
-    supplier_item_cd: str = ""
-    supplier_delivery_month_day: str = ""
-    supplier_qty: str = ""
-    supplier_cancel_qty: str = ""
-    supplier_name: str = ""
-    remarks: str = ""
-    existing_id: int | None = None
-
-    @property
-    def flag_label(self) -> str:
-        return ReceiptFlag(self.receipt_flag).label
 
 
 def normalize_item_cd(value: object) -> str:

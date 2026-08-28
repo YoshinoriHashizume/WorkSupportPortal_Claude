@@ -655,10 +655,17 @@ body.portal-app-page.bare-result-page .content {
 .asset-inventory-page .aiv-results-card {
   min-height: 0;
   overflow: hidden;
-  grid-template-rows: auto minmax(0, 1fr);
+  /* 見出し・メッセージは内容の高さ、本体だけが余白を占める（1fr） */
+  grid-template-rows: auto auto minmax(0, 1fr);
   align-content: stretch;
   padding: 8px 16px 16px;
 }
+
+/* メッセージが hidden でも本体が 1fr の行に載るよう、行位置を明示する */
+.asset-inventory-page .aiv-results-card > .aiv-results-head { grid-row: 1; }
+.asset-inventory-page .aiv-results-card > .aiv-asp-import-message { grid-row: 2; }
+.asset-inventory-page .aiv-results-card > .aiv-results-body,
+.asset-inventory-page .aiv-results-card > .favorite-empty { grid-row: 3; }
 .receipt-comparison-page .receipt-results-card .db-table-wrap {
   min-height: 0;
   overflow: auto;
@@ -899,6 +906,7 @@ button:hover, .button:hover { background: #0369a1; border-color: #0369a1; }
 .favorite-toggle:hover { background: transparent; color: #fda4af; border: 0; }
 .favorite-toggle.is-favorite { color: #f43f5e; }
 .error { color: #b91c1c; font-weight: 700; }
+.warning { color: #b45309; font-weight: 700; }
 .message { margin-bottom: 16px; padding: 12px; background: #ecfeff; border: 1px solid #67e8f9; border-radius: 8px; }
 .history-list { display: grid; gap: 8px; }
 .history-list button { background: white; color: #0f172a; border-color: #cbd5e1; text-align: left; }
@@ -1120,21 +1128,23 @@ summary { cursor: pointer; font-weight: 700; }
 .button-link:hover {
   background: #e2e8f0;
 }
-/* ポータル共通: 一覧・警告条件ダイアログの行背景色 */
-.alert-row--重点,
+/* ポータル共通: 一覧・判定ルールダイアログの行背景色
+   流動区分は ASCII キーのセレクタを使う（design.md §6.6.7）。
+   確認状態のクラス（確認済／確認中）は本要件の対象外のため日本語のまま据え置く。 */
+.alert-row--supply-risk,
 .shipment-trend-page .st-row-decrease-strong,
 body.portal-app-page.shipment-trend-page .st-alert-rules-row--decrease-strong,
-body.inventory-order-alert-page .ioa-alert-rules-row--critical {
+body.inventory-order-alert-page .ioa-alert-rules-row--supply-risk {
   background: #fde8e8;
 }
-.alert-row--警告（出荷あり）,
-body.inventory-order-alert-page .ioa-alert-rules-row--warning-ship {
+.alert-row--dormant-stock,
+body.inventory-order-alert-page .ioa-alert-rules-row--dormant-stock {
   background: #ffedd5;
 }
-.alert-row--警告（出荷なし）,
+.alert-row--excess-stock-risk,
 .shipment-trend-page .st-row-decrease-mild,
 body.portal-app-page.shipment-trend-page .st-alert-rules-row--decrease-mild,
-body.inventory-order-alert-page .ioa-alert-rules-row--warning-incoming {
+body.inventory-order-alert-page .ioa-alert-rules-row--excess-stock-risk {
   background: #fff8e1;
 }
 .alert-row--確認済,
@@ -1145,10 +1155,10 @@ body.portal-app-page.shipment-trend-page .st-alert-rules-row--increase-strong {
 .alert-row--確認中 {
   background: #dbeafe;
 }
-.alert-row--アラート無し,
+.alert-row--normal-flow,
 .shipment-trend-page .st-row-neutral,
 body.portal-app-page.shipment-trend-page .st-alert-rules-row--neutral,
-body.inventory-order-alert-page .ioa-alert-rules-row--none {
+body.inventory-order-alert-page .ioa-alert-rules-row--normal-flow {
   background: #fff;
 }
 /* ポータル共通: 警告条件ダイアログの設定セレクト */
@@ -1678,16 +1688,16 @@ body.inventory-order-alert-page .ioa-location-table td.ioa-location-qty {
   text-align: right;
   font-variant-numeric: tabular-nums;
 }
-body.inventory-order-alert-page .ioa-alert-rules-row--critical .ioa-alert-rules-color-swatch {
+body.inventory-order-alert-page .ioa-alert-rules-row--supply-risk .ioa-alert-rules-color-swatch {
   background: #fecaca;
 }
-body.inventory-order-alert-page .ioa-alert-rules-row--warning-ship .ioa-alert-rules-color-swatch {
+body.inventory-order-alert-page .ioa-alert-rules-row--dormant-stock .ioa-alert-rules-color-swatch {
   background: #fed7aa;
 }
-body.inventory-order-alert-page .ioa-alert-rules-row--warning-incoming .ioa-alert-rules-color-swatch {
+body.inventory-order-alert-page .ioa-alert-rules-row--excess-stock-risk .ioa-alert-rules-color-swatch {
   background: #fde68a;
 }
-body.inventory-order-alert-page .ioa-alert-rules-row--none .ioa-alert-rules-color-swatch {
+body.inventory-order-alert-page .ioa-alert-rules-row--normal-flow .ioa-alert-rules-color-swatch {
   background: #fff;
 }
 body.inventory-order-alert-page .ioa-alert-rules-level-label {
@@ -1837,16 +1847,50 @@ body.inventory-order-alert-page .ioa-detail-memo {
 .inventory-order-alert-page .ioa-table td {
   white-space: nowrap;
 }
+/* 判定条件セレクタ（design.md §6.6.1）。一覧の上部に常時表示する。 */
+.inventory-order-alert-page .ioa-flow-selector {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 12px;
+  padding: 10px 12px;
+  margin-bottom: 8px;
+  border: 1px solid #e2e8f0;
+  border-radius: 6px;
+  background: #f8fafc;
+}
+.inventory-order-alert-page .ioa-flow-selector-title {
+  font-weight: 600;
+  align-self: center;
+}
+.inventory-order-alert-page .ioa-flow-selector-field {
+  display: grid;
+  gap: 4px;
+  font-size: 0.85rem;
+}
+.inventory-order-alert-page .ioa-flow-selector-help {
+  flex-basis: 100%;
+  margin: 0;
+  font-size: 0.8rem;
+}
+.inventory-order-alert-page .ioa-flow-condition-label {
+  margin: 0;
+  font-size: 0.85rem;
+}
+.inventory-order-alert-page .ioa-alert-rules-condition {
+  margin: 0 0 4px;
+  font-weight: 600;
+}
 .inventory-order-alert-page .ioa-table tbody tr.ioa-data-row {
   cursor: pointer;
 }
-.inventory-order-alert-page .ioa-table tbody tr.alert-row--重点.ioa-data-row:hover {
+.inventory-order-alert-page .ioa-table tbody tr.alert-row--supply-risk.ioa-data-row:hover {
   background: #fecaca;
 }
-.inventory-order-alert-page .ioa-table tbody tr.alert-row--警告（出荷あり）.ioa-data-row:hover {
+.inventory-order-alert-page .ioa-table tbody tr.alert-row--dormant-stock.ioa-data-row:hover {
   background: #fed7aa;
 }
-.inventory-order-alert-page .ioa-table tbody tr.alert-row--警告（出荷なし）.ioa-data-row:hover {
+.inventory-order-alert-page .ioa-table tbody tr.alert-row--excess-stock-risk.ioa-data-row:hover {
   background: #fde68a;
 }
 .inventory-order-alert-page .ioa-table tbody tr.alert-row--確認済.ioa-data-row:hover {
@@ -1855,7 +1899,7 @@ body.inventory-order-alert-page .ioa-detail-memo {
 .inventory-order-alert-page .ioa-table tbody tr.alert-row--確認中.ioa-data-row:hover {
   background: #bfdbfe;
 }
-.inventory-order-alert-page .ioa-table tbody tr.alert-row--アラート無し.ioa-data-row:hover {
+.inventory-order-alert-page .ioa-table tbody tr.alert-row--normal-flow.ioa-data-row:hover {
   background: #f1f5f9;
 }
 .inventory-order-alert-page .ioa-table tbody tr.alert-row--確認済.ioa-data-row.is-selected {
@@ -3115,3 +3159,21 @@ body.portal-app-page.shipment-trend-page .st-alert-rules-actions {
   justify-content: flex-end;
 }
 
+.asset-inventory-page .aiv-asp-import-message {
+  margin: 8px 0 0;
+  padding: 8px 12px;
+  border-radius: 6px;
+  /* 警告文は違反理由ごとに改行して組み立てるため、改行を保持する */
+  white-space: pre-line;
+  font-size: var(--portal-font-size-body);
+  background: #f1f5f9;
+  color: #334155;
+}
+.asset-inventory-page .aiv-asp-import-message.is-warning {
+  background: #fef3c7;
+  color: #92400e;
+}
+.asset-inventory-page .aiv-asp-import-message.is-error {
+  background: #fee2e2;
+  color: #991b1b;
+}

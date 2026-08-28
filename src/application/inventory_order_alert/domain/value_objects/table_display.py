@@ -9,7 +9,7 @@ from application.inventory_order_alert.domain.value_objects.code_sort import num
 from application.inventory_order_alert.domain.value_objects.dates import parse_optional_ymd
 
 SORTABLE_COLUMNS: tuple[tuple[str, str], ...] = (
-    ("alert_level", "アラート"),
+    ("flow_quadrant", "流動区分"),
     ("cust_chrg_psn_cd", "担当者コード"),
     ("cust_code", "得意先コード"),
     ("cust_name", "得意先名"),
@@ -22,16 +22,20 @@ SORTABLE_COLUMNS: tuple[tuple[str, str], ...] = (
     ("post_shipment_count", "出荷回数"),
     ("post_shipment_total_qty", "出荷数合計"),
     ("stock_qty", "在庫数"),
+    ("responsible_department", "責任部署"),
     ("confirmation_status", "確認状態"),
 )
 
 PAGE_SIZE_OPTIONS = (20, 50, 100, 200)
 DEFAULT_PAGE_SIZE = 50
-DEFAULT_SORT = "alert_level"
+DEFAULT_SORT = "flow_quadrant"
 DEFAULT_DIRECTION = "asc"
 MAX_SORT_SPECS = 5
-from application.inventory_order_alert.domain.value_objects.alert_level import ALERT_NONE, alert_sort_rank, normalize_alert_level
 from application.inventory_order_alert.domain.value_objects.confirmation import confirmation_status_sort_key
+from application.inventory_order_alert.domain.value_objects.flow_quadrant import (
+    QUADRANT_NORMAL_FLOW,
+    flow_quadrant_sort_rank,
+)
 VALID_DIRECTIONS = {"asc", "desc"}
 SORTABLE_KEYS = {column for column, _label in SORTABLE_COLUMNS}
 COLUMN_LABELS = dict(SORTABLE_COLUMNS)
@@ -105,7 +109,7 @@ def build_table_query_string(*, sort_specs: tuple[SortSpec, ...], page: int, pag
 
 
 def default_direction_for_column(column: str) -> str:
-    if column == "alert_level":
+    if column == "flow_quadrant":
         return "asc"
     if column in {"post_shipment_count", "post_shipment_total_qty", "stock_qty"}:
         return "desc"
@@ -193,8 +197,11 @@ def _date_sort_key(value: object) -> tuple[int, str]:
 
 def _sort_value(row: dict[str, object], column: str) -> object:
     value = row.get(column, "")
-    if column == "alert_level":
-        return alert_sort_rank(normalize_alert_level(str(value or ALERT_NONE)))
+    if column == "flow_quadrant":
+        return flow_quadrant_sort_rank(str(value or QUADRANT_NORMAL_FLOW))
+    if column == "responsible_department":
+        # 責任部署は流動区分からの導出値なので、独自ランクを持たず流動区分ランクで並べる（design.md §6.6.2）。
+        return flow_quadrant_sort_rank(str(row.get("flow_quadrant") or QUADRANT_NORMAL_FLOW))
     if column in {"post_shipment_count", "post_shipment_total_qty"}:
         try:
             return int(value or 0)

@@ -7,7 +7,7 @@ from django.contrib.auth import get_user_model
 from django.contrib.auth.models import Group
 from django.utils import timezone
 
-from application.gonenkukumi.domain.value_objects.errors import OracleQueryError
+from application.sales.domain.value_objects.errors import OracleQueryError
 from application.gonenkukumi.models import GonenKukumiSearchHistory
 from application.portal.models import PortalMenuGroupAccess, UserFavoriteMenu
 

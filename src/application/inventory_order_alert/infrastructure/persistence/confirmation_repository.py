@@ -2,7 +2,11 @@ from __future__ import annotations
 
 from django.utils import timezone
 
-from application.inventory_order_alert.domain.value_objects.alert_level import ALERT_NONE, is_alert_escalated, normalize_alert_level
+from application.inventory_order_alert.domain.value_objects.flow_quadrant import (
+    QUADRANT_NORMAL_FLOW,
+    is_flow_escalated,
+    normalize_flow_quadrant,
+)
 from application.inventory_order_alert.domain.value_objects.confirmation import (
     ACTIVE_STATUSES,
     ConfirmationInput,
@@ -36,7 +40,7 @@ def _confirmation_from_model(confirmation: InventoryOrderAlertConfirmation) -> C
         item_cd=confirmation.item_cd,
         status=confirmation.status,
         memo=confirmation.memo,
-        confirmed_alert_level=confirmation.confirmed_alert_level,
+        confirmed_flow_quadrant=confirmation.confirmed_flow_quadrant,
         confirmed_at=confirmation.confirmed_at,
         confirmed_by=confirmation.confirmed_by,
         memo_history=format_memo_history_csv(list(entries), author_names=author_names),
@@ -61,15 +65,15 @@ def save_confirmation(
     input_data: ConfirmationInput,
     *,
     confirmed_by: str,
-    alert_level: str = "",
+    flow_quadrant: str = "",
 ) -> ConfirmationRecord:
     confirmed_at = None
     confirmed_by_value = ""
-    confirmed_alert_level = ""
+    confirmed_flow_quadrant = ""
     if input_data.status in {ConfirmationStatus.IN_PROGRESS, ConfirmationStatus.CONFIRMED}:
         confirmed_at = timezone.now()
         confirmed_by_value = confirmed_by
-        confirmed_alert_level = normalize_alert_level(alert_level or ALERT_NONE)
+        confirmed_flow_quadrant = normalize_flow_quadrant(flow_quadrant or QUADRANT_NORMAL_FLOW)
 
     confirmation, _created = InventoryOrderAlertConfirmation.objects.update_or_create(
         cust_code=input_data.cust_code,
@@ -78,7 +82,7 @@ def save_confirmation(
             "status": input_data.status,
             "confirmed_at": confirmed_at,
             "confirmed_by": confirmed_by_value,
-            "confirmed_alert_level": confirmed_alert_level,
+            "confirmed_flow_quadrant": confirmed_flow_quadrant,
         },
     )
     return _confirmation_from_model(confirmation)
@@ -132,22 +136,23 @@ def reconcile_confirmations_after_import(rows: list[dict[str, object]]) -> int:
         status__in=ACTIVE_STATUSES,
     )
     for confirmation in confirmations:
-        if not confirmation.confirmed_alert_level:
+        if not confirmation.confirmed_flow_quadrant:
             continue
         row = row_by_key.get((confirmation.cust_code, confirmation.item_cd))
         if row is None:
             continue
-        current_level = normalize_alert_level(str(row.get("alert_level") or ""))
-        if not is_alert_escalated(confirmation.confirmed_alert_level, current_level):
+        # 行の流動区分は取込側が基準判定条件で付けたもの。利用者の画面選択には依存しない（design.md §5.2）。
+        current_quadrant = normalize_flow_quadrant(str(row.get("flow_quadrant") or ""))
+        if not is_flow_escalated(confirmation.confirmed_flow_quadrant, current_quadrant):
             continue
         confirmation.status = STATUS_UNCONFIRMED
-        confirmation.confirmed_alert_level = ""
+        confirmation.confirmed_flow_quadrant = ""
         confirmation.confirmed_at = None
         confirmation.confirmed_by = ""
         confirmation.save(
             update_fields=[
                 "status",
-                "confirmed_alert_level",
+                "confirmed_flow_quadrant",
                 "confirmed_at",
                 "confirmed_by",
                 "updated_at",
@@ -162,7 +167,7 @@ def reset_all_confirmations() -> int:
         status__in=ACTIVE_STATUSES,
     ).update(
         status=STATUS_UNCONFIRMED,
-        confirmed_alert_level="",
+        confirmed_flow_quadrant="",
         confirmed_at=None,
         confirmed_by="",
         updated_at=timezone.now(),

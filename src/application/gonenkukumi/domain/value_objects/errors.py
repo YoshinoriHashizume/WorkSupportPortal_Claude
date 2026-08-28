@@ -1,14 +1,8 @@
 from __future__ import annotations
 
+from application.sales.domain.value_objects.errors import OracleQueryError
+
 NAISAK_NOT_FOUND = "NAISAK_NOT_FOUND"
-
-
-class OracleNotConfiguredError(RuntimeError):
-    pass
-
-
-class OracleQueryError(RuntimeError):
-    pass
 
 
 def oracle_error_message(exc: OracleQueryError) -> str:

@@ -1,11 +1,8 @@
 from __future__ import annotations
 
-from collections.abc import Callable
-
+from application.asset_inventory.domain.repositories.ports import FetchAttachmentFn
 from application.asset_inventory.domain.value_objects.attachment_proxy import is_allowed_attachment_url
 from application.asset_inventory.domain.value_objects.errors import DesknetApiError
-
-FetchAttachmentFn = Callable[..., tuple[bytes, str]]
 
 
 class FetchAttachment:

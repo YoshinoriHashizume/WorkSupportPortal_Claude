@@ -1,13 +1,17 @@
 from __future__ import annotations
 
+import csv
+import io
 import json
 
 from django.contrib.auth.decorators import login_required
 from django.http import HttpRequest, HttpResponse, JsonResponse
 from django.shortcuts import redirect, render
+from django.utils import timezone
 from django.views.decorators.http import require_http_methods
 
 from application.portal.domain.value_objects.menu import MENU_BY_KEY, MENU_ITEMS
+from application.shared.domain.value_objects.list_table import DEFAULT_PAGE_SIZE
 from application.portal.interfaces.favorites import (
     can_access_menu_item,
     page_favorite_toggle_context,
@@ -18,6 +22,7 @@ from application.portal.interfaces.wiring import (
     database_page_usecase,
     favorites_usecase,
     notice_management_usecase,
+    usage_status_usecase,
     user_management_usecase,
 )
 
@@ -147,6 +152,91 @@ def management_page(request: HttpRequest, slug: str) -> HttpResponse:
             },
         )
     return render(request, "portal/placeholder.html", {"title": title})
+
+
+def _positive_int(raw: object, default: int) -> int:
+    """1 以上の整数だけを受け付け、それ以外は既定値に丸める。"""
+    try:
+        value = int(str(raw))
+    except (TypeError, ValueError):
+        return default
+    return value if value >= 1 else default
+
+
+def _usage_status_query(request: HttpRequest) -> dict[str, object]:
+    """利用状況画面のクエリパラメータ（design.md §6.3）を読み取る。"""
+    return {
+        "today": timezone.localdate(),
+        "start": (request.GET.get("start") or "").strip(),
+        "end": (request.GET.get("end") or "").strip(),
+        "group_key": (request.GET.get("group") or "").strip(),
+        "sort_key": (request.GET.get("sort") or "").strip(),
+        "sort_direction": (request.GET.get("dir") or "asc").strip().lower(),
+        "page": _positive_int(request.GET.get("page"), 1),
+        "page_size": _positive_int(request.GET.get("size"), DEFAULT_PAGE_SIZE),
+    }
+
+
+def _render_usage_status(
+    request: HttpRequest,
+    *,
+    context: dict[str, object],
+    error_message: str | None = None,
+) -> HttpResponse:
+    if error_message:
+        context = {**context, "error_message": error_message}
+    return render(
+        request,
+        "portal/usage_status.html",
+        {
+            **context,
+            **page_favorite_toggle_context(request.user, "usage-status"),
+        },
+    )
+
+
+def _csv_response(rows: list[list[str]], *, filename: str) -> HttpResponse:
+    """BOM 付き UTF-8・CRLF 改行。既存の CSV 出力（出荷トレンド等）に揃える。"""
+    buffer = io.StringIO()
+    writer = csv.writer(buffer, lineterminator="\r\n")
+    for row in rows:
+        writer.writerow(row)
+    response = HttpResponse(
+        ("\ufeff" + buffer.getvalue()).encode("utf-8"),
+        content_type="text/csv; charset=utf-8",
+    )
+    response["Content-Disposition"] = f'attachment; filename="{filename}"'
+    return response
+
+
+@login_required
+def usage_status_page(request: HttpRequest) -> HttpResponse:
+    context = usage_status_usecase().page_context(**_usage_status_query(request))
+    return _render_usage_status(request, context=context)
+
+
+@login_required
+def usage_status_export_csv(request: HttpRequest) -> HttpResponse:
+    query = _usage_status_query(request)
+    section = (request.GET.get("section") or "").strip()
+    usecase = usage_status_usecase()
+    payload = usecase.csv_payload(
+        section=section,
+        today=query["today"],
+        start=query["start"],
+        end=query["end"],
+        group_key=query["group_key"],
+        sort_key=query["sort_key"],
+        sort_direction=query["sort_direction"],
+    )
+    if payload.rows is None:
+        # 出力できないときは CSV を返さず、画面へ戻して案内する（design.md §6.5）
+        return _render_usage_status(
+            request,
+            context=usecase.page_context(**query),
+            error_message=payload.error_message,
+        )
+    return _csv_response(payload.rows, filename=f"usage_status_{section}.csv")
 
 
 @login_required

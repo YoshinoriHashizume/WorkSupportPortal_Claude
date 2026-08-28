@@ -3,7 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from datetime import date
 
-from application.receipt_comparison.domain.value_objects.comparison import ComparisonRow
+from application.receipt_comparison.domain.entities.comparison_row import ComparisonRow
 from application.receipt_comparison.domain.value_objects.receipt_flag import ReceiptFlag
 
 

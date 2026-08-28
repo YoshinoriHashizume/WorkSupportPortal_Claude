@@ -1,18 +1,16 @@
 from __future__ import annotations
 
-from collections.abc import Callable
-
 from dataclasses import dataclass
 
+from application.inventory_order_alert.domain.repositories.ports import (
+    AddConfirmationMemo,
+    ListConfirmationMemos,
+    ResolveUserDisplayNames,
+)
 from application.inventory_order_alert.domain.value_objects.confirmation import (
     memo_entry_to_dict,
     parse_memo_entry_payload,
 )
-from application.inventory_order_alert.domain.value_objects.confirmation import MemoEntryRecord
-
-ListConfirmationMemos = Callable[..., list[dict[str, str]]]
-AddConfirmationMemo = Callable[..., MemoEntryRecord]
-ResolveUserDisplayNames = Callable[[set[str]], dict[str, str]]
 
 
 @dataclass(frozen=True)

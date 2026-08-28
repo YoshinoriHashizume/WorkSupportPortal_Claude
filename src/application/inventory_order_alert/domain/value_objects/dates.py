@@ -1,6 +1,14 @@
 from __future__ import annotations
 
 from datetime import date, datetime, timedelta
+from zoneinfo import ZoneInfo
+
+#: 業務日付は日本時間で判定する。
+JST = ZoneInfo("Asia/Tokyo")
+
+
+def today_jst() -> date:
+    return datetime.now(JST).date()
 
 
 def parse_optional_ymd(value: str, *, today: date | None = None) -> date:
@@ -50,3 +58,19 @@ def has_passed_calendar_months(*, start: date, end: date, months: int) -> bool:
 
 def is_within_calendar_months(*, start: date, end: date, months: int) -> bool:
     return start < end <= add_calendar_months(start, months)
+
+
+def is_stock_stale(
+    stock_as_of_date: date | None,
+    stock_stale_days: int,
+    *,
+    today: date | None = None,
+) -> bool:
+    """SLIMS 在庫データが陳腐化しているか（§4.1.1 / §13.1）。
+
+    在庫日付が未取得の場合は陳腐化とみなさない。
+    """
+    if stock_as_of_date is None:
+        return False
+    reference = today or today_jst()
+    return (reference - stock_as_of_date).days > stock_stale_days

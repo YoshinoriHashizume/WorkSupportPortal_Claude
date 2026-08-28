@@ -59,12 +59,14 @@
     return { custCode: "", itemCd: "" };
   }
 
-  const ALERT_NONE = "アラート無し";
-  const ALERT_RANK = {
-    重点: 0,
-    "警告（出荷あり）": 1,
-    "警告（出荷なし）": 2,
-    [ALERT_NONE]: 3,
+  // 流動区分の判定ロジックはサーバ側にのみ置く。ここは row.flowQuadrants から引くだけにする
+  // （design.md §3.2 案B）。暦月計算を JS に持ち込まない。
+  const QUADRANT_NORMAL_FLOW_KEY = "normal-flow";
+  const FLOW_QUADRANT_RANK = {
+    "supply-risk": 0,
+    "dormant-stock": 1,
+    "excess-stock-risk": 2,
+    [QUADRANT_NORMAL_FLOW_KEY]: 3,
   };
   const CONFIRMATION_STATUS_RANK = {
     unconfirmed: 0,
@@ -72,22 +74,22 @@
     confirmed: 2,
   };
 
-  function normalizeAlertLevel(level) {
-    const text = String(level || "").trim();
-    if (text === "" || text === "なし" || text === "アラートなし" || text === "問題なし") {
-      return ALERT_NONE;
-    }
-    if (text === "警告（出荷）") {
-      return "警告（出荷あり）";
-    }
-    if (text === "警告（入荷）") {
-      return "警告（出荷なし）";
-    }
-    return text;
+  function flowSelectionKey(state) {
+    const axis = String(state.flowAxis || "low_flow");
+    const prefix = axis === "dormant" ? "D" : "L";
+    return `${prefix}${Number(state.flowPeriod) || 3}`;
   }
 
-  function alertSortRank(level) {
-    return ALERT_RANK[normalizeAlertLevel(level)] ?? 99;
+  function rowFlowQuadrantKey(row, state) {
+    const matrix = row.flowQuadrants || {};
+    const key = matrix[flowSelectionKey(state)];
+    return key && Object.prototype.hasOwnProperty.call(FLOW_QUADRANT_RANK, key)
+      ? key
+      : QUADRANT_NORMAL_FLOW_KEY;
+  }
+
+  function flowQuadrantSortRank(key) {
+    return FLOW_QUADRANT_RANK[key] ?? 99;
   }
 
   function confirmationStatusSortRank(row) {
@@ -106,7 +108,7 @@
   }
 
   function defaultDirectionForColumn(column) {
-    if (column === "alert_level") {
+    if (column === "flow_quadrant" || column === "responsible_department") {
       return "asc";
     }
     if (column === "post_shipment_count" || column === "post_shipment_total_qty" || column === "stock_qty") {
@@ -125,13 +127,38 @@
     const visibleCustOptions = CustFilter.custOptionsForChrg(allCustOptions, custChrgCustIndex, custChrgPsnCd);
     const validCust = new Set(visibleCustOptions.map((option) => option.value));
     const custCodeRaw = params.get("cust_code") || "";
+    const defaultSelection = defaults.defaultFlowSelection || { axis: "low_flow", period: 3 };
+    const flowPeriods = defaults.flowPeriods || {};
+    const axisRaw = params.get("axis") || "";
+    const flowAxis = Object.prototype.hasOwnProperty.call(flowPeriods, axisRaw)
+      ? axisRaw
+      : defaultSelection.axis;
+    const flowPeriod = resolveFlowPeriod(flowPeriods, flowAxis, params.get("period"), defaultSelection);
+    const quadrantRaw = params.get("flow_quadrant") || "";
     return {
       custCode: custCodeRaw && validCust.has(custCodeRaw) ? custCodeRaw : "",
       custChrgPsnCd,
       itemCd: params.get("item_cd") || "",
       level1ItemCd: params.get("level1_item_cd") || "",
+      flowAxis,
+      flowPeriod,
+      flowQuadrant: Object.prototype.hasOwnProperty.call(FLOW_QUADRANT_RANK, quadrantRaw) ? quadrantRaw : "",
+      attentionOnly: (params.get("attentionOnly") || "").toLowerCase() === "true",
       ...Core.readBaseStateFromUrl(defaults, defaultDirectionForColumn),
     };
+  }
+
+  function resolveFlowPeriod(flowPeriods, axis, rawPeriod, defaultSelection) {
+    const options = flowPeriods[axis] || [];
+    const parsed = Number(rawPeriod);
+    if (options.some((option) => Number(option.value) === parsed)) {
+      return parsed;
+    }
+    // 軸に対応しない値・未指定は当該軸の既定値へ倒す（design.md §6.1）。
+    if (axis === defaultSelection.axis) {
+      return Number(defaultSelection.period);
+    }
+    return options.length ? Number(options[0].value) : Number(defaultSelection.period);
   }
 
   function numericCodeSortKey(code) {
@@ -185,6 +212,13 @@
 
   function applyListFilters(rows, state) {
     return rows.filter((row) => {
+      const quadrantKey = rowFlowQuadrantKey(row, state);
+      if (state.flowQuadrant && quadrantKey !== state.flowQuadrant) {
+        return false;
+      }
+      if (state.attentionOnly && quadrantKey === QUADRANT_NORMAL_FLOW_KEY) {
+        return false;
+      }
       if (state.custCode && String(row.cust_code || "").trim() !== state.custCode) {
         return false;
       }
@@ -201,18 +235,18 @@
     });
   }
 
-  function countRows(rows) {
+  function countRows(rows, state) {
     return rows.reduce(
       (counts, row) => {
-        const level = normalizeAlertLevel(row.alert_level);
-        if (level === "重点") {
-          counts.critical += 1;
-        } else if (level === "警告（出荷あり）") {
-          counts.warningShip += 1;
-        } else if (level === "警告（出荷なし）") {
-          counts.warningIncoming += 1;
+        const quadrantKey = rowFlowQuadrantKey(row, state);
+        if (quadrantKey === "supply-risk") {
+          counts.supplyRisk += 1;
+        } else if (quadrantKey === "dormant-stock") {
+          counts.dormantStock += 1;
+        } else if (quadrantKey === "excess-stock-risk") {
+          counts.excessStockRisk += 1;
         } else {
-          counts.alertNone += 1;
+          counts.normalFlow += 1;
         }
         const status = String(row.confirmation_status || "未確認");
         if (status === "確認済み") {
@@ -225,10 +259,10 @@
         return counts;
       },
       {
-        critical: 0,
-        warningShip: 0,
-        warningIncoming: 0,
-        alertNone: 0,
+        supplyRisk: 0,
+        dormantStock: 0,
+        excessStockRisk: 0,
+        normalFlow: 0,
         confirmed: 0,
         inProgress: 0,
         unconfirmed: 0,
@@ -236,10 +270,11 @@
     );
   }
 
-  function sortValue(row, column) {
+  function sortValue(row, column, state) {
     const value = row[column] ?? "";
-    if (column === "alert_level") {
-      return alertSortRank(value);
+    if (column === "flow_quadrant" || column === "responsible_department") {
+      // 責任部署は流動区分からの導出値なので同じランクで並べる（design.md §6.6.2）。
+      return flowQuadrantSortRank(rowFlowQuadrantKey(row, state));
     }
     if (column === "post_shipment_count" || column === "post_shipment_total_qty") {
       const number = Number.parseInt(String(value || "0"), 10);
@@ -306,6 +341,15 @@
     const tableHead = pageRoot.querySelector(".ioa-table thead");
     const countsLeft = pageRoot.querySelector(".ioa-table-counts-left");
     const countsRight = pageRoot.querySelector(".ioa-table-counts-right");
+    const flowAxisSelect = pageRoot.querySelector("#ioa-flow-axis");
+    const flowPeriodSelect = pageRoot.querySelector("#ioa-flow-period");
+    const flowQuadrantSelect = pageRoot.querySelector("#ioa-flow-quadrant");
+    const flowAxisHelp = pageRoot.querySelector("#ioa-flow-axis-help");
+    const flowConditionLabel = pageRoot.querySelector(".ioa-flow-condition-label");
+    const flowQuadrantLabels = payload.flowQuadrantLabels || {};
+    const flowQuadrantDepartments = payload.flowQuadrantDepartments || {};
+    const flowAxes = Array.isArray(payload.flowAxes) ? payload.flowAxes : [];
+    const flowPeriods = payload.flowPeriods || {};
     const paginationElements = {
       footer: pageRoot.querySelector(".ioa-table-footer"),
       pageSizeSelect: pageRoot.querySelector(".ioa-page-size-select"),
@@ -436,6 +480,15 @@
       if (state.level1ItemCd && String(state.level1ItemCd).trim()) {
         params.set("level1_item_cd", String(state.level1ItemCd).trim());
       }
+      // 判定条件は常に URL へ書き戻し、再読み込み後も選択が復元されるようにする（design.md §6.1）。
+      params.set("axis", state.flowAxis);
+      params.set("period", String(state.flowPeriod));
+      if (state.flowQuadrant) {
+        params.set("flow_quadrant", state.flowQuadrant);
+      }
+      if (state.attentionOnly) {
+        params.set("attentionOnly", "true");
+      }
       Core.appendSortQueryParams(params, state.sortSpecs, state.page, state.pageSize);
       Core.replaceUrl(window.location.pathname, params.toString());
     }
@@ -466,6 +519,11 @@
           const display = row.display && typeof row.display === "object" ? row.display : {};
           const identity = formatRowIdentity(row);
           const rowKey = row.rowKey || buildRowKeyAttribute(identity);
+          const quadrantKey = rowFlowQuadrantKey(row, state);
+          const statusKey = String(row.confirmationStatusKey || "unconfirmed");
+          // 確認状態は流動区分より優先する（design.md §6.6.7）。
+          const rowClass =
+            statusKey === "confirmed" ? "確認済" : statusKey === "in_progress" ? "確認中" : quadrantKey;
           const cells = sortableColumns
             .map((column) => {
               if (column.key === "confirmation_status") {
@@ -474,10 +532,17 @@
                   identity,
                 )}</td>`;
               }
+              // 判定条件を切り替えたら流動区分と責任部署は引き直す（design.md §3.2 案B）。
+              if (column.key === "flow_quadrant") {
+                return `<td>${Core.escapeHtml(flowQuadrantLabels[quadrantKey] || "")}</td>`;
+              }
+              if (column.key === "responsible_department") {
+                return `<td>${Core.escapeHtml(flowQuadrantDepartments[quadrantKey] || "")}</td>`;
+              }
               return `<td>${Core.escapeHtml(display[column.key] ?? "")}</td>`;
             })
             .join("");
-          return `<tr class="alert-row alert-row--${Core.escapeHtml(row.alertRowClass || "")} ioa-data-row"
+          return `<tr class="alert-row alert-row--${Core.escapeHtml(rowClass)} ioa-data-row"
             data-row-key="${Core.escapeHtml(String(rowKey || ""))}"
             data-cust-code="${Core.escapeHtml(identity.custCode)}"
             data-cust-name="${Core.escapeHtml(row.cust_name || "")}"
@@ -493,15 +558,15 @@
 
     function renderCounts(counts) {
       countsLeft.textContent =
-        `重点 ${counts.critical} 件 / 警告（出荷あり） ${counts.warningShip} 件 / 警告（出荷なし） ${counts.warningIncoming} 件 / アラート無し ${counts.alertNone} 件`;
+        `供給リスク品 ${counts.supplyRisk} 件 / 在庫死蔵品 ${counts.dormantStock} 件 / 在庫過剰リスク品 ${counts.excessStockRisk} 件 / 通常流動品 ${counts.normalFlow} 件`;
       countsRight.textContent =
         `確認済み ${counts.confirmed} 件 / 確認中 ${counts.inProgress} 件 / 未確認 ${counts.unconfirmed} 件`;
     }
 
     function render() {
       const filtered = applyListFilters(allRows, state);
-      const counts = countRows(filtered);
-      const sorted = Core.sortRows(filtered, state.sortSpecs, sortValue, [
+      const counts = countRows(filtered, state);
+      const sorted = Core.sortRows(filtered, state.sortSpecs, (row, column) => sortValue(row, column, state), [
         { column: "cust_code", direction: "asc" },
         { column: "item_cd", direction: "asc" },
       ]);
@@ -527,6 +592,7 @@
       renderTableBody(pagination.rows);
       Core.renderPagination(paginationElements, pagination);
       updateUrl();
+      syncFlowSelector();
       itemCdAutocomplete.sync(state.itemCd);
       level1ItemCdAutocomplete.sync(state.level1ItemCd);
     }
@@ -535,6 +601,50 @@
       state = { ...state, ...patch };
       render();
     }
+
+    function syncFlowSelector() {
+      if (flowAxisSelect) {
+        flowAxisSelect.value = state.flowAxis;
+      }
+      if (flowPeriodSelect) {
+        // 選択中の判定軸に属する選択肢だけを見せる（design.md §6.6.1）。
+        Array.from(flowPeriodSelect.options).forEach((option) => {
+          option.hidden = option.dataset.axis !== state.flowAxis;
+        });
+        flowPeriodSelect.value = String(state.flowPeriod);
+      }
+      if (flowQuadrantSelect) {
+        flowQuadrantSelect.value = state.flowQuadrant || "";
+      }
+      const axis = flowAxes.find((option) => option.value === state.flowAxis);
+      const period = (flowPeriods[state.flowAxis] || []).find(
+        (option) => Number(option.value) === Number(state.flowPeriod),
+      );
+      if (flowAxisHelp && axis) {
+        flowAxisHelp.textContent = axis.helpText || axis.help_text || flowAxisHelp.textContent;
+      }
+      if (flowConditionLabel && axis && period) {
+        flowConditionLabel.textContent = `${axis.label}・${period.label}で判定`;
+      }
+    }
+
+    flowAxisSelect?.addEventListener("change", () => {
+      const nextAxis = flowAxisSelect.value;
+      const options = flowPeriods[nextAxis] || [];
+      // 軸を切り替えたら判定期間は当該軸の既定値へ戻す（REQ-LFV-F-003）。ページも1へ。
+      const defaultPeriod = nextAxis === (payload.defaultFlowSelection || {}).axis
+        ? Number((payload.defaultFlowSelection || {}).period)
+        : Number(options.length ? options[0].value : 3);
+      setState({ flowAxis: nextAxis, flowPeriod: defaultPeriod, page: 1 });
+    });
+
+    flowPeriodSelect?.addEventListener("change", () => {
+      setState({ flowPeriod: Number(flowPeriodSelect.value), page: 1 });
+    });
+
+    flowQuadrantSelect?.addEventListener("change", () => {
+      setState({ flowQuadrant: flowQuadrantSelect.value, page: 1 });
+    });
 
     custChrgSelect?.addEventListener("change", () => {
       const custCode = CustFilter.renderCustCodeSelect(

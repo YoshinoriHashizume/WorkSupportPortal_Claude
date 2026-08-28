@@ -1,23 +1,20 @@
 from __future__ import annotations
 
-from collections.abc import Callable
-
 from application.inventory_order_alert.domain.value_objects.list_filter import (
     apply_list_filters,
     list_filter_params_from_client_payload,
 )
-from application.inventory_order_alert.domain.repositories.ports import LoadSummary
+from application.inventory_order_alert.domain.repositories.ports import LoadSummary, ResetAllConfirmations
 from application.inventory_order_alert.domain.value_objects.row_counts import RowCounts, count_rows
-
-ResetAllConfirmations = Callable[[], int]
 
 
 def _counts_to_response(counts: RowCounts) -> dict[str, int]:
     return {
-        "critical": counts.critical,
-        "warningShip": counts.warning_ship,
-        "warningIncoming": counts.warning_incoming,
-        "alertNone": counts.alert_none,
+        "supplyRisk": counts.supply_risk,
+        "dormantStock": counts.dormant_stock,
+        "excessStockRisk": counts.excess_stock_risk,
+        "normalFlow": counts.normal_flow,
+        "attention": counts.attention,
         "unconfirmed": counts.unconfirmed,
         "inProgress": counts.in_progress,
         "confirmed": counts.confirmed,

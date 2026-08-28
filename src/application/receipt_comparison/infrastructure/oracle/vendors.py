@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from application.gonenkukumi.domain.value_objects.errors import OracleNotConfiguredError, OracleQueryError
+from application.sales.domain.value_objects.errors import OracleNotConfiguredError, OracleQueryError
 
 from .client import list_vendors
 

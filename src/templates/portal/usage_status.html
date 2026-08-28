@@ -1,0 +1,235 @@
+{% extends "base.html" %}
+{% block title %}利用状況{% endblock %}
+{% block body_class %}usage-status-page{% endblock %}
+
+{% block extra_head %}
+<style>
+  .us-purpose-note { margin: 0 0 12px; }
+  .us-filter { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 12px; margin-bottom: 12px; }
+  .us-filter label { display: flex; flex-direction: column; gap: 4px; font-size: 13px; }
+  .us-error { margin: 0 0 12px; }
+  .us-summary-items { display: flex; flex-wrap: wrap; gap: 24px; margin: 0; }
+  .us-summary-items div { min-width: 120px; }
+  .us-summary-items dt { font-size: 12px; color: #64748b; }
+  .us-summary-items dd { margin: 2px 0 0; font-size: 22px; font-weight: 600; }
+  .us-trend-list { list-style: none; margin: 0; padding: 0; }
+  .us-trend-item { display: grid; grid-template-columns: 96px 1fr 64px; align-items: center; gap: 8px; }
+  .us-trend-bar-wrap { background: #e2e8f0; border-radius: 3px; height: 10px; }
+  .us-trend-bar { display: block; background: #2563eb; border-radius: 3px; height: 10px; }
+  .us-trend-count { text-align: right; }
+  .us-list { margin-bottom: 20px; }
+  .us-list-actions { display: flex; gap: 8px; align-items: center; }
+  .us-num { text-align: right; }
+  .us-empty { text-align: center; color: #64748b; }
+  .us-table-footer { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; padding: 8px 12px; }
+  .us-table-range { margin: 0; }
+  .us-sort-dialog { border: 1px solid #cbd5e1; border-radius: 6px; padding: 16px; }
+  .us-sort-row { display: flex; align-items: center; gap: 8px; margin-bottom: 12px; }
+  .us-sort-dialog-actions { display: flex; justify-content: flex-end; gap: 8px; }
+</style>
+{% endblock %}
+
+{% block content %}
+<section class="usage-status">
+  <div class="portal-section-head">
+    <div class="portal-page-title-row">
+      <h1>利用状況</h1>
+      {% include "includes/page_favorite_toggle.html" %}
+      <p class="portal-page-description">ポータルのメニューがどれだけ使われているかを確認します。</p>
+    </div>
+  </div>
+
+  {# 区画0: 利用目的の注記（常時表示・REQ-NF-005） #}
+  <p class="muted us-purpose-note">{{ purpose_note }}</p>
+
+  {# 区画1: 絞り込みパネル #}
+  <form method="get" class="card us-filter">
+    <label>開始日
+      <input type="date" name="start" value="{{ start }}">
+    </label>
+    <label>終了日
+      <input type="date" name="end" value="{{ end }}">
+    </label>
+    <label>メニューグループ
+      <select name="group">
+        <option value="">すべて</option>
+        {% for menu_group in portal_menu_groups %}
+        <option value="{{ menu_group.key }}"{% if menu_group.key == group_key %} selected{% endif %}>{{ menu_group.title }}</option>
+        {% endfor %}
+      </select>
+    </label>
+    <input type="hidden" name="sort" value="{{ sort_key }}">
+    <input type="hidden" name="dir" value="{{ sort_direction }}">
+    <button type="submit" class="button-link">表示</button>
+  </form>
+
+  {% if error_message %}
+  <p class="error us-error">{{ error_message }}</p>
+  {% else %}
+
+  {# 区画2: 全体集計 #}
+  <section class="card us-summary">
+    <h2>全体集計</h2>
+    <dl class="us-summary-items">
+      <div><dt>利用ユーザー数</dt><dd>{{ summary.active_user_count }}</dd></div>
+      <div><dt>利用回数</dt><dd>{{ summary.usage_count }}</dd></div>
+      <div><dt>出力回数</dt><dd>{{ summary.export_count }}</dd></div>
+      <div><dt>未利用ユーザー数</dt><dd>{{ summary.unused_user_count }}</dd></div>
+      <div><dt>休眠ユーザー数</dt><dd>{{ summary.dormant_user_count }}</dd></div>
+    </dl>
+  </section>
+
+  {# 区画3: 日別推移 #}
+  <section class="card us-daily-trend">
+    <h2>日別推移</h2>
+    {% if daily_trend.is_empty %}
+    <p class="muted">該当なし</p>
+    {% else %}
+    <ul class="us-trend-list">
+      {% for point in daily_trend.points %}
+      <li class="us-trend-item">
+        <span class="us-trend-date">{{ point.on|date:"Y/m/d" }}</span>
+        <span class="us-trend-bar-wrap"><span class="us-trend-bar" style="width: {% widthratio point.count daily_trend.max_count 100 %}%"></span></span>
+        <span class="us-trend-count">{{ point.count }}</span>
+      </li>
+      {% endfor %}
+    </ul>
+    {% endif %}
+  </section>
+
+  {# 区画4〜7: メニュー別／ユーザー別／メニューグループ付与済み×未利用／出力操作の記録 #}
+  {% for section_key, labels in sort_labels.items %}
+  <section class="db-table-card us-list" data-section="{{ section_key }}">
+    <div class="db-table-head us-list-head">
+      <h2>
+        {% if section_key == "menus" %}メニュー別
+        {% elif section_key == "users" %}ユーザー別
+        {% elif section_key == "unused-grants" %}メニューグループ付与済み×未利用
+        {% else %}出力操作の記録{% endif %}
+      </h2>
+      <div class="us-list-actions">
+        <button type="button" class="button-link us-sort-open" data-section="{{ section_key }}" aria-haspopup="dialog" aria-controls="us-sort-dialog-{{ section_key }}">並び替え</button>
+        <a class="button-link us-csv-link" href="{% url 'portal:usage_status_export_csv' %}?start={{ start|urlencode }}&amp;end={{ end|urlencode }}&amp;group={{ group_key|urlencode }}&amp;sort={{ sort_key|urlencode }}&amp;dir={{ sort_direction|urlencode }}&amp;section={{ section_key|urlencode }}">CSV出力</a>
+      </div>
+    </div>
+    <div class="db-table-wrap">
+      <table class="db-table">
+        <thead>
+          <tr>
+            {% for column_key, column_label in labels.items %}
+            <th scope="col" data-column="{{ column_key }}">
+              <a class="db-sort-link" href="?start={{ start|urlencode }}&amp;end={{ end|urlencode }}&amp;group={{ group_key|urlencode }}&amp;sort={{ column_key|urlencode }}&amp;dir={% if column_key == sort_key and sort_direction == "asc" %}desc{% else %}asc{% endif %}">{{ column_label }}{% if column_key == sort_key %}{% if sort_direction == "asc" %} ▲{% else %} ▼{% endif %}{% endif %}</a>
+            </th>
+            {% endfor %}
+          </tr>
+        </thead>
+        {% if section_key == "menus" %}
+        <tbody id="menu-usage-rows">
+          {% for row in menu_usage_page.rows %}
+          <tr>
+            <td>{{ row.group_title }}</td>
+            <td>{{ row.menu_title }}</td>
+            <td class="us-num">{{ row.view_count }}</td>
+            <td class="us-num">{{ row.export_count }}</td>
+            <td class="us-num">{{ row.user_count }}</td>
+            <td>{{ row.last_used_on|date:"Y/m/d"|default:"—" }}</td>
+          </tr>
+          {% empty %}
+          <tr><td colspan="{{ labels|length }}" class="us-empty">該当なし</td></tr>
+          {% endfor %}
+        </tbody>
+        {% elif section_key == "users" %}
+        <tbody id="user-usage-rows">
+          {% for row in user_usage_page.rows %}
+          <tr>
+            <td>{{ row.username }}</td>
+            <td>{{ row.display_name }}</td>
+            <td>{{ row.role }}</td>
+            <td>{{ row.menu_group_titles }}</td>
+            <td class="us-num">{{ row.usage_count }}</td>
+            <td class="us-num">{{ row.export_count }}</td>
+            <td>{{ row.most_used_menu_title }}</td>
+            <td>{{ row.last_used_on|date:"Y/m/d"|default:"—" }}</td>
+            <td>{{ row.last_login_at|date:"Y/m/d H:i"|default:"—" }}</td>
+          </tr>
+          {% empty %}
+          <tr><td colspan="{{ labels|length }}" class="us-empty">該当なし</td></tr>
+          {% endfor %}
+        </tbody>
+        {% elif section_key == "unused-grants" %}
+        <tbody id="unused-grant-rows">
+          {% for row in unused_grant_page.rows %}
+          <tr>
+            <td>{{ row.username }}</td>
+            <td>{{ row.display_name }}</td>
+            <td>{{ row.group_title }}</td>
+            <td>{{ row.last_used_on|date:"Y/m/d"|default:"—" }}</td>
+            <td>{{ row.granted_on|date:"Y/m/d"|default:"—" }}</td>
+          </tr>
+          {% empty %}
+          <tr><td colspan="{{ labels|length }}" class="us-empty">該当なし</td></tr>
+          {% endfor %}
+        </tbody>
+        {% else %}
+        <tbody id="export-log-rows">
+          {% for row in export_log_page.rows %}
+          <tr>
+            <td>{{ row.used_at|date:"Y/m/d H:i" }}</td>
+            <td>{{ row.username }}</td>
+            <td>{{ row.display_name }}</td>
+            <td>{{ row.group_title }}</td>
+            <td>{{ row.menu_title }}</td>
+          </tr>
+          {% empty %}
+          <tr><td colspan="{{ labels|length }}" class="us-empty">該当なし</td></tr>
+          {% endfor %}
+        </tbody>
+        {% endif %}
+      </table>
+    </div>
+
+    {% if section_key == "menus" %}{% with paginated=menu_usage_page %}
+    {% include "portal/includes/usage_status_footer.html" %}
+    {% endwith %}{% elif section_key == "users" %}{% with paginated=user_usage_page %}
+    {% include "portal/includes/usage_status_footer.html" %}
+    {% endwith %}{% elif section_key == "unused-grants" %}{% with paginated=unused_grant_page %}
+    {% include "portal/includes/usage_status_footer.html" %}
+    {% endwith %}{% else %}{% with paginated=export_log_page %}
+    {% include "portal/includes/usage_status_footer.html" %}
+    {% endwith %}{% endif %}
+
+    <dialog id="us-sort-dialog-{{ section_key }}" class="us-sort-dialog" data-section="{{ section_key }}">
+      <form method="get" class="us-sort-form">
+        <h3 class="us-sort-dialog-title">並び替え</h3>
+        <input type="hidden" name="start" value="{{ start }}">
+        <input type="hidden" name="end" value="{{ end }}">
+        <input type="hidden" name="group" value="{{ group_key }}">
+        <div class="us-sort-rows">
+          <div class="us-sort-row">
+            <span class="us-sort-row-order">1</span>
+            <select class="us-sort-column" name="sort" aria-label="並び替え列">
+              {% for column_key, column_label in labels.items %}
+              <option value="{{ column_key }}"{% if column_key == sort_key %} selected{% endif %}>{{ column_label }}</option>
+              {% endfor %}
+            </select>
+            <select class="us-sort-direction" name="dir" aria-label="並び順">
+              <option value="asc"{% if sort_direction == "asc" %} selected{% endif %}>昇順</option>
+              <option value="desc"{% if sort_direction == "desc" %} selected{% endif %}>降順</option>
+            </select>
+          </div>
+        </div>
+        <div class="us-sort-dialog-actions">
+          <button type="button" class="button-link us-sort-cancel">キャンセル</button>
+          <button type="submit" class="button-link">適用</button>
+        </div>
+      </form>
+    </dialog>
+  </section>
+  {% endfor %}
+
+  {% endif %}
+</section>
+
+<script src="/static/js/portal-list-core.js?v=20260827" defer></script>
+<script src="/static/js/usage-status-list-client.js?v=20260827" defer></script>
+{% endblock %}

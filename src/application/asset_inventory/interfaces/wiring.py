@@ -7,6 +7,7 @@ from application.asset_inventory.infrastructure.desknet.gateway import make_list
 from application.asset_inventory.infrastructure.desknet.service_access_key import (
     resolve_asset_inventory_access_key,
 )
+from application.asset_inventory.use_cases.export_asp_import import ExportAspImport
 from application.asset_inventory.use_cases.export_csv import ExportCsv
 from application.asset_inventory.use_cases.fetch_attachment import FetchAttachment
 from application.asset_inventory.use_cases.list_page import ListPage
@@ -26,6 +27,11 @@ def list_page_usecase() -> ListPage:
 
 def export_csv_usecase() -> ExportCsv:
     return ExportCsv(_list_all_fn())
+
+
+def export_asp_import_usecase() -> ExportAspImport:
+    # 画面が表示した突合結果スナップショットだけを入力とするため、desknet's ゲートウェイは渡さない（DD-01）
+    return ExportAspImport()
 
 
 def resolve_access_key_usecase() -> ResolveAccessKey:

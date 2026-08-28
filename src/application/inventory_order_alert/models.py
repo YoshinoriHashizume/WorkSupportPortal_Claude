@@ -17,9 +17,12 @@ class InventoryOrderAlertSettings(models.Model):
     recent_shipment_days = models.PositiveIntegerField(default=90)
     stale_incoming_days = models.PositiveIntegerField(default=180)
     balance_shipment_months = models.PositiveIntegerField(default=12)
+    # 旧アラートレベル方式の残置カラム（未使用）。流動区分の判定には用いない（design.md §5.3）。
     warning_shipment_months = models.PositiveIntegerField(default=12)
+    # 旧アラートレベル方式の残置カラム（未使用）。流動区分の判定には用いない（design.md §5.3）。
     warning_incoming_months = models.PositiveIntegerField(default=12)
     incoming_grace_days = models.PositiveIntegerField(default=30)
+    # 旧アラートレベル方式の残置カラム（未使用）。重点は供給リスク品に置き換わった（design.md §5.3）。
     critical_enabled = models.BooleanField(default=True)
     stock_stale_days = models.PositiveIntegerField(default=7)
     updated_at = models.DateTimeField(auto_now=True)
@@ -45,7 +48,8 @@ class InventoryOrderAlertConfirmation(models.Model):
         default=ConfirmationStatus.UNCONFIRMED,
     )
     memo = models.CharField(max_length=500, blank=True)
-    confirmed_alert_level = models.CharField(max_length=40, blank=True, default="")
+    #: 確認時点の流動区分（design.md §5.2）。旧データには旧アラートレベルのラベルが残る。
+    confirmed_flow_quadrant = models.CharField(max_length=40, blank=True, default="")
     confirmed_at = models.DateTimeField(null=True, blank=True)
     confirmed_by = models.CharField(max_length=40, blank=True)
     updated_at = models.DateTimeField(auto_now=True)

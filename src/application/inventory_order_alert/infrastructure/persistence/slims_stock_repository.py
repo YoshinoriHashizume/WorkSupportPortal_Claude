@@ -7,6 +7,7 @@ from application.inventory_order_alert.domain.value_objects.summary import Stock
 from application.inventory_order_alert.domain.value_objects.dates import format_stock_as_of_label
 from application.inventory_order_alert.domain.value_objects.slims_stock import SlimsStockLocationLine, parse_slims_stock_csv
 from application.inventory_order_alert.infrastructure.oracle.summary_aggregation import run_summary_aggregation
+from application.inventory_order_alert.infrastructure.persistence.import_lock import slims_import_lock
 from application.inventory_order_alert.models import InventoryOrderAlertSummarySnapshot, SlimsStockImport, SlimsStockSnapshot
 
 
@@ -17,7 +18,9 @@ def import_slims_csv_text(
     file_name: str = "",
 ) -> StockImportInfo:
     lines = parse_slims_stock_csv(text)
-    with transaction.atomic():
+    # 取込は「在庫保存 → Oracle 全件集計 → スナップショット保存」を全件差し替えで行うため、
+    # 排他ロックを取得したうえで単一トランザクションで実行する（機能仕様書 §3「取込の排他」・§7.2）。
+    with transaction.atomic(), slims_import_lock():
         SlimsStockSnapshot.objects.all().delete()
         import_record = SlimsStockImport.objects.create(
             imported_by=user if getattr(user, "is_authenticated", False) else None,

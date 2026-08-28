@@ -4,7 +4,7 @@ import base64
 from dataclasses import dataclass
 from datetime import date
 
-from application.gonenkukumi.domain.value_objects.errors import OracleNotConfiguredError, OracleQueryError
+from application.sales.domain.value_objects.errors import OracleNotConfiguredError, OracleQueryError
 from application.receipt_comparison.domain.value_objects.comparison_display import pending_matches
 from application.receipt_comparison.domain.value_objects.comparison_sort import default_sort_params
 from application.receipt_comparison.domain.value_objects.comparison_urls import comparison_url_path

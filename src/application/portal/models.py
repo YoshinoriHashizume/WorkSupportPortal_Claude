@@ -8,6 +8,11 @@ from application.portal.domain.value_objects.access_status import (
     ACCESS_STATUS_PENDING,
     ACCESS_STATUS_REJECTED,
 )
+from application.portal.domain.value_objects.usage_record import (
+    USAGE_TYPE_EXPORT,
+    USAGE_TYPE_LABELS,
+    USAGE_TYPE_VIEW,
+)
 
 
 class UserFavoriteMenu(models.Model):
@@ -86,4 +91,32 @@ class PortalNotice(models.Model):
         indexes = [
             models.Index(fields=["-created_at"], name="portal_notice_created_idx"),
             models.Index(fields=["is_published", "-created_at"], name="portal_notice_pub_idx"),
+        ]
+
+
+class MenuUsageLog(models.Model):
+    """メニュー利用ログ（E-601）。追記のみ。"""
+
+    class UsageType(models.TextChoices):
+        VIEW = USAGE_TYPE_VIEW, USAGE_TYPE_LABELS[USAGE_TYPE_VIEW]
+        EXPORT = USAGE_TYPE_EXPORT, USAGE_TYPE_LABELS[USAGE_TYPE_EXPORT]
+
+    user = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="portal_menu_usage_logs",
+    )
+    menu_key = models.CharField(max_length=80)
+    usage_type = models.CharField(max_length=10, choices=UsageType.choices)
+    used_at = models.DateTimeField()
+
+    class Meta:
+        ordering = ["-used_at"]
+        indexes = [
+            models.Index(fields=["used_at"], name="menu_usage_used_at_idx"),
+            models.Index(fields=["menu_key", "-used_at"], name="menu_usage_menu_key_idx"),
+            models.Index(fields=["user", "-used_at"], name="menu_usage_user_idx"),
+            models.Index(fields=["usage_type", "-used_at"], name="menu_usage_type_idx"),
         ]

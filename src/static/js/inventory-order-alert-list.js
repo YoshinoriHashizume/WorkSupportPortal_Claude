@@ -193,7 +193,7 @@
     const right = countsElement.querySelector(".ioa-table-counts-right");
     if (left) {
       left.textContent =
-        `重点 ${counts.critical} 件 / 警告（出荷あり） ${counts.warningShip} 件 / 警告（出荷なし） ${counts.warningIncoming} 件 / アラート無し ${counts.alertNone} 件`;
+        `供給リスク品 ${counts.supplyRisk} 件 / 在庫死蔵品 ${counts.dormantStock} 件 / 在庫過剰リスク品 ${counts.excessStockRisk} 件 / 通常流動品 ${counts.normalFlow} 件`;
     }
     if (right) {
       right.textContent =
@@ -570,13 +570,11 @@
   }
 
   function initAlertRulesDialog() {
+    // 判定ルールダイアログは読み取り専用の凡例。開閉のみを担う（design.md §6.6.5）。
     const dialog = document.getElementById("ioa-alert-rules-dialog");
     const openButton = document.querySelector(".inventory-order-alert-page .ioa-alert-rules-open");
     const closeButton = dialog?.querySelector(".ioa-alert-rules-close");
-    const saveButton = dialog?.querySelector(".ioa-alert-rules-save");
-    const shipmentSelect = document.getElementById("ioa-warning-shipment-months");
-    const incomingSelect = document.getElementById("ioa-warning-incoming-months");
-    if (!dialog || !openButton || !closeButton || !saveButton || !shipmentSelect || !incomingSelect) {
+    if (!dialog || !openButton || !closeButton) {
       return;
     }
 
@@ -593,33 +591,6 @@
     dialog.addEventListener("click", (event) => {
       if (event.target === dialog) {
         dialog.close();
-      }
-    });
-
-    saveButton.addEventListener("click", async () => {
-      saveButton.disabled = true;
-      try {
-        const response = await fetch("/api/inventory-order-alert/alert-settings", {
-          method: "PUT",
-          headers: {
-            "Content-Type": "application/json",
-            "X-CSRFToken": getCsrfToken(),
-          },
-          body: JSON.stringify({
-            warningShipmentMonths: Number(shipmentSelect.value),
-            warningIncomingMonths: Number(incomingSelect.value),
-          }),
-        });
-        const payload = await response.json();
-        if (!response.ok || !payload.ok) {
-          window.alert(payload.message || "警告条件の保存に失敗しました。");
-          return;
-        }
-        window.location.reload();
-      } catch (_error) {
-        window.alert("警告条件の保存に失敗しました。");
-      } finally {
-        saveButton.disabled = false;
       }
     });
   }

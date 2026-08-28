@@ -9,7 +9,7 @@ from django.core.files.storage import FileSystemStorage
 from django.utils import timezone
 from pathlib import Path
 
-from application.receipt_comparison.domain.value_objects.comparison import ComparisonRow
+from application.receipt_comparison.domain.entities.comparison_row import ComparisonRow
 from application.receipt_comparison.models import ReceiptFlag
 from application.receipt_comparison.infrastructure.persistence.model_registry import comparison_result_model, file_import_model
 

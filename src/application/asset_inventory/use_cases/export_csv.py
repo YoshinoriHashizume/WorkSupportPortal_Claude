@@ -23,7 +23,8 @@ class ExportCsv:
         selected = _select_management_row(management_rows, query.management_id)
         if selected is None:
             raise ValueError("選択した棚卸が見つかりません。")
-        reconciled = load_reconciled_data(self._list_all, access_key, selected, session=session)
+        # 拠点マスタのみの取得失敗では CSV 出力を失敗させない（機能仕様書 §7.4.1）
+        reconciled, _site_warning = load_reconciled_data(self._list_all, access_key, selected, session=session)
         all_rows = reconciled.rows
         filtered = apply_filters(
             all_rows,

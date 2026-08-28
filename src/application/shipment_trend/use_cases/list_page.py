@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from application.portal.domain.value_objects.list_table import build_table_query_string
+from application.shared.domain.value_objects.list_table import build_table_query_string
 from application.shipment_trend.domain.value_objects.alert_tier import build_alert_rule_rows
 from application.shipment_trend.domain.value_objects.list_client_data import build_list_client_payload
 from application.shipment_trend.domain.value_objects.list_rows import enrich_rows

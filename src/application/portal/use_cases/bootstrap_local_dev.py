@@ -1,10 +1,7 @@
 from __future__ import annotations
 
-from collections.abc import Callable
-
+from application.portal.domain.repositories.ports import BootstrapLocalDevRunner
 from application.portal.domain.value_objects.bootstrap import BootstrapLocalDevConfig, BootstrapUserResult
-
-BootstrapLocalDevRunner = Callable[[BootstrapLocalDevConfig], BootstrapUserResult]
 
 
 class BootstrapLocalDev:
