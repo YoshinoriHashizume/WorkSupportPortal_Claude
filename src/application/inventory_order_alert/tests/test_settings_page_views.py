@@ -38,12 +38,7 @@ SETTINGS_API_URL = "/api/inventory-order-alert/settings"
 def test_settings_page_shows_current_values_for_admin(client, admin_user):
     InventoryOrderAlertSettings.objects.update_or_create(
         pk=1,
-        defaults={
-            "warning_shipment_months": 6,
-            "warning_incoming_months": 18,
-            "critical_enabled": False,
-            "stock_stale_days": 14,
-        },
+        defaults={"warning_days": 730, "stock_stale_days": 14},
     )
     client.force_login(admin_user)
 
@@ -51,9 +46,22 @@ def test_settings_page_shows_current_values_for_admin(client, admin_user):
     html = response.content.decode("utf-8")
 
     assert response.status_code == 200
-    assert 'value="6"' in html
-    assert 'value="18"' in html
+    assert 'value="730"' in html
     assert 'value="14"' in html
+
+
+@pytest.mark.django_db
+def test_settings_page_has_no_warning_month_inputs(client, admin_user):
+    client.force_login(admin_user)
+
+    html = client.get(SETTINGS_PAGE_URL).content.decode("utf-8")
+
+    # 警告条件の入力欄と保存経路は撤去した（design.md §6.5）。
+    assert "warningShipmentMonths" not in html
+    assert "warningIncomingMonths" not in html
+    assert "criticalEnabled" not in html
+    assert "/api/inventory-order-alert/alert-settings" not in html
+    assert "stockStaleDays" in html
 
 
 @pytest.mark.django_db
@@ -80,13 +88,7 @@ def test_api_settings_get_returns_current_settings(client, admin_user):
     payload = client.get(SETTINGS_API_URL).json()
 
     assert payload["ok"] is True
-    assert set(payload["settings"]) == {
-        "warningDays",
-        "warningShipmentMonths",
-        "warningIncomingMonths",
-        "criticalEnabled",
-        "stockStaleDays",
-    }
+    assert set(payload["settings"]) == {"warningDays", "stockStaleDays"}
 
 
 @pytest.mark.django_db
@@ -94,23 +96,22 @@ def test_api_settings_put_updates_and_persists(client, admin_user):
     client.force_login(admin_user)
     response = client.put(
         SETTINGS_API_URL,
-        data=json.dumps({"criticalEnabled": False, "stockStaleDays": 21}),
+        data=json.dumps({"stockStaleDays": 21}),
         content_type="application/json",
     )
     payload = response.json()
 
     assert response.status_code == 200
-    assert payload["settings"]["criticalEnabled"] is False
     assert payload["settings"]["stockStaleDays"] == 21
 
     settings_row = InventoryOrderAlertSettings.objects.get(pk=1)
-    assert settings_row.critical_enabled is False
     assert settings_row.stock_stale_days == 21
     assert settings_row.updated_by_id == admin_user.pk
 
 
 @pytest.mark.django_db
-def test_api_settings_put_keeps_month_settings(client, admin_user):
+def test_api_settings_put_leaves_legacy_columns_untouched(client, admin_user):
+    # 残置カラムは保存経路から外れており、値が書き換わらない（design.md §5.3）。
     InventoryOrderAlertSettings.objects.update_or_create(
         pk=1, defaults={"warning_shipment_months": 6, "warning_incoming_months": 18}
     )
@@ -121,8 +122,10 @@ def test_api_settings_put_keeps_month_settings(client, admin_user):
         content_type="application/json",
     ).json()
 
-    assert payload["settings"]["warningShipmentMonths"] == 6
-    assert payload["settings"]["warningIncomingMonths"] == 18
+    assert payload["settings"]["stockStaleDays"] == 30
+    settings_row = InventoryOrderAlertSettings.objects.get(pk=1)
+    assert settings_row.warning_shipment_months == 6
+    assert settings_row.warning_incoming_months == 18
 
 
 @pytest.mark.django_db

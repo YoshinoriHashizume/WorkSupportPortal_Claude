@@ -68,7 +68,7 @@ def test_shipment_trend_alert_rules_dialog_table_fits_popup_with_row_colors():
     portal_select_block = css.split("body.portal-app-page .portal-alert-rules-select {", 1)[1].split("}", 1)[0]
     assert "padding: 6px 10px" in portal_select_block
     assert "border: 1px solid #cbd5e1" in portal_select_block
-    shared_block = css.split("/* ポータル共通: 一覧・警告条件ダイアログの行背景色 */", 1)[1]
+    shared_block = css.split("/* ポータル共通: 一覧・判定ルールダイアログの行背景色", 1)[1]
     assert ".shipment-trend-page .st-row-decrease-strong," in shared_block
     assert "#fde8e8" in shared_block
     assert "#fff8e1" in shared_block

@@ -23,8 +23,9 @@ def store_summary_snapshot(
             "as_of_date": as_of_date,
             "rows": storable_rows,
             "total_count": counts.total,
-            "critical_count": counts.critical,
-            "warning_count": counts.warning,
+            # 残置カラムへの詰め替え規則（design.md §5.1）。カラム名は据え置く。
+            "critical_count": counts.supply_risk,
+            "warning_count": counts.dormant_stock + counts.excess_stock_risk,
             "aggregation_error": aggregation_error,
         },
     )
@@ -52,6 +53,7 @@ def persist_editable_snapshot(snapshot: EditableSummarySnapshot, rows: list[dict
     InventoryOrderAlertSummarySnapshot.objects.filter(pk=snapshot.id).update(
         rows=[row_to_storable(row) for row in rows],
         total_count=counts.total,
-        critical_count=counts.critical,
-        warning_count=counts.warning,
+        # 残置カラムへの詰め替え規則（design.md §5.1）。カラム名は据え置く。
+        critical_count=counts.supply_risk,
+        warning_count=counts.dormant_stock + counts.excess_stock_risk,
     )

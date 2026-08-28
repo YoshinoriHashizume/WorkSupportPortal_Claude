@@ -26,7 +26,6 @@ class AppSettingsUseCase:
         input_data = parse_settings_payload(payload, current=current)
         saved = self._save_app_settings(
             warning_days=input_data.warning_days,
-            critical_enabled=input_data.critical_enabled,
             stock_stale_days=input_data.stock_stale_days,
             updated_by=updated_by,
         )

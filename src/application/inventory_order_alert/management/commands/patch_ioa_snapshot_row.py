@@ -67,7 +67,7 @@ class Command(BaseCommand):
                 "パッチ完了: "
                 f"cust_code={result.cust_code}, item_cd={result.item_cd}\n"
                 f"  最終出荷日: {result.previous_last_ship_date or '(空)'} -> {result.new_last_ship_date or '(空)'}\n"
-                f"  アラート: {result.previous_alert_level} -> {result.new_alert_level}\n"
+                f"  流動区分: {result.previous_flow_quadrant} -> {result.new_flow_quadrant}\n"
                 f"  確認状態復帰: {result.confirmation_reset_count} 件"
             )
         )

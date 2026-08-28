@@ -18,7 +18,15 @@ from application.inventory_order_alert.domain.repositories.ports import (
     LoadAppSettings,
     LoadSummary,
 )
-from application.inventory_order_alert.domain.value_objects.app_settings import MAX_WARNING_MONTHS
+from application.inventory_order_alert.domain.value_objects.flow_quadrant import (
+    EVALUATION_PERIODS,
+    FLOW_AXIS_DORMANT,
+    FLOW_AXIS_HELP_TEXTS,
+    FLOW_AXIS_LABELS,
+    FLOW_AXIS_LOW_FLOW,
+)
+from application.inventory_order_alert.domain.value_objects.list_query import parse_list_query
+from application.inventory_order_alert.domain.value_objects.list_rows import apply_flow_quadrants_to_rows
 from application.inventory_order_alert.domain.value_objects.table_display import (
     PAGE_SIZE_OPTIONS,
     SORTABLE_COLUMNS,
@@ -29,9 +37,25 @@ from application.inventory_order_alert.domain.value_objects.table_display import
     single_column_sort_specs,
     sort_spec_label,
 )
-from application.inventory_order_alert.domain.value_objects.alert_rules import build_alert_rule_rows
+from application.inventory_order_alert.domain.value_objects.flow_quadrant_rules import (
+    build_flow_quadrant_rule_rows,
+)
 from application.inventory_order_alert.domain.value_objects.dev_data_guard import looks_like_test_import
 from application.inventory_order_alert.domain.value_objects.row_display import row_alert_class
+
+
+@dataclass(frozen=True)
+class FlowAxisOption:
+    value: str
+    label: str
+    help_text: str
+
+
+@dataclass(frozen=True)
+class FlowPeriodOption:
+    value: int
+    key: str
+    label: str
 
 
 @dataclass(frozen=True)
@@ -69,10 +93,11 @@ class ListPageContext:
     has_list_data: bool
     stock_stale: bool
     confirmation_status_choices: list[tuple[str, str]]
-    alert_rule_rows: list[dict[str, object]]
-    warning_shipment_months: int
-    warning_incoming_months: int
-    warning_month_options: list[int]
+    flow_selection: object
+    flow_axis_options: list[FlowAxisOption]
+    flow_period_options: dict[str, list[FlowPeriodOption]]
+    flow_quadrant_filter: str
+    flow_quadrant_rule_rows: list[object]
     can_reset_confirmations: bool
     test_data_warning: bool
 
@@ -85,6 +110,27 @@ def _rows_for_template(rows: list[dict[str, object]]) -> list[dict[str, object]]
         copied["confirmation_status_key"] = confirmation_status_key(row)
         enriched.append(copied)
     return enriched
+
+
+def _flow_axis_options() -> list[FlowAxisOption]:
+    return [
+        FlowAxisOption(
+            value=axis,
+            label=FLOW_AXIS_LABELS[axis],
+            help_text=FLOW_AXIS_HELP_TEXTS[axis],
+        )
+        for axis in (FLOW_AXIS_LOW_FLOW, FLOW_AXIS_DORMANT)
+    ]
+
+
+def _flow_period_options() -> dict[str, list[FlowPeriodOption]]:
+    return {
+        axis: [
+            FlowPeriodOption(value=period.value, key=period.key, label=period.label)
+            for period in EVALUATION_PERIODS.for_axis(axis)
+        ]
+        for axis in (FLOW_AXIS_LOW_FLOW, FLOW_AXIS_DORMANT)
+    }
 
 
 class ListPage:
@@ -142,6 +188,16 @@ class ListPage:
         if summary and summary.aggregation_error and not import_message:
             error_message = error_message or f"集計に失敗しました: {summary.aggregation_error}"
 
+        # 判定軸・判定期間は利用者の選択で決まるため、読込時の基準判定条件から引き直す（design.md §3.1）。
+        list_query = parse_list_query(query_params)
+        if all_rows:
+            as_of_date = (summary.as_of_date if summary else None) or list_query.as_of_date
+            all_rows = apply_flow_quadrants_to_rows(
+                all_rows,
+                as_of_date=as_of_date,
+                query=list_query,
+            )
+
         summary_total = len(all_rows)
         filter_options = build_filter_options(all_rows)
         list_filter = parse_list_filter_params(query_params, filter_options)
@@ -163,6 +219,8 @@ class ListPage:
                 href="?" + build_display_query_string(
                     table_params=table_params,
                     filter_params=list_filter,
+                    flow_selection=list_query.flow_selection,
+                    flow_quadrant=list_query.flow_quadrant,
                     page=1,
                     sort_specs=single_column_sort_specs(table_params, column),
                 ),
@@ -176,12 +234,16 @@ class ListPage:
                 prev_href = "?" + build_display_query_string(
                     table_params=table_params,
                     filter_params=list_filter,
+                    flow_selection=list_query.flow_selection,
+                    flow_quadrant=list_query.flow_quadrant,
                     page=paginated.page - 1,
                 )
             if paginated.has_next:
                 next_href = "?" + build_display_query_string(
                     table_params=table_params,
                     filter_params=list_filter,
+                    flow_selection=list_query.flow_selection,
+                    flow_quadrant=list_query.flow_quadrant,
                     page=paginated.page + 1,
                 )
 
@@ -212,13 +274,11 @@ class ListPage:
                 app_settings.stock_stale_days,
             ),
             confirmation_status_choices=list(STATUS_CHOICES),
-            alert_rule_rows=build_alert_rule_rows(
-                warning_shipment_months=app_settings.warning_shipment_months,
-                warning_incoming_months=app_settings.warning_incoming_months,
-            ),
-            warning_shipment_months=app_settings.warning_shipment_months,
-            warning_incoming_months=app_settings.warning_incoming_months,
-            warning_month_options=list(range(1, MAX_WARNING_MONTHS + 1)),
+            flow_selection=list_query.flow_selection,
+            flow_axis_options=_flow_axis_options(),
+            flow_period_options=_flow_period_options(),
+            flow_quadrant_filter=list_query.flow_quadrant,
+            flow_quadrant_rule_rows=build_flow_quadrant_rule_rows(),
             can_reset_confirmations=self._has_resettable_confirmations(),
             test_data_warning=looks_like_test_import(
                 stock_info.file_name if stock_info else "",

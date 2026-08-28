@@ -16,7 +16,6 @@ from application.inventory_order_alert.interfaces.wiring import (
     export_csv_usecase,
     list_page_usecase,
     reset_confirmations_usecase,
-    save_alert_settings_usecase,
     save_confirmation_usecase,
     stock_locations_usecase,
     summary_api_usecase,
@@ -82,10 +81,11 @@ def list_page(request: HttpRequest) -> HttpResponse:
             "is_inventory_order_alert_favorite": is_menu_favorited(request.user, "inventory-order-alert"),
             "is_admin": is_portal_admin(request.user),
             "confirmation_status_choices": context.confirmation_status_choices,
-            "alert_rule_rows": context.alert_rule_rows,
-            "warning_shipment_months": context.warning_shipment_months,
-            "warning_incoming_months": context.warning_incoming_months,
-            "warning_month_options": context.warning_month_options,
+            "flow_selection": context.flow_selection,
+            "flow_axis_options": context.flow_axis_options,
+            "flow_period_options": context.flow_period_options,
+            "flow_quadrant_filter": context.flow_quadrant_filter,
+            "flow_quadrant_rule_rows": context.flow_quadrant_rule_rows,
             "can_reset_confirmations": context.can_reset_confirmations,
             "test_data_warning": context.test_data_warning,
             "list_client_payload": list_client_payload,
@@ -151,22 +151,6 @@ def api_reset_confirmations(request: HttpRequest) -> JsonResponse:
 
 
 @login_required
-@require_http_methods(["PUT"])
-def api_save_alert_settings(request: HttpRequest) -> JsonResponse:
-    try:
-        payload = json.loads(request.body.decode("utf-8"))
-    except (json.JSONDecodeError, UnicodeDecodeError):
-        return JsonResponse({"ok": False, "message": "JSON の形式が不正です。"}, status=400)
-
-    try:
-        save_alert_settings_usecase().execute(payload, updated_by=request.user)
-    except ValueError as exc:
-        return JsonResponse({"ok": False, "message": str(exc)}, status=400)
-
-    return JsonResponse({"ok": True})
-
-
-@login_required
 @require_http_methods(["GET"])
 def settings_page(request: HttpRequest) -> HttpResponse:
     """設定画面 SCR-02（§4.2）。管理者のみが開ける。"""
@@ -178,9 +162,7 @@ def settings_page(request: HttpRequest) -> HttpResponse:
         request,
         "inventory_order_alert/settings.html",
         {
-            "warning_shipment_months": settings.warning_shipment_months,
-            "warning_incoming_months": settings.warning_incoming_months,
-            "critical_enabled": settings.critical_enabled,
+            "warning_days": settings.warning_days,
             "stock_stale_days": settings.stock_stale_days,
         },
     )
@@ -251,7 +233,7 @@ def api_dashboard_summary(request: HttpRequest) -> JsonResponse:
 @login_required
 def export_csv(request: HttpRequest) -> HttpResponse:
     try:
-        result = export_csv_usecase().execute()
+        result = export_csv_usecase().execute(query_params=_query_params(request))
     except ValueError as exc:
         return HttpResponse(str(exc), status=404)
 

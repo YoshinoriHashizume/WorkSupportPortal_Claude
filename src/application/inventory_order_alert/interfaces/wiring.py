@@ -7,7 +7,6 @@ from application.inventory_order_alert.use_cases.import_stock import ImportStock
 from application.inventory_order_alert.use_cases.list_page import ListPage
 from application.inventory_order_alert.use_cases.portal_dashboard import PortalDashboard
 from application.inventory_order_alert.use_cases.reset_confirmations import ResetConfirmations
-from application.inventory_order_alert.use_cases.save_alert_settings import SaveAlertSettings
 from application.inventory_order_alert.use_cases.patch_snapshot_row import PatchSnapshotRow
 from application.inventory_order_alert.use_cases.save_confirmation import SaveConfirmationUseCase
 from application.inventory_order_alert.use_cases.summary_api import (
@@ -28,7 +27,6 @@ from application.inventory_order_alert.infrastructure.persistence.confirmation_r
 from application.inventory_order_alert.infrastructure.persistence.settings_repository import (
     load_app_settings,
     save_app_settings,
-    save_warning_month_settings,
 )
 from application.inventory_order_alert.infrastructure.persistence.slims_stock_repository import (
     import_slims_csv_text,
@@ -69,10 +67,6 @@ def confirmation_memos_usecase() -> ConfirmationMemos:
 
 def reset_confirmations_usecase() -> ResetConfirmations:
     return ResetConfirmations(load_latest_summary, reset_all_confirmations)
-
-
-def save_alert_settings_usecase() -> SaveAlertSettings:
-    return SaveAlertSettings(save_warning_month_settings)
 
 
 def app_settings_usecase() -> AppSettingsUseCase:
@@ -123,7 +117,6 @@ __all__ = [
     "list_page_usecase",
     "portal_dashboard_usecase",
     "reset_confirmations_usecase",
-    "save_alert_settings_usecase",
     "save_confirmation_usecase",
     "stock_locations_usecase",
     "summary_api_usecase",

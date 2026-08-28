@@ -2,12 +2,12 @@ from __future__ import annotations
 
 from application.inventory_order_alert.domain.value_objects.confirmation import attach_confirmation_fields
 from application.inventory_order_alert.domain.value_objects.list_query import ListQuery
-from application.inventory_order_alert.domain.value_objects.list_rows import apply_alert_levels_to_rows
+from application.inventory_order_alert.domain.value_objects.flow_quadrant import REFERENCE_FLOW_SELECTION
+from application.inventory_order_alert.domain.value_objects.list_rows import apply_flow_quadrants_to_rows
 from application.inventory_order_alert.domain.value_objects.row_counts import count_rows
 from application.inventory_order_alert.domain.value_objects.stock_join import attach_stock_fields
 from application.inventory_order_alert.domain.value_objects.summary import SummaryLoadResult
 from application.inventory_order_alert.infrastructure.persistence.confirmation_repository import load_confirmation_map
-from application.inventory_order_alert.infrastructure.persistence.settings_repository import load_app_settings
 from application.inventory_order_alert.infrastructure.persistence.slims_stock_repository import load_latest_stock_lines
 from application.inventory_order_alert.infrastructure.persistence.summary_row_codec import row_from_stored, stock_info_from_import
 from application.inventory_order_alert.models import InventoryOrderAlertSummarySnapshot, SlimsStockImport
@@ -37,17 +37,13 @@ def load_latest_summary() -> SummaryLoadResult | None:
 
     stored_rows = [row_from_stored(row) for row in snapshot.rows]
     rows = attach_confirmation_fields(stored_rows, load_confirmation_map())
-    app_settings = load_app_settings()
     as_of_date = snapshot.as_of_date or stock_info.stock_as_of_date
-    rows = apply_alert_levels_to_rows(
+    # 読込のたびに基準判定条件で再判定する。スナップショットには流動区分を保存しない（design.md §3.1）。
+    # 利用者が選んだ判定条件は use_cases 側で付け直す。
+    rows = apply_flow_quadrants_to_rows(
         rows,
         as_of_date=as_of_date,
-        query=ListQuery(
-            as_of_date=as_of_date,
-            warning_shipment_months=app_settings.warning_shipment_months,
-            warning_incoming_months=app_settings.warning_incoming_months,
-            critical_enabled=app_settings.critical_enabled,
-        ),
+        query=ListQuery(as_of_date=as_of_date, flow_selection=REFERENCE_FLOW_SELECTION),
     )
     stock_lines, _ = load_latest_stock_lines()
     rows = attach_stock_fields(
@@ -62,8 +58,9 @@ def load_latest_summary() -> SummaryLoadResult | None:
         as_of_date=snapshot.as_of_date,
         aggregation_error=snapshot.aggregation_error,
         total_count=counts.total,
-        critical_count=counts.critical,
-        warning_count=counts.warning,
+        # 残置カラムへの詰め替え規則（design.md §5.1）。カラム名は据え置く。
+        critical_count=counts.supply_risk,
+        warning_count=counts.dormant_stock + counts.excess_stock_risk,
     )
 
 

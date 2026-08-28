@@ -19,7 +19,7 @@ from application.inventory_order_alert.domain.value_objects.list_query import (
     parse_list_query,
 )
 from application.inventory_order_alert.domain.value_objects.list_rows import (
-    apply_alert_levels_to_rows,
+    apply_flow_quadrants_to_rows,
     filter_summary_rows,
     sort_summary_rows,
 )
@@ -53,9 +53,11 @@ def _location_payload(lines: list) -> list[dict[str, object]]:
 def _counts_payload(counts: RowCounts) -> dict[str, int]:
     return {
         "total": counts.total,
-        "alert": counts.alert,
-        "critical": counts.critical,
-        "warning": counts.warning,
+        "attention": counts.attention,
+        "supplyRisk": counts.supply_risk,
+        "dormantStock": counts.dormant_stock,
+        "excessStockRisk": counts.excess_stock_risk,
+        "normalFlow": counts.normal_flow,
         "unconfirmed": counts.unconfirmed,
     }
 
@@ -86,7 +88,7 @@ class SummaryApi:
             raise ValueError("クエリの形式が不正です。") from exc
 
         settings = self._load_app_settings()
-        # 判定条件は設定値で上書きする（クエリ指定は無視する。§8.1）
+        # 判定軸・判定期間は利用者がクエリで選ぶ値であり、設定値では上書きしない（design.md §6.1）
         query = merge_query_with_settings(query, settings)
 
         summary = self._load_summary()
@@ -99,7 +101,7 @@ class SummaryApi:
             }
 
         as_of_date = summary.as_of_date or query.as_of_date
-        rows = apply_alert_levels_to_rows(summary.rows, as_of_date=as_of_date, query=query)
+        rows = apply_flow_quadrants_to_rows(summary.rows, as_of_date=as_of_date, query=query)
         rows = sort_summary_rows(filter_summary_rows(rows, query))
 
         stock_info = summary.stock_info
@@ -167,8 +169,10 @@ def dashboard_summary_payload(
     return {
         "ok": True,
         "counts": {
-            "critical": context.critical,
-            "warning": context.warning,
+            "supplyRisk": context.supply_risk,
+            "dormantStock": context.dormant_stock,
+            "excessStockRisk": context.excess_stock_risk,
+            "attention": context.attention,
             "unconfirmed": context.unconfirmed,
         },
         "stockImport": {

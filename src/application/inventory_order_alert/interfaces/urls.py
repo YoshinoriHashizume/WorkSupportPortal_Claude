@@ -32,6 +32,5 @@ urlpatterns = [
         views.api_reset_confirmations,
         name="api_reset_confirmations",
     ),
-    path("api/inventory-order-alert/alert-settings", views.api_save_alert_settings, name="api_save_alert_settings"),
     path("api/inventory-order-alert/settings", views.api_settings, name="api_settings"),
 ]

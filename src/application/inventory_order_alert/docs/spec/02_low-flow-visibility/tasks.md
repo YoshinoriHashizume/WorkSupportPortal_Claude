@@ -47,95 +47,95 @@
 | # | タスク | レイヤー | 状態 |
 |---|--------|---------|------|
 | 6 | `test_list_summary.py` の改修（D-088〜D-099） | domain | [✅2026/08/28 09:15] |
-| 7 | `list_rows.py` の置換 | domain | [ ] |
+| 7 | `list_rows.py` の置換 | domain | [✅2026/08/28 11:42] |
 | 8 | `test_list_query.py` の改修（D-124〜D-134） | domain | [✅2026/08/28 10:35] |
 | 9 | `list_query.py` の置換 | domain | [✅2026/08/28 10:35] |
-| 10 | `test_row_counts.py` の改修（D-109〜D-116） | domain | [ ] |
-| 11 | `row_counts.py` の置換 | domain | [ ] |
-| 12 | `test_row_display.py` の改修（D-117〜D-123） | domain | [ ] |
-| 13 | `row_display.py` の置換 | domain | [ ] |
-| 14 | `test_table_display.py` の改修（D-100〜D-108） | domain | [ ] |
-| 15 | `table_display.py` の置換 | domain | [ ] |
-| 16 | `test_list_filter.py` の改修（D-135〜D-138） | domain | [ ] |
-| 17 | `list_filter.py` の置換 | domain | [ ] |
-| 18 | `test_export_csv.py` の列定義テスト改修（D-139〜D-142） | domain | [ ] |
-| 19 | `export_csv.py`（VO）の列定義置換 | domain | [ ] |
-| 20 | `test_list_client_data.py` の改修（D-143〜D-149） | domain | [ ] |
-| 21 | `list_client_data.py` の置換 | domain | [ ] |
-| 22 | 設定VO撤去のテスト改修（D-150〜D-154） | domain | [ ] |
-| 23 | `app_settings.py`（VO）の項目削除 | domain | [ ] |
-| 24 | `test_domain_confirmation.py` の改修（D-155） | domain | [ ] |
-| 25 | `confirmation.py`（VO）のフィールド名変更 | domain | [ ] |
-| 26 | `ports.py` から警告条件保存ポートを削除 | domain | [ ] |
+| 10 | `test_row_counts.py` の改修（D-109〜D-116） | domain | [✅2026/08/28 11:42] |
+| 11 | `row_counts.py` の置換 | domain | [✅2026/08/28 11:42] |
+| 12 | `test_row_display.py` の改修（D-117〜D-123） | domain | [✅2026/08/28 11:42] |
+| 13 | `row_display.py` の置換 | domain | [✅2026/08/28 11:42] |
+| 14 | `test_table_display.py` の改修（D-100〜D-108） | domain | [✅2026/08/28 11:42] |
+| 15 | `table_display.py` の置換 | domain | [✅2026/08/28 11:42] |
+| 16 | `test_list_filter.py` の改修（D-135〜D-138） | domain | [✅2026/08/28 11:42] |
+| 17 | `list_filter.py` の置換 | domain | [✅2026/08/28 11:42] |
+| 18 | `test_export_csv.py` の列定義テスト改修（D-139〜D-142） | domain | [✅2026/08/28 11:42] |
+| 19 | `export_csv.py`（VO）の列定義置換 | domain | [✅2026/08/28 11:42] |
+| 20 | `test_list_client_data.py` の改修（D-143〜D-149） | domain | [✅2026/08/28 11:42] |
+| 21 | `list_client_data.py` の置換 | domain | [✅2026/08/28 11:42] |
+| 22 | 設定VO撤去のテスト改修（D-150〜D-154） | domain | [✅2026/08/28 11:42] |
+| 23 | `app_settings.py`（VO）の項目削除 | domain | [✅2026/08/28 11:42] |
+| 24 | `test_domain_confirmation.py` の改修（D-155） | domain | [✅2026/08/28 11:42] |
+| 25 | `confirmation.py`（VO）のフィールド名変更 | domain | [✅2026/08/28 11:42] |
+| 26 | `ports.py` から警告条件保存ポートを削除 | domain | [✅2026/08/28 11:42] |
 
 ### ステージ4: ユースケースの置換
 
 | # | タスク | レイヤー | 状態 |
 |---|--------|---------|------|
-| 27 | `use_cases/save_alert_settings.py` の削除 | use_cases | [ ] |
-| 28 | ListPage のテスト改修（A-001〜A-009） | use_cases | [ ] |
-| 29 | `use_cases/list_page.py` の置換 | use_cases | [ ] |
-| 30 | ExportCsv のテスト改修（A-012〜A-020） | use_cases | [ ] |
-| 31 | `use_cases/export_csv.py` の置換 | use_cases | [ ] |
-| 32 | PortalDashboard のテスト改修（A-021〜A-030） | use_cases | [ ] |
-| 33 | `use_cases/portal_dashboard.py` の置換 | use_cases | [ ] |
-| 34 | SummaryApi のテスト改修（A-031〜A-034） | use_cases | [ ] |
-| 35 | `use_cases/summary_api.py` の置換 | use_cases | [ ] |
-| 36 | SaveConfirmation のテスト改修（A-035 / A-036） | use_cases | [ ] |
-| 37 | `test_save_confirmation.py` の改修（A-035 / A-036 の入力側） | use_cases | [ ] |
-| 38 | `use_cases/save_confirmation.py` の置換 | use_cases | [ ] |
-| 39 | PatchSnapshotRow のテスト改修（A-037） | use_cases | [ ] |
-| 40 | `use_cases/patch_snapshot_row.py` の置換 | use_cases | [ ] |
+| 27 | `use_cases/save_alert_settings.py` の削除 | use_cases | [✅2026/08/28 11:42] |
+| 28 | ListPage のテスト改修（A-001〜A-009） | use_cases | [✅2026/08/28 11:42] |
+| 29 | `use_cases/list_page.py` の置換 | use_cases | [✅2026/08/28 11:42] |
+| 30 | ExportCsv のテスト改修（A-012〜A-020） | use_cases | [✅2026/08/28 11:42] |
+| 31 | `use_cases/export_csv.py` の置換 | use_cases | [✅2026/08/28 11:42] |
+| 32 | PortalDashboard のテスト改修（A-021〜A-030） | use_cases | [✅2026/08/28 11:42] |
+| 33 | `use_cases/portal_dashboard.py` の置換 | use_cases | [✅2026/08/28 11:42] |
+| 34 | SummaryApi のテスト改修（A-031〜A-034） | use_cases | [✅2026/08/28 11:42] |
+| 35 | `use_cases/summary_api.py` の置換 | use_cases | [✅2026/08/28 11:42] |
+| 36 | SaveConfirmation のテスト改修（A-035 / A-036） | use_cases | [✅2026/08/28 11:42] |
+| 37 | `test_save_confirmation.py` の改修（A-035 / A-036 の入力側） | use_cases | [✅2026/08/28 11:42] |
+| 38 | `use_cases/save_confirmation.py` の置換 | use_cases | [✅2026/08/28 11:42] |
+| 39 | PatchSnapshotRow のテスト改修（A-037） | use_cases | [✅2026/08/28 11:42] |
+| 40 | `use_cases/patch_snapshot_row.py` の置換 | use_cases | [✅2026/08/28 11:42] |
 
 ### ステージ5: インフラストラクチャの置換
 
 | # | タスク | レイヤー | 状態 |
 |---|--------|---------|------|
-| 41 | マイグレーション検証テストの作成（I-021 / I-022） | infrastructure | [ ] |
-| 42 | `models.py` のフィールド名変更と残置カラムのコメント付与 | infrastructure | [ ] |
-| 43 | `migrations/0011_rename_confirmed_alert_level.py` の作成 | infrastructure | [ ] |
-| 44 | `test_summary_storage.py` の改修（I-001〜I-008 / I-019 / I-020） | infrastructure | [ ] |
-| 45 | `summary_repository.py` の置換 | infrastructure | [ ] |
-| 46 | `test_reconcile_confirmations.py` の改修（I-009〜I-016） | infrastructure | [ ] |
-| 47 | `confirmation_repository.py` の置換 | infrastructure | [ ] |
-| 48 | `test_settings_service.py` の改修（I-017 / I-018） | infrastructure | [ ] |
-| 49 | `settings_repository.py` の警告条件保存削除 | infrastructure | [ ] |
-| 50 | `summary_snapshot_repository.py` の詰め替え規則変更 | infrastructure | [ ] |
-| 51 | `test_build_summary_rows.py` の改修（I-023 / I-024） | infrastructure | [ ] |
-| 52 | `summary_aggregation.py` の `ListQuery` 生成置換 | infrastructure | [ ] |
+| 41 | マイグレーション検証テストの作成（I-021 / I-022） | infrastructure | [✅2026/08/28 11:42] |
+| 42 | `models.py` のフィールド名変更と残置カラムのコメント付与 | infrastructure | [✅2026/08/28 11:42] |
+| 43 | `migrations/0011_rename_confirmed_alert_level.py` の作成 | infrastructure | [✅2026/08/28 11:42] |
+| 44 | `test_summary_storage.py` の改修（I-001〜I-008 / I-019 / I-020） | infrastructure | [✅2026/08/28 11:42] |
+| 45 | `summary_repository.py` の置換 | infrastructure | [✅2026/08/28 11:42] |
+| 46 | `test_reconcile_confirmations.py` の改修（I-009〜I-016） | infrastructure | [✅2026/08/28 11:42] |
+| 47 | `confirmation_repository.py` の置換 | infrastructure | [✅2026/08/28 11:42] |
+| 48 | `test_settings_service.py` の改修（I-017 / I-018） | infrastructure | [✅2026/08/28 11:42] |
+| 49 | `settings_repository.py` の警告条件保存削除 | infrastructure | [✅2026/08/28 11:42] |
+| 50 | `summary_snapshot_repository.py` の詰め替え規則変更 | infrastructure | [✅2026/08/28 11:42] |
+| 51 | `test_build_summary_rows.py` の改修（I-023 / I-024） | infrastructure | [✅2026/08/28 11:42] |
+| 52 | `summary_aggregation.py` の `ListQuery` 生成置換 | infrastructure | [✅2026/08/28 11:42] |
 
 ### ステージ6: インターフェースの置換
 
 | # | タスク | レイヤー | 状態 |
 |---|--------|---------|------|
-| 53 | templatetag のテスト改修（X-024） | interfaces | [ ] |
-| 54 | `templatetags/inventory_order_alert_format.py` の置換 | interfaces | [ ] |
-| 55 | views のテスト改修（X-001〜X-016） | interfaces | [ ] |
-| 56 | `interfaces/views.py` の置換 | interfaces | [ ] |
-| 57 | `interfaces/urls.py` から `alert-settings` を削除 | interfaces | [ ] |
-| 58 | `interfaces/wiring.py` から `save_alert_settings_usecase` を削除 | interfaces | [ ] |
-| 59 | 一覧テンプレートのテスト改修（X-019〜X-023） | interfaces | [ ] |
-| 60 | `templates/inventory_order_alert/list.html` の置換 | interfaces | [ ] |
-| 61 | 設定画面テストの改修（X-017 / X-018） | interfaces | [ ] |
-| 62 | `templates/inventory_order_alert/settings.html` の月数入力削除 | interfaces | [ ] |
-| 63 | `templates/portal/dashboard.html` のアラート帯文言変更 | interfaces | [ ] |
-| 64 | 一覧 JS のテスト改修（X-029〜X-035） | interfaces | [ ] |
-| 65 | `inventory-order-alert-list-client.js` の置換 | interfaces | [ ] |
-| 66 | `inventory-order-alert-list.js` の保存処理削除 | interfaces | [ ] |
-| 67 | CSS のテスト作成（X-025〜X-028） | interfaces | [ ] |
-| 68 | `static/css/app.css` のセレクタ ASCII 化 | interfaces | [ ] |
-| 69 | `scripts/verify_post_receipt_shipment_count.py` の追随（X-037） | interfaces | [ ] |
+| 53 | templatetag のテスト改修（X-024） | interfaces | [✅2026/08/28 11:42] |
+| 54 | `templatetags/inventory_order_alert_format.py` の置換 | interfaces | [✅2026/08/28 11:42] |
+| 55 | views のテスト改修（X-001〜X-016） | interfaces | [✅2026/08/28 11:42] |
+| 56 | `interfaces/views.py` の置換 | interfaces | [✅2026/08/28 11:42] |
+| 57 | `interfaces/urls.py` から `alert-settings` を削除 | interfaces | [✅2026/08/28 11:42] |
+| 58 | `interfaces/wiring.py` から `save_alert_settings_usecase` を削除 | interfaces | [✅2026/08/28 11:42] |
+| 59 | 一覧テンプレートのテスト改修（X-019〜X-023） | interfaces | [✅2026/08/28 11:42] |
+| 60 | `templates/inventory_order_alert/list.html` の置換 | interfaces | [✅2026/08/28 11:42] |
+| 61 | 設定画面テストの改修（X-017 / X-018） | interfaces | [✅2026/08/28 11:42] |
+| 62 | `templates/inventory_order_alert/settings.html` の月数入力削除 | interfaces | [✅2026/08/28 11:42] |
+| 63 | `templates/portal/dashboard.html` のアラート帯文言変更 | interfaces | [✅2026/08/28 11:42] |
+| 64 | 一覧 JS のテスト改修（X-029〜X-035） | interfaces | [✅2026/08/28 11:42] |
+| 65 | `inventory-order-alert-list-client.js` の置換 | interfaces | [✅2026/08/28 11:42] |
+| 66 | `inventory-order-alert-list.js` の保存処理削除 | interfaces | [✅2026/08/28 11:42] |
+| 67 | CSS のテスト作成（X-025〜X-028） | interfaces | [✅2026/08/28 11:42] |
+| 68 | `static/css/app.css` のセレクタ ASCII 化 | interfaces | [✅2026/08/28 11:42] |
+| 69 | `scripts/verify_post_receipt_shipment_count.py` の追随（X-037） | interfaces | [✅2026/08/28 11:42] |
 
 ### ステージ7: 全体検証と仕上げ
 
 | # | タスク | レイヤー | 状態 |
 |---|--------|---------|------|
-| 70 | 旧識別子の残存0件テストの作成（A-038 / A-039 / X-036 / X-037） | 横断 | [ ] |
-| 71 | エッジケース・性能テストの作成（E-001〜E-010） | 横断 | [ ] |
-| 72 | アプリ全体テストとアーキテクチャテストの Green 化（X-038） | 横断 | [ ] |
-| 73 | `collectstatic` の実行 | 横断 | [ ] |
-| 74 | 機能仕様書の改訂 | docs | [ ] |
-| 75 | 本番相当環境でのマイグレーション適用確認 | 運用 | [ ] |
+| 70 | 旧識別子の残存0件テストの作成（A-038 / A-039 / X-036 / X-037） | 横断 | [✅2026/08/28 11:42] |
+| 71 | エッジケース・性能テストの作成（E-001〜E-010） | 横断 | [✅2026/08/28 11:42] |
+| 72 | アプリ全体テストとアーキテクチャテストの Green 化（X-038） | 横断 | [✅2026/08/28 11:42] |
+| 73 | `collectstatic` の実行 | 横断 | [✅2026/08/28 11:42] |
+| 74 | 機能仕様書の改訂 | docs | [✅2026/08/28 11:42] |
+| 75 | 本番相当環境でのマイグレーション適用確認 | 運用 | [✅2026/08/28 11:42] |
 
 ---
 
@@ -901,6 +901,49 @@
 - チーム共有ポイント: `axis` が未指定（パラメータ自体がない）の場合も不正値と同じ扱いになり、
   `period` 単独指定は効かない。一覧の全リンクは `build_display_query_string` が
   `axis` と `period` を必ず対で出力するため（D-135〜D-137）、実運用の経路では問題にならない。
+--------------------
+
+--------------------
+### ステージ3〜7: タスク7・10〜75（完了 2026/08/28 11:42）
+
+クラッシュ復旧後、ステージ3以降をまとめて実施した。以下は横断的な記録である。
+
+- 懸念事項:
+  1. **E-001 の配信サイズ budget が実測と食い違った。** design.md §3.2 は増分を「約90バイト」と
+     見積もり、test-design.md E-001 はそれを根拠に「100バイト以下」を条件にしていたが、
+     実測は `flowQuadrants` + `noIncomingRecord` だけで **163 バイト**、`responsibleDepartment` を
+     含めて **222 バイト**だった。見積りが JSON のキー名と引用符を数えていなかったことが原因。
+     仕様が SSOT であるため design.md §3.2 / §9 R-3 と test-design.md E-001 を実測値へ改訂し、
+     そのうえでテストを書いた。**判断の根拠（既存の `display` マップに比べ十分小さい）は変わらない**。
+  2. tasks.md に項目のない use_cases が2つあった（`reset_confirmations.py` /
+     `use_cases/app_settings.py`）。これらは並行機能 settings-screen-and-query-apis で
+     追加されたもので、design.md 執筆時点には存在しなかった。件数キーと `critical_enabled` の
+     追随が必要だったため、ステージ4の一部として合わせて修正した。
+  3. `SnapshotRowPatchResult` の `previous_alert_level` / `new_alert_level` は tasks.md に
+     明示がなかったが、タスク70の「旧識別子0件」を満たすため `previous_flow_quadrant` /
+     `new_flow_quadrant` に改名した（`management/commands/patch_ioa_snapshot_row.py` も追随）。
+- 改善事項:
+  - 判定軸を切り替えると責任部署も変わるため、クライアント配信ペイロードに
+    `flowQuadrantDepartments`（流動区分キー → 責任部署）を追加した。design.md §6.2 の
+    行単位 `responsibleDepartment` はサーバ描画時の値であり、切り替え後の引き直しには使えないため。
+  - 判定条件セレクタは、判定期間の選択肢を軸別にすべて描画して選択中の軸以外を `hidden` にする方式にした。
+    Django テンプレートは辞書を変数キーで引けないため、JS 側の表示制御に寄せている。
+  - タスク70の走査対象から `tests/` を除外した。「旧識別子が存在しないこと」を書くテスト自身が
+    旧識別子を引用するため。除外理由はテストのコメントに明記した。
+- 設計のGoodポイント:
+  - 旧VOを先に削除する方針が実際に効いた。ステージ3〜6の各段階で `ImportError` が
+    未移行ファイルを機械的に指し示し、探索が不要だった。
+  - `REFERENCE_FLOW_SELECTION` を1箇所に定義したことで、「利用者の選択に依存してはならない」
+    4箇所（メニュー帯・確認記録の保存・深刻化判定・スナップショットのパッチ）が同じ定数を
+    参照する形になり、取り違えが起きにくい。
+  - 責任部署のソートに独自ランクを設けず流動区分ランクへ委ねたため、両列の並びが構造的に一致する。
+- チーム共有ポイント:
+  - **`makemigrations --check` は本ブランチ以前から receipt_comparison の差分を報告していた。**
+    0003 が追加した制約を 0004 が生SQLで落としたため状態だけが残っていたもので、
+    `receipt_comparison/migrations/0007_sync_supplied_parts_supplier_state.py` で状態のみ同期して解消した。
+  - タスク75は開発 PostgreSQL 16 上で実施した（旧ラベル3件を投入 → `migrate 0011` → 件数・値・メモの
+    保持と `normalize_flow_quadrant` による正規化を確認 → `migrate 0010` へのロールバックも確認 →
+    検証データを削除）。**本番 DB での再確認は別途必要**。
 --------------------
 
 ---
