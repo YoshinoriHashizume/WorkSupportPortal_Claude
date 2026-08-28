@@ -24,6 +24,7 @@ from application.inventory_order_alert.domain.value_objects.flow_quadrant import
     FLOW_AXIS_HELP_TEXTS,
     FLOW_AXIS_LABELS,
     FLOW_AXIS_LOW_FLOW,
+    FlowSelection,
 )
 from application.inventory_order_alert.domain.value_objects.list_query import parse_list_query
 from application.inventory_order_alert.domain.value_objects.list_rows import apply_flow_quadrants_to_rows
@@ -38,6 +39,7 @@ from application.inventory_order_alert.domain.value_objects.table_display import
     sort_spec_label,
 )
 from application.inventory_order_alert.domain.value_objects.flow_quadrant_rules import (
+    FlowQuadrantRuleRow,
     build_flow_quadrant_rule_rows,
 )
 from application.inventory_order_alert.domain.value_objects.dev_data_guard import looks_like_test_import
@@ -93,11 +95,11 @@ class ListPageContext:
     has_list_data: bool
     stock_stale: bool
     confirmation_status_choices: list[tuple[str, str]]
-    flow_selection: object
+    flow_selection: FlowSelection
     flow_axis_options: list[FlowAxisOption]
     flow_period_options: dict[str, list[FlowPeriodOption]]
     flow_quadrant_filter: str
-    flow_quadrant_rule_rows: list[object]
+    flow_quadrant_rule_rows: list[FlowQuadrantRuleRow]
     can_reset_confirmations: bool
     test_data_warning: bool
 

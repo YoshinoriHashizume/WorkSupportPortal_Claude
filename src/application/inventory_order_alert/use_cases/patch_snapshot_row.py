@@ -3,12 +3,10 @@ from __future__ import annotations
 from datetime import date
 
 from application.inventory_order_alert.domain.repositories.ports import (
-    LoadAppSettings,
     LoadEditableSnapshot,
     PersistEditableSnapshot,
     ReconcileConfirmationsAfterImport,
 )
-from application.inventory_order_alert.domain.value_objects.app_settings import AppSettings
 from application.inventory_order_alert.domain.value_objects.flow_quadrant import (
     REFERENCE_FLOW_SELECTION,
     normalize_flow_quadrant,
@@ -25,12 +23,10 @@ from application.inventory_order_alert.domain.value_objects.summary import Edita
 class PatchSnapshotRow:
     def __init__(
         self,
-        load_app_settings: LoadAppSettings,
         load_editable_snapshot: LoadEditableSnapshot,
         persist_snapshot: PersistEditableSnapshot,
         reconcile_confirmations_after_import: ReconcileConfirmationsAfterImport,
     ) -> None:
-        self._load_app_settings = load_app_settings
         self._load_editable_snapshot = load_editable_snapshot
         self._persist_snapshot = persist_snapshot
         self._reconcile_confirmations_after_import = reconcile_confirmations_after_import
@@ -44,7 +40,6 @@ class PatchSnapshotRow:
         last_incoming_date: date | None = None,
         post_shipment_count: int | None = None,
         run_reconcile: bool = False,
-        app_settings: AppSettings | None = None,
     ) -> SnapshotRowPatchResult:
         if last_ship_date is None and last_incoming_date is None and post_shipment_count is None:
             raise ValueError("更新する項目（last_ship_date 等）を1つ以上指定してください。")

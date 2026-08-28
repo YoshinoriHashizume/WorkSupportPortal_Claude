@@ -13,10 +13,7 @@ from application.inventory_order_alert.domain.value_objects.flow_quadrant import
     FLOW_QUADRANT_KEYS,
     FLOW_QUADRANT_LABELS,
     FLOW_QUADRANTS,
-    responsible_departments,
-)
-from application.inventory_order_alert.domain.value_objects.list_rows import (
-    RESPONSIBLE_DEPARTMENT_SEPARATOR,
+    format_responsible_departments,
 )
 from application.inventory_order_alert.domain.value_objects.format_display import format_cell_display
 from application.inventory_order_alert.domain.value_objects.list_filter import ListFilterOptions
@@ -132,9 +129,7 @@ def build_list_client_payload(
         "flowQuadrantLabels": dict(FLOW_QUADRANT_LABELS),
         # 判定軸を切り替えると行の責任部署も変わるため、区分ごとの対応表をクライアントへ渡す。
         "flowQuadrantDepartments": {
-            FLOW_QUADRANT_KEYS[quadrant]: RESPONSIBLE_DEPARTMENT_SEPARATOR.join(
-                responsible_departments(quadrant)
-            )
+            FLOW_QUADRANT_KEYS[quadrant]: format_responsible_departments(quadrant)
             for quadrant in FLOW_QUADRANTS
         },
         "flowQuadrantOrder": [FLOW_QUADRANT_KEYS[quadrant] for quadrant in FLOW_QUADRANTS],

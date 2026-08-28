@@ -8,17 +8,16 @@ from application.inventory_order_alert.domain.value_objects.flow_quadrant import
     FLOW_QUADRANT_KEYS,
     FLOW_QUADRANT_LABELS,
     QUADRANT_NORMAL_FLOW,
+    RESPONSIBLE_DEPARTMENT_SEPARATOR,
+    flow_quadrant_sort_rank,
+    format_responsible_departments,
     is_no_incoming_record,
     resolve_flow_quadrant,
     resolve_flow_quadrant_matrix,
-    responsible_departments,
 )
 from application.inventory_order_alert.domain.value_objects.list_query import ListQuery
 from application.inventory_order_alert.domain.value_objects.slims_stock import SlimsStockLocationLine
 from application.inventory_order_alert.domain.value_objects.stock_join import attach_stock_fields
-
-#: 責任部署（R-201）を1セルに収めるときの区切り。
-RESPONSIBLE_DEPARTMENT_SEPARATOR = "・"
 
 
 def _row_date(row: dict[str, object], key: str, *, as_of_date: date) -> date | None:
@@ -63,9 +62,7 @@ def apply_flow_quadrants_to_rows(
             as_of_date=as_of_date,
         )
         copied["no_incoming_record"] = is_no_incoming_record(last_incoming)
-        copied["responsible_department"] = RESPONSIBLE_DEPARTMENT_SEPARATOR.join(
-            responsible_departments(quadrant)
-        )
+        copied["responsible_department"] = format_responsible_departments(quadrant)
         enriched.append(copied)
     return enriched
 
@@ -106,8 +103,6 @@ def filter_summary_rows(rows: list[dict[str, object]], query: ListQuery) -> list
 
 
 def sort_summary_rows(rows: list[dict[str, object]]) -> list[dict[str, object]]:
-    from application.inventory_order_alert.domain.value_objects.flow_quadrant import flow_quadrant_sort_rank
-
     def sort_key(row: dict[str, object]) -> tuple[int, int]:
         quadrant = str(row.get("flow_quadrant") or QUADRANT_NORMAL_FLOW)
         qty = int(row.get("post_shipment_total_qty") or 0)

@@ -99,7 +99,6 @@ def dashboard_summary_usecase() -> DashboardSummary:
 
 def patch_snapshot_row_usecase() -> PatchSnapshotRow:
     return PatchSnapshotRow(
-        load_app_settings,
         load_latest_editable_snapshot,
         persist_editable_snapshot,
         reconcile_confirmations_after_import,

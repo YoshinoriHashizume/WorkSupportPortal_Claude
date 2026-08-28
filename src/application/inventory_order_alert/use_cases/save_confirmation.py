@@ -17,6 +17,7 @@ from application.inventory_order_alert.domain.value_objects.list_query import Li
 from application.inventory_order_alert.domain.value_objects.list_rows import apply_flow_quadrants_to_rows
 from application.inventory_order_alert.domain.value_objects.row_counts import RowCounts, count_rows
 from application.inventory_order_alert.domain.value_objects.row_display import row_alert_class
+from application.inventory_order_alert.domain.value_objects.summary import SummaryLoadResult
 
 
 def _counts_to_response(counts: RowCounts) -> dict[str, int]:
@@ -104,9 +105,11 @@ class SaveConfirmationUseCase:
         )
 
     @staticmethod
-    def _rows_with_reference_quadrant(summary: object | None) -> list[dict[str, object]]:
-        rows = list(getattr(summary, "rows", None) or [])
-        as_of_date = getattr(summary, "as_of_date", None)
+    def _rows_with_reference_quadrant(summary: SummaryLoadResult | None) -> list[dict[str, object]]:
+        if summary is None:
+            return []
+        rows = list(summary.rows)
+        as_of_date = summary.as_of_date
         if not rows or as_of_date is None:
             return rows
         return apply_flow_quadrants_to_rows(

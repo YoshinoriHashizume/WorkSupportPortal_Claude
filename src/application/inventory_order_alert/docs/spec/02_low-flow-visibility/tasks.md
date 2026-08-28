@@ -950,4 +950,48 @@
 
 ## レビュー履歴
 
+### 実装レビュー（implement-review-l1） 2026/08/28
+
+- **アーキテクチャreference整合性チェック**: ✅ 一致（`django-clean-architecture` version 1.0。
+  `make-design` / `design-review-l1` / `implement-review-l1` の3スキルで同一）
+- **コーディング規約reference**: `django-coding-rules` version 1.1
+
+#### レビューサマリー
+
+| 観点 | OK | 警告 | NG |
+|------|-----|------|-----|
+| 1. 設計書との整合性 | 5件 | 0件 | 1件 |
+| 2. Clean Architecture のレイヤー違反 | 4件 | 0件 | 0件 |
+| 3. ドメインモデルの実装 | 4件 | 0件 | 0件 |
+| 4. 設計パターンの一貫性 | 3件 | 2件 | 0件 |
+| 5. 命名の準拠 | 3件 | 0件 | 0件 |
+| **合計** | **19件** | **2件** | **1件** |
+
+**総合判定**: 指摘の是正後 **PASS**（是正前は CONDITIONAL PASS）
+
+#### 検出事項と是正
+
+| # | 観点 | 重要度 | 該当ファイル | 指摘内容 | 対応 |
+|---|------|--------|-----------|---------|------|
+| 1 | 観点1 | NG | `use_cases/patch_snapshot_row.py` | `_apply_flow_quadrants` が基準判定条件固定になったことで `load_app_settings` 依存と `app_settings` 引数が未使用のまま残っていた（設計書にない余分な依存） | **是正済み**。コンストラクタ引数と `execute` の `app_settings` を削除し、`wiring.py`・`test_snapshot_patch.py` を追随 |
+| 2 | 観点4 | 警告 | `domain/value_objects/list_rows.py` | `sort_summary_rows` に関数内 import が残っていた（django-coding-rules「関数内 import 禁止」/ pylint C0415）。旧実装からの引き継ぎ | **是正済み**。トップレベル import へ移動。アプリ内の関数内 import は 0 件 |
+| 3 | 観点4 | 警告 | `list_rows.py` / `list_client_data.py` | 責任部署の区切り定数が `list_rows.py` にあり、`list_client_data.py` がそれを import していた（責任部署の書式は流動区分の関心事） | **是正済み**。`flow_quadrant.py` に `RESPONSIBLE_DEPARTMENT_SEPARATOR` と `format_responsible_departments()` を移し、両モジュールから同一関数を使う形にした |
+| 4 | 観点1 | OK（改善） | `use_cases/list_page.py` / `save_confirmation.py` | `ListPageContext.flow_selection` が `object` 型、`_rows_with_reference_quadrant` が `getattr` によるダックタイピングで、型の意図が読み取れない | **是正済み**。`FlowSelection` / `FlowQuadrantRuleRow` / `SummaryLoadResult` で明示 |
+
+#### 是正しなかった事項（プロジェクト方針の決定が必要）
+
+| 項目 | 内容 | 判断 |
+|------|------|------|
+| コメント・docstring の全角括弧 | `django-coding-rules` v1.1 は「コメント・docstring に全角括弧を使わない（リンターエラーの原因）」と定めるが、リポジトリには **112 箇所・46 ファイル** が存在し、`dates.py` / `confirmation.py` / `models.py` / `views.py` など **本機能以前からのファイルにも及ぶ**。またリンター設定（pylintrc / ruff / flake8）はリポジトリに存在せず、実際にエラーになる経路がない | **本機能では是正しない**。周辺コードの記法に合わせた。規約と実態の食い違いはリポジトリ横断の判断事項であり、①規約を実態に合わせる ②リンターを導入して一括是正する のいずれかを別途決める |
+| production 関数・メソッドの docstring | 同規約は全関数への docstring を求めるが、既存コードは大半が未記載。本機能でも周辺に合わせ、非自明な箇所にのみ記載した | 同上（横断課題） |
+
+#### 良かった点
+
+- domain 層・use_cases 層に `import django` が 0 件。`views.py` が use_cases / infrastructure / models を直 import しておらず、`wiring.py` 経由が保たれている（CLAUDE.md §2）
+- `REFERENCE_FLOW_SELECTION` を単一定数に集約したことで、「利用者の選択に依存してはならない」4 箇所が同じ定数を参照する構造になっている
+- `EvaluationPeriods` がファーストクラスコレクションとして実装され、6 値の列挙・既定値解決・キー検索が 1 箇所に閉じている
+- 用語がユビキタス言語集（S-203 / V-210〜V-214 / R-201）と一致し、「使用しない表現」（未流動品・デッドストック・不良在庫）はコード・テンプレートに 0 件
+
+
+
 <!-- 実装レビュー（implement-review-l1）がこのセクションに追記する。作成時点では見出しのみ残す。 -->

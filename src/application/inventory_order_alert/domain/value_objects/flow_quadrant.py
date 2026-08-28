@@ -152,6 +152,9 @@ FLOW_QUADRANTS = (
     QUADRANT_NORMAL_FLOW,
 )
 
+#: 責任部署（R-201）を1セルに収めるときの区切り。
+RESPONSIBLE_DEPARTMENT_SEPARATOR = "・"
+
 #: 流動区分ごとの責任部署（R-201）。
 RESPONSIBLE_DEPARTMENTS = {
     QUADRANT_SUPPLY_RISK: ("調達G", "営業G", "生産管理"),
@@ -245,6 +248,12 @@ def responsible_departments(quadrant: str) -> tuple[str, ...]:
     """流動区分に対応する責任部署（R-201）。未知の値は空タプル。"""
 
     return RESPONSIBLE_DEPARTMENTS.get(quadrant, ())
+
+
+def format_responsible_departments(quadrant: str) -> str:
+    """責任部署（R-201）を1セル・1列に収める文字列にする。"""
+
+    return RESPONSIBLE_DEPARTMENT_SEPARATOR.join(responsible_departments(quadrant))
 
 
 def is_flow_escalated(previous: str, current: str) -> bool:

@@ -5,7 +5,6 @@ from datetime import date
 import pytest
 from django.utils import timezone
 
-from application.inventory_order_alert.domain.value_objects.app_settings import AppSettings
 from application.inventory_order_alert.domain.value_objects.flow_quadrant import (
     QUADRANT_DORMANT_STOCK,
     QUADRANT_SUPPLY_RISK,
@@ -59,7 +58,6 @@ def test_patch_snapshot_row_applies_flow_quadrant_with_reference_selection(monke
         item_cd="90249-14011",
         last_ship_date=AS_OF,
         post_shipment_count=2,
-        app_settings=AppSettings(),
     )
 
     # 基準判定条件（低流動判定軸・3か月）で判定される。
@@ -88,7 +86,6 @@ def test_patch_snapshot_row_can_run_reconcile(monkeypatch):
         last_ship_date=AS_OF,
         post_shipment_count=2,
         run_reconcile=True,
-        app_settings=AppSettings(),
     )
 
     confirmation = InventoryOrderAlertConfirmation.objects.get(cust_code="100", item_cd="90249-14011")
