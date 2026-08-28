@@ -1,6 +1,6 @@
 文書ID: TASK-LOW-FLOW-VISIBILITY-2026-001
 作成日: 2026/08/27
-更新日:
+更新日: 2026/08/28
 対応文書: ./design.md (DESIGN-LOW-FLOW-VISIBILITY-2026-001), ./test-design.md (TEST-LOW-FLOW-VISIBILITY-2026-001), ./requirements.md (REQ-LOW-FLOW-VISIBILITY-2026-001)
 
 # low-flow-visibility タスクリスト
@@ -48,8 +48,8 @@
 |---|--------|---------|------|
 | 6 | `test_list_summary.py` の改修（D-088〜D-099） | domain | [✅2026/08/28 09:15] |
 | 7 | `list_rows.py` の置換 | domain | [ ] |
-| 8 | `test_list_query.py` の改修（D-124〜D-134） | domain | [ ] |
-| 9 | `list_query.py` の置換 | domain | [ ] |
+| 8 | `test_list_query.py` の改修（D-124〜D-134） | domain | [✅2026/08/28 10:35] |
+| 9 | `list_query.py` の置換 | domain | [✅2026/08/28 10:35] |
 | 10 | `test_row_counts.py` の改修（D-109〜D-116） | domain | [ ] |
 | 11 | `row_counts.py` の置換 | domain | [ ] |
 | 12 | `test_row_display.py` の改修（D-117〜D-123） | domain | [ ] |
@@ -214,6 +214,14 @@
   - `grep -rn "alert_level\|alert_rules" application/inventory_order_alert --include=*.py` の
     残存箇所を一覧化し、ステージ3〜6で潰す対象リストとして記録する。
   - この時点で `pytest application/inventory_order_alert/` は **大量に Red**（想定どおり）。
+- **注意（2026/08/28 追記）**: 削除後は `templatetags/inventory_order_alert_format.py` が
+  `alert_level` を import できず、**`manage.py runserver` が起動しなくなる**（タスク54で解消する）。
+  これは「置換」方式の必然であり異常ではない。開発サーバーが落ちていることを理由に
+  `alert_level.py` / `alert_rules.py` を Git の旧版から戻してはならない。
+  戻すと §0 の「`ImportError` を未移行箇所の検知手段として使う」方針が無効化される。
+  ステージ2〜6 の途中で動作確認が必要な場合は、
+  `docker compose -f docker-compose.devcontainer.yaml run --rm --no-deps web-app bash -lc "cd /django_app/src && python -m pytest ..."`
+  のようにテスト経由で確認する。
 
 ---
 
@@ -860,6 +868,39 @@
   行ビルダーを分けた（`_source_row` / `_filter_row`）。付与前の行と付与後の行を取り違えないため。
 - チーム共有ポイント: Red の内容は `list_rows.py` が削除済み `alert_level` を import している ModuleNotFoundError。
   期待どおりの Red であり、タスク7で解消する。
+--------------------
+
+--------------------
+### タスク8: `test_list_query.py` の改修（完了 2026/08/28 10:35）
+
+- 懸念事項: 本タスクと次のタスク9の作業中に Claude がクラッシュした。復旧時に
+  `alert_level.py` / `alert_rules.py` を Git の旧版から戻す対応が行われたが、これはタスク5の
+  巻き戻しにあたるため再削除した（経緯はタスク5の注意書きを参照）。
+- 改善事項: フォールバックの検証（D-127〜D-130）を `AXIS_UNKNOWN` / `PERIOD_MISMATCHED` /
+  `PERIOD_NON_NUMERIC` / `PERIOD_OUT_OF_RANGE` のモジュール定数に寄せ、
+  test-design.md §3.1 の異常値表と1対1で対応させた。
+- 設計のGoodポイント: D-134（`ListQuery` が `alert_only` / 月数3項目を持たないこと）を
+  属性の非存在で検証しているため、撤去漏れがフィールド追加の副作用で復活しても検出できる。
+- チーム共有ポイント: 判定条件は URL クエリの `axis` / `period` の2パラメータで表す。
+  `ListQuery` 側は `FlowSelection` 1個に畳んで保持する。
+--------------------
+
+--------------------
+### タスク9: `list_query.py` の置換（完了 2026/08/28 10:35）
+
+- 懸念事項: クラッシュ直前の実装では D-128（`axis=foo&period=6` → **L3**）が Red のままだった。
+  `parse_flow_selection` が判定軸だけ既定へ倒し、`period` はフォールバック後の軸に対して
+  そのまま解釈していたため `L6` を返していた。design.md §6.1 の
+  「`axis` を切り替えたときは `period` を当該軸の既定値へリセットする（REQ-LFV-F-003）」に従い、
+  判定軸が未指定・不正なら `period` の解釈自体をスキップして既定値を返すよう修正した。
+- 改善事項: 「判定軸が不正なら判定期間も既定へ」という規則をコメントで design.md §6.1 に紐付け、
+  次に読む人がフォールバック表と突き合わせられるようにした。
+- 設計のGoodポイント: `merge_query_with_settings` を「設定値で判定条件を上書きしない」ことを
+  明示する空実装として残した。旧実装が月数を設定から上書きしていた経緯があるため、
+  関数ごと消すより意図が伝わる。
+- チーム共有ポイント: `axis` が未指定（パラメータ自体がない）の場合も不正値と同じ扱いになり、
+  `period` 単独指定は効かない。一覧の全リンクは `build_display_query_string` が
+  `axis` と `period` を必ず対で出力するため（D-135〜D-137）、実運用の経路では問題にならない。
 --------------------
 
 ---

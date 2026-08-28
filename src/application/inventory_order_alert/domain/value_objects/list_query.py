@@ -29,7 +29,8 @@ def parse_flow_selection(params: dict[str, str]) -> FlowSelection:
     """判定軸・判定期間を解釈する（§6.1）。不正値は静かに既定値へ倒す。"""
     axis = params.get("axis", "").strip()
     if not EVALUATION_PERIODS.for_axis(axis):
-        axis = DEFAULT_FLOW_AXIS
+        # 判定軸が未指定・不正なら判定期間も当該軸の既定値へリセットする（design.md §6.1）。
+        return FlowSelection(EVALUATION_PERIODS.default_for_axis(DEFAULT_FLOW_AXIS))
     raw_period = params.get("period", "").strip()
     for period in EVALUATION_PERIODS.for_axis(axis):
         if raw_period == str(period.value):
