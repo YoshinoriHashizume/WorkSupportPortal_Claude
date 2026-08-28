@@ -1,13 +1,11 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import datetime
-from zoneinfo import ZoneInfo
 
+from application.inventory_order_alert.domain.value_objects.dates import is_stock_stale
 from application.inventory_order_alert.domain.value_objects.row_counts import count_rows
 from application.inventory_order_alert.domain.repositories.ports import LoadAppSettings, LoadSummary
 
-_TZ = ZoneInfo("Asia/Tokyo")
 _BANNER_ERROR_MESSAGE = "アラート件数を取得できませんでした。在庫発注アラート画面で再確認してください。"
 
 
@@ -74,7 +72,7 @@ class PortalDashboard:
 
         counts = count_rows(summary.rows)
         app_settings = self._load_app_settings()
-        stock_stale = (datetime.now(_TZ).date() - stock_info.stock_as_of_date).days > app_settings.stock_stale_days
+        stock_stale = is_stock_stale(stock_info.stock_as_of_date, app_settings.stock_stale_days)
 
         return DashboardBannerContext(
             critical=counts.critical,

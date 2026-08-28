@@ -7,7 +7,7 @@ from application.asset_inventory.domain.repositories.ports import (
     ReconcileRow,
     Record,
 )
-from application.portal.domain.value_objects.prefix_filter import extract_distinct_values, filter_prefix_options, matches_prefix_filter
+from application.shared.domain.value_objects.prefix_filter import extract_distinct_values, filter_prefix_options, matches_prefix_filter
 
 
 def extract_site_names_from_assets(asset_records: list[Record]) -> tuple[str, ...]:

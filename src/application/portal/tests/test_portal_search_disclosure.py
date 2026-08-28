@@ -102,6 +102,7 @@ def test_asset_inventory_renders_search_disclosure(client, general_affairs_user,
             "has_previous": False,
             "has_next": False,
             "error_message": None,
+            "warning_message": None,
         },
     )()
 

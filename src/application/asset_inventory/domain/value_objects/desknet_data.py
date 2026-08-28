@@ -11,6 +11,13 @@ from application.asset_inventory.domain.repositories.ports import (
     ManagementRow,
     Record,
 )
+from application.asset_inventory.domain.value_objects.errors import (
+    DesknetAccessKeyMissingError,
+    DesknetApiError,
+)
+
+# 拠点マスタのみ取得に失敗した場合に一覧上部へ併記する警告（機能仕様書 §7.4.1）
+SITE_MASTER_UNAVAILABLE_MESSAGE = "拠点マスタを取得できませんでした。工場変化の判定は管理部門コードの直接比較で行います。"
 
 
 def parse_management_row(record: Record) -> ManagementRow:
@@ -38,7 +45,13 @@ def fetch_reconcile_source_data(
     list_all: ListAllRecordsFn,
     access_key: str,
     management_row: ManagementRow,
-) -> tuple[list[Record], list[Record], list[Record]]:
+) -> tuple[list[Record], list[Record], list[Record], str]:
+    """資産・棚卸・拠点マスタを取得する。
+
+    戻り値の 4 要素目は拠点マスタの取得に失敗した場合の警告文（成功時は空文字）。
+    拠点マスタのみの失敗では突合を止めず、§5.5 のフォールバック（管理部門コードの
+    直接比較）で工場変化を判定する（機能仕様書 §7.4.1）。
+    """
     assets = (
         filter_inventory_target_assets(
             list_all(access_key, management_row.asset_app_id, ASSET_FIELDS),
@@ -51,5 +64,14 @@ def fetch_reconcile_source_data(
         if management_row.inventory_app_id
         else []
     )
-    sites = list_all(access_key, management_row.site_app_id, SITE_FIELDS) if management_row.site_app_id else []
-    return assets, inventory, sites
+    sites: list[Record] = []
+    site_warning = ""
+    if management_row.site_app_id:
+        try:
+            sites = list_all(access_key, management_row.site_app_id, SITE_FIELDS)
+        except DesknetAccessKeyMissingError:
+            # アクセスキー欠落・期限切れは縮退させず 503 として扱う（§7.4）
+            raise
+        except DesknetApiError:
+            site_warning = SITE_MASTER_UNAVAILABLE_MESSAGE
+    return assets, inventory, sites, site_warning

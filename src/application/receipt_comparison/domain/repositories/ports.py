@@ -4,7 +4,7 @@ from collections.abc import Callable
 from datetime import date
 from typing import Any, Protocol
 
-from application.receipt_comparison.domain.value_objects.comparison import ComparisonRow
+from application.receipt_comparison.domain.entities.comparison_row import ComparisonRow
 
 
 class PendingComparisonStore(Protocol):

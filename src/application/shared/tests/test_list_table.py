@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import pytest
 
-from application.portal.domain.value_objects.list_table import (
+from application.shared.domain.value_objects.list_table import (
     DEFAULT_PAGE_SIZE,
     MAX_SORT_SPECS,
     PaginatedRows,

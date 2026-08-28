@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from application.receipt_comparison.domain.value_objects.comparison import ComparisonRow
+from application.receipt_comparison.domain.entities.comparison_row import ComparisonRow
 from application.receipt_comparison.models import ReceiptFlag
 from application.receipt_comparison.domain.value_objects.comparison_display import DisplayRow, comparison_row_from_dict, comparison_row_to_dict
 from application.receipt_comparison.domain.value_objects.comparison_sort import quantity_sort_key, resolve_sort_params, sort_display_rows

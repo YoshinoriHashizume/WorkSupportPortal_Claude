@@ -1,11 +1,15 @@
 from __future__ import annotations
 
-from collections.abc import Callable
 from datetime import date
 
 from application.inventory_order_alert.domain.value_objects.list_rows import apply_alert_levels_to_rows
 from application.inventory_order_alert.domain.value_objects.list_query import ListQuery
-from application.inventory_order_alert.domain.repositories.ports import LoadAppSettings, LoadEditableSnapshot, PersistEditableSnapshot
+from application.inventory_order_alert.domain.repositories.ports import (
+    LoadAppSettings,
+    LoadEditableSnapshot,
+    PersistEditableSnapshot,
+    ReconcileConfirmationsAfterImport,
+)
 from application.inventory_order_alert.domain.value_objects.summary import EditableSummarySnapshot
 from application.inventory_order_alert.domain.value_objects.alert_level import normalize_alert_level
 from application.inventory_order_alert.domain.value_objects.app_settings import AppSettings
@@ -13,8 +17,6 @@ from application.inventory_order_alert.domain.value_objects.snapshot_patch impor
     SnapshotRowPatchResult,
     find_snapshot_row_index,
 )
-
-ReconcileConfirmationsAfterImport = Callable[[list[dict[str, object]]], int]
 
 
 class PatchSnapshotRow:

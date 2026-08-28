@@ -65,11 +65,13 @@ class ListPage:
             )
 
         try:
-            reconciled = load_reconciled_data(
+            # 一覧表示（棚卸セレクトの選択を含む）のたびに desknet's から取得し直す（§3・§4.1.1 手順7）
+            reconciled, site_warning = load_reconciled_data(
                 self._list_all,
                 access_key,
                 selected,
                 session=session,
+                use_snapshot=False,
             )
         except DesknetAccessKeyMissingError as exc:
             return empty_list_page_result(management_rows=management_rows, error_message=str(exc))
@@ -111,6 +113,7 @@ class ListPage:
             end_index=paginated.end_index,
             has_previous=paginated.has_previous,
             has_next=paginated.has_next,
+            warning_message=site_warning or None,
         )
 
 

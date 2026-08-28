@@ -1,13 +1,11 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import date, datetime
-from zoneinfo import ZoneInfo
-
-from collections.abc import Callable
 
 from application.inventory_order_alert.domain.value_objects.confirmation import STATUS_CHOICES, confirmation_status_key
+from application.inventory_order_alert.domain.value_objects.dates import is_stock_stale
 from application.inventory_order_alert.domain.value_objects.row_counts import RowCounts, count_rows
+from application.inventory_order_alert.domain.value_objects.errors import ImportInProgressError
 from application.inventory_order_alert.use_cases.import_stock import ImportStock
 from application.inventory_order_alert.domain.value_objects.list_filter import (
     apply_list_filters,
@@ -15,7 +13,11 @@ from application.inventory_order_alert.domain.value_objects.list_filter import (
     build_filter_options,
     parse_list_filter_params,
 )
-from application.inventory_order_alert.domain.repositories.ports import LoadAppSettings, LoadSummary
+from application.inventory_order_alert.domain.repositories.ports import (
+    HasResettableConfirmations,
+    LoadAppSettings,
+    LoadSummary,
+)
 from application.inventory_order_alert.domain.value_objects.app_settings import MAX_WARNING_MONTHS
 from application.inventory_order_alert.domain.value_objects.table_display import (
     PAGE_SIZE_OPTIONS,
@@ -30,10 +32,6 @@ from application.inventory_order_alert.domain.value_objects.table_display import
 from application.inventory_order_alert.domain.value_objects.alert_rules import build_alert_rule_rows
 from application.inventory_order_alert.domain.value_objects.dev_data_guard import looks_like_test_import
 from application.inventory_order_alert.domain.value_objects.row_display import row_alert_class
-
-HasResettableConfirmations = Callable[[], bool]
-
-_TZ = ZoneInfo("Asia/Tokyo")
 
 
 @dataclass(frozen=True)
@@ -77,12 +75,6 @@ class ListPageContext:
     warning_month_options: list[int]
     can_reset_confirmations: bool
     test_data_warning: bool
-
-
-def _is_stock_stale(stock_as_of_date: date | None, stock_stale_days: int) -> bool:
-    if stock_as_of_date is None:
-        return False
-    return (datetime.now(_TZ).date() - stock_as_of_date).days > stock_stale_days
 
 
 def _rows_for_template(rows: list[dict[str, object]]) -> list[dict[str, object]]:
@@ -140,6 +132,9 @@ class ListPage:
                             f" {stock_info.confirmation_reset_count} 件の確認状態を未確認に戻しました"
                             f"（アラート悪化）。"
                         )
+            except ImportInProgressError as exc:
+                # 排他ロックを取得できなかった場合は取込を行わず、既存スナップショットを保持する
+                error_message = str(exc)
             except ValueError as exc:
                 error_message = str(exc)
 
@@ -212,7 +207,7 @@ class ListPage:
             has_slims_stock=bool(stock_info and stock_info.has_data),
             has_summary=bool(summary and summary.has_summary and not summary.aggregation_error),
             has_list_data=has_list_data,
-            stock_stale=_is_stock_stale(
+            stock_stale=is_stock_stale(
                 stock_info.stock_as_of_date if stock_info else None,
                 app_settings.stock_stale_days,
             ),

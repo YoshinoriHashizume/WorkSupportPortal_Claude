@@ -1,10 +1,7 @@
 from __future__ import annotations
 
-from collections.abc import Callable
-
+from application.portal.domain.repositories.ports import BootstrapProductionAdminRunner
 from application.portal.domain.value_objects.bootstrap import BootstrapProductionAdminConfig, BootstrapUserResult
-
-BootstrapProductionAdminRunner = Callable[[BootstrapProductionAdminConfig], BootstrapUserResult]
 
 
 class BootstrapProductionAdmin:

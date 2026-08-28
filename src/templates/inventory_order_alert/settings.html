@@ -1,0 +1,105 @@
+{% extends "base.html" %}
+{% block title %}在庫発注アラート 設定{% endblock %}
+{% block body_class %}inventory-order-alert-settings-page{% endblock %}
+{% block content %}
+<section class="ioa-settings">
+  <div class="portal-section-head">
+    <div>
+      <h1>在庫発注アラート 設定</h1>
+      <p class="portal-page-description">アラートの判定条件と SLIMS 取込の警告日数を設定します。変更は一覧・ダッシュボード帯に即時反映されます。</p>
+    </div>
+    <a class="button secondary-button" href="{% url 'inventory_order_alert:list_page' %}">一覧へ戻る</a>
+  </div>
+
+  <p class="error ioa-settings-error" id="ioa-settings-error" hidden></p>
+
+  <form class="card ioa-settings-form" id="ioa-settings-form">
+    <div class="ioa-settings-grid">
+      <label class="ioa-settings-field">
+        <span>警告（出荷あり）月数</span>
+        <input type="number" id="ioa-setting-shipment-months" name="warningShipmentMonths"
+               min="1" max="36" step="1" value="{{ warning_shipment_months }}" required>
+        <small>直近この月数に出荷実績があるかで判定します（1〜36）。</small>
+      </label>
+
+      <label class="ioa-settings-field">
+        <span>警告（出荷なし）月数</span>
+        <input type="number" id="ioa-setting-incoming-months" name="warningIncomingMonths"
+               min="1" max="36" step="1" value="{{ warning_incoming_months }}" required>
+        <small>直近この月数に入荷実績があるかで判定します（1〜36）。</small>
+      </label>
+
+      <label class="ioa-settings-field">
+        <span>SLIMS 取込警告日数</span>
+        <input type="number" id="ioa-setting-stock-stale-days" name="stockStaleDays"
+               min="1" max="365" step="1" value="{{ stock_stale_days }}" required>
+        <small>最終取込からこの日数を超えると警告バナーを表示します（1〜365）。</small>
+      </label>
+
+      <label class="ioa-settings-field inline">
+        <input type="checkbox" id="ioa-setting-critical-enabled" name="criticalEnabled"
+               {% if critical_enabled %}checked{% endif %}>
+        <span>重点アラートを有効にする</span>
+        <small>入荷なし かつ 出荷実績ありの品目を「重点」として扱います。</small>
+      </label>
+    </div>
+
+    <div class="ioa-settings-actions">
+      <button type="submit" id="ioa-settings-save">保存</button>
+    </div>
+  </form>
+</section>
+
+<script>
+  (function () {
+    const form = document.getElementById("ioa-settings-form");
+    const saveButton = document.getElementById("ioa-settings-save");
+    const errorBox = document.getElementById("ioa-settings-error");
+    if (!form || !saveButton || !errorBox) {
+      return;
+    }
+
+    function showError(message) {
+      errorBox.textContent = message;
+      errorBox.hidden = false;
+    }
+
+    async function put(url, body) {
+      const response = await fetch(url, {
+        method: "PUT",
+        headers: {
+          "Content-Type": "application/json",
+          "X-CSRFToken": window.portalCsrfToken || "",
+        },
+        body: JSON.stringify(body),
+      });
+      const payload = await response.json().catch(() => ({}));
+      if (!response.ok || !payload.ok) {
+        throw new Error(payload.message || "設定の保存に失敗しました。");
+      }
+      return payload;
+    }
+
+    form.addEventListener("submit", async (event) => {
+      event.preventDefault();
+      errorBox.hidden = true;
+      saveButton.disabled = true;
+      try {
+        await put("/api/inventory-order-alert/alert-settings", {
+          warningShipmentMonths: Number(document.getElementById("ioa-setting-shipment-months").value),
+          warningIncomingMonths: Number(document.getElementById("ioa-setting-incoming-months").value),
+        });
+        await put("/api/inventory-order-alert/settings", {
+          criticalEnabled: document.getElementById("ioa-setting-critical-enabled").checked,
+          stockStaleDays: Number(document.getElementById("ioa-setting-stock-stale-days").value),
+        });
+        window.location.reload();
+      } catch (error) {
+        showError(error.message || "設定の保存に失敗しました。");
+      } finally {
+        saveButton.disabled = false;
+      }
+    });
+  })();
+</script>
+{% endblock %}

@@ -4,7 +4,7 @@ from datetime import date
 
 from django.http import HttpRequest
 
-from application.receipt_comparison.domain.value_objects.comparison import ComparisonRow
+from application.receipt_comparison.domain.entities.comparison_row import ComparisonRow
 from application.receipt_comparison.domain.value_objects.comparison_display import pending_matches
 from application.receipt_comparison.infrastructure.session import pending_comparison_session as session
 

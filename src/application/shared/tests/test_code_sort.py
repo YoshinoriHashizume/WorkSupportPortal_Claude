@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from application.portal.domain.value_objects.code_sort import numeric_code_sort_key
+from application.shared.domain.value_objects.code_sort import numeric_code_sort_key
 
 
 def test_numeric_code_sort_key_orders_digits_numerically():

@@ -1,11 +1,7 @@
 from __future__ import annotations
 
-from collections.abc import Callable
-
+from application.inventory_order_alert.domain.repositories.ports import SaveWarningMonthSettings
 from application.inventory_order_alert.domain.value_objects.app_settings import parse_alert_settings_payload
-from application.inventory_order_alert.domain.value_objects.app_settings import AppSettings
-
-SaveWarningMonthSettings = Callable[..., AppSettings]
 
 
 class SaveAlertSettings:

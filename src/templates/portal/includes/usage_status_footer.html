@@ -1,0 +1,24 @@
+{# 一覧のページ送りと表示件数。JS が無効でも GET 送信で機能する #}
+<form method="get" class="us-table-footer"{% if not paginated.total_count %} hidden{% endif %}>
+  <input type="hidden" name="start" value="{{ start }}">
+  <input type="hidden" name="end" value="{{ end }}">
+  <input type="hidden" name="group" value="{{ group_key }}">
+  <input type="hidden" name="sort" value="{{ sort_key }}">
+  <input type="hidden" name="dir" value="{{ sort_direction }}">
+  <label class="us-page-size-label">表示件数
+    <select name="size" class="us-page-size-select">
+      <option value="20"{% if paginated.page_size == 20 %} selected{% endif %}>20 件</option>
+      <option value="50"{% if paginated.page_size == 50 %} selected{% endif %}>50 件</option>
+      <option value="100"{% if paginated.page_size == 100 %} selected{% endif %}>100 件</option>
+      <option value="200"{% if paginated.page_size == 200 %} selected{% endif %}>200 件</option>
+    </select>
+  </label>
+  <button type="submit" name="page" value="1" class="button-link us-page-size-apply">適用</button>
+  <nav class="us-pagination" aria-label="一覧ページ移動">
+    <button type="submit" name="page" value="{{ paginated.page|add:"-1" }}" class="button-link us-pagination-prev"{% if not paginated.has_previous %} disabled{% endif %}>前へ</button>
+    <button type="submit" name="page" value="{{ paginated.page|add:"1" }}" class="button-link us-pagination-next"{% if not paginated.has_next %} disabled{% endif %}>次へ</button>
+  </nav>
+  {% if paginated.total_count %}
+  <p class="muted us-table-range">{{ paginated.start_index }}–{{ paginated.end_index }} 件目を表示（{{ paginated.page }} / {{ paginated.total_pages }} ページ）</p>
+  {% endif %}
+</form>

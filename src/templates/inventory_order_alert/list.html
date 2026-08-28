@@ -50,6 +50,10 @@
       {% if has_list_data %}
         <a class="button-link" href="{% url 'inventory_order_alert:export_csv' %}">CSV 出力</a>
       {% endif %}
+      {% if is_admin %}
+        {# 設定画面 SCR-02（§4.2）への導線。管理者のみに表示する #}
+        <a class="button-link" href="{% url 'inventory_order_alert:settings_page' %}">設定</a>
+      {% endif %}
     </div>
   </div>
 

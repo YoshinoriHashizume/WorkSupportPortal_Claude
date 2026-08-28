@@ -1,20 +1,16 @@
 from __future__ import annotations
 
-from collections.abc import Callable
-
 from application.inventory_order_alert.domain.value_objects.list_filter import (
     ListFilterParams,
     apply_list_filters,
     list_filter_params_from_client_payload,
 )
 from application.inventory_order_alert.domain.value_objects.confirmation import ConfirmationInput, parse_confirmation_payload
-from application.inventory_order_alert.domain.repositories.ports import LoadSummary
+from application.inventory_order_alert.domain.repositories.ports import LoadSummary, SaveConfirmation
 from application.inventory_order_alert.domain.value_objects.alert_level import ALERT_NONE, lookup_alert_level_for_row
 from application.inventory_order_alert.domain.value_objects.confirmation import confirmation_label
 from application.inventory_order_alert.domain.value_objects.row_counts import RowCounts, count_rows
 from application.inventory_order_alert.domain.value_objects.row_display import row_alert_class
-
-SaveConfirmation = Callable[..., None]
 
 
 def _counts_to_response(counts: RowCounts) -> dict[str, int]:
@@ -61,7 +57,7 @@ def _build_save_result(
     }
 
 
-class SaveConfirmation:
+class SaveConfirmationUseCase:
     def __init__(self, load_summary: LoadSummary, save_confirmation: SaveConfirmation) -> None:
         self._load_summary = load_summary
         self._save_confirmation = save_confirmation

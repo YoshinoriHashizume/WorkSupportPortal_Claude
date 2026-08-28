@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from application.portal.domain.value_objects.dependent_cust_filter import (
+from application.shared.domain.value_objects.dependent_cust_filter import (
     build_cust_chrg_cust_index,
     cust_options_for_chrg_psn,
     sanitize_cust_code,

@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from application.portal.domain.value_objects.prefix_filter import (
+from application.shared.domain.value_objects.prefix_filter import (
     extract_distinct_values,
     extract_distinct_values_from_rows,
     filter_prefix_options,

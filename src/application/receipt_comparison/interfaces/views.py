@@ -26,7 +26,12 @@ from application.receipt_comparison.interfaces.wiring import (
     update_results_usecase,
 )
 from application.receipt_comparison.domain.value_objects.comparison_type import UnknownComparisonTypeError, comparison_type_from_slug
-from application.receipt_comparison.domain.value_objects.comparison_urls import append_query, comparison_url_path, parse_date
+from application.receipt_comparison.domain.value_objects.comparison_urls import (
+    append_query,
+    comparison_url_path,
+    date_range_error,
+    parse_date,
+)
 from application.receipt_comparison.domain.value_objects.receipt_flag import ReceiptFlag
 
 if TYPE_CHECKING:
@@ -114,14 +119,38 @@ def comparison_page(request: HttpRequest) -> HttpResponse:
     supplier_id = request.POST.get("supplier_id") or request.GET.get("supplier_id") or ""
     start_date = parse_date(request.POST.get("start_date") or request.GET.get("start_date")) or date.today()
     end_date = parse_date(request.POST.get("end_date") or request.GET.get("end_date")) or start_date
-    if start_date > end_date:
-        start_date, end_date = end_date, start_date
 
     supplier = None
     if supplier_id:
         supplier = resolve_supplier(comparison_type, supplier_id)
         if supplier is None:
             raise Http404
+
+    date_error = date_range_error(start_date, end_date)
+    if date_error:
+        messages.error(request, date_error)
+        sort_key, sort_direction = page_usecase.resolve_sort(
+            sort_key=request.GET.get("sort"),
+            sort_direction=request.GET.get("dir"),
+            reset_to_default=False,
+        )
+        context = page_usecase.build_context(
+            type_slug=type_slug,
+            comparison_type=comparison_type,
+            supplier=supplier,
+            start_date=start_date,
+            end_date=end_date,
+            rows=[],
+            has_pending=False,
+            results_panel_active=False,
+            sort_key=sort_key,
+            sort_direction=sort_direction,
+        )
+        return render(
+            request,
+            "receipt_comparison/comparison.html",
+            _comparison_page_template_context(request, context),
+        )
 
     pending_store = pending_comparison_store(request)
 
@@ -279,6 +308,9 @@ def export_csv(request: HttpRequest) -> HttpResponse:
         raise Http404
     start_date = parse_date(request.GET.get("start_date")) or date.today()
     end_date = parse_date(request.GET.get("end_date")) or start_date
+    date_error = date_range_error(start_date, end_date)
+    if date_error:
+        return HttpResponse(date_error, status=400, content_type="text/plain; charset=utf-8")
     page_usecase = comparison_page_usecase()
     sort_key, sort_direction = page_usecase.resolve_sort(
         sort_key=request.GET.get("sort"),

@@ -1,15 +1,11 @@
 from __future__ import annotations
 
-from collections.abc import Callable
-
 from application.inventory_order_alert.domain.value_objects.list_filter import (
     apply_list_filters,
     list_filter_params_from_client_payload,
 )
-from application.inventory_order_alert.domain.repositories.ports import LoadSummary
+from application.inventory_order_alert.domain.repositories.ports import LoadSummary, ResetAllConfirmations
 from application.inventory_order_alert.domain.value_objects.row_counts import RowCounts, count_rows
-
-ResetAllConfirmations = Callable[[], int]
 
 
 def _counts_to_response(counts: RowCounts) -> dict[str, int]:

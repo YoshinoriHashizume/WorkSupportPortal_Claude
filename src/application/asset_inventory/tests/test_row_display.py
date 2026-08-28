@@ -162,3 +162,41 @@ def test_asset_acquisition_date_empty_for_inventory_only_row():
         asset_row=asset_row,
     )
     assert row.asset_acquisition_date == ""
+
+
+# --- REQ-F-003 / DD-08 判定は名称・出力はコード（ASP 取り込み用データの 44・59・64 列目） ---
+
+ADDED_CODE_VALUES = {
+    "管理者コード": "MGR1",
+    "使用区分コード": "U1",
+    "メーカーコード": "MK1",
+}
+
+
+def _matched_display(record):
+    """棚卸データと突き合わせた変化点ありの行を組み立てる。"""
+    return map_record_to_display(
+        record,
+        status=MatchStatus.MATCHED,
+        row_tone=RowTone.MATCH_DIFF,
+        has_diff=True,
+        factory_change=False,
+    )
+
+
+def test_TC_AIV_DOM_061_added_code_parts_come_from_the_record():
+    """追加コード 3 件が棚卸データの値として詰められること（対応 REQ-F-003・DD-08）。"""
+    row = _matched_display({**RECORD, **ADDED_CODE_VALUES})
+
+    assert row.manager_code == "MGR1"
+    assert row.usage_category_code == "U1"
+    assert row.manufacturer_code == "MK1"
+
+
+def test_TC_AIV_DOM_062_missing_added_code_parts_are_empty():
+    """追加コードを持たない記録でも例外にならず空欄になること（対応 REQ-F-003・D-01）。"""
+    row = _matched_display(RECORD)
+
+    assert row.manager_code == ""
+    assert row.usage_category_code == ""
+    assert row.manufacturer_code == ""

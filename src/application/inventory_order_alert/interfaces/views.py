@@ -10,14 +10,19 @@ from django.views.decorators.http import require_http_methods
 from application.inventory_order_alert.domain.value_objects.list_client_data import build_list_client_payload
 from application.inventory_order_alert.domain.value_objects.list_filter import visible_cust_options
 from application.inventory_order_alert.interfaces.wiring import (
+    app_settings_usecase,
     confirmation_memos_usecase,
+    dashboard_summary_usecase,
     export_csv_usecase,
     list_page_usecase,
     reset_confirmations_usecase,
     save_alert_settings_usecase,
     save_confirmation_usecase,
+    stock_locations_usecase,
+    summary_api_usecase,
+    vendors_usecase,
 )
-from application.portal.interfaces.favorites import is_menu_favorited
+from application.portal.interfaces.favorites import is_menu_favorited, is_portal_admin
 
 
 def _query_params(request: HttpRequest) -> dict[str, str]:
@@ -75,6 +80,7 @@ def list_page(request: HttpRequest) -> HttpResponse:
             "has_list_data": context.has_list_data,
             "stock_stale": context.stock_stale,
             "is_inventory_order_alert_favorite": is_menu_favorited(request.user, "inventory-order-alert"),
+            "is_admin": is_portal_admin(request.user),
             "confirmation_status_choices": context.confirmation_status_choices,
             "alert_rule_rows": context.alert_rule_rows,
             "warning_shipment_months": context.warning_shipment_months,
@@ -158,6 +164,88 @@ def api_save_alert_settings(request: HttpRequest) -> JsonResponse:
         return JsonResponse({"ok": False, "message": str(exc)}, status=400)
 
     return JsonResponse({"ok": True})
+
+
+@login_required
+@require_http_methods(["GET"])
+def settings_page(request: HttpRequest) -> HttpResponse:
+    """設定画面 SCR-02（§4.2）。管理者のみが開ける。"""
+    if not is_portal_admin(request.user):
+        return HttpResponse("権限がありません。", status=403)
+
+    settings = app_settings_usecase().load()
+    return render(
+        request,
+        "inventory_order_alert/settings.html",
+        {
+            "warning_shipment_months": settings.warning_shipment_months,
+            "warning_incoming_months": settings.warning_incoming_months,
+            "critical_enabled": settings.critical_enabled,
+            "stock_stale_days": settings.stock_stale_days,
+        },
+    )
+
+
+@login_required
+@require_http_methods(["GET", "PUT"])
+def api_settings(request: HttpRequest) -> JsonResponse:
+    """設定 API（§8.10）。管理者のみが参照・更新できる。"""
+    if not is_portal_admin(request.user):
+        return JsonResponse({"ok": False, "message": "権限がありません。"}, status=403)
+
+    use_case = app_settings_usecase()
+    if request.method == "GET":
+        return JsonResponse({"ok": True, "settings": use_case.load_payload()})
+
+    try:
+        payload = json.loads(request.body.decode("utf-8"))
+    except (json.JSONDecodeError, UnicodeDecodeError):
+        return JsonResponse({"ok": False, "message": "JSON の形式が不正です。"}, status=400)
+
+    try:
+        settings = use_case.save(payload, updated_by=request.user)
+    except ValueError as exc:
+        return JsonResponse({"ok": False, "message": str(exc)}, status=400)
+
+    return JsonResponse({"ok": True, "settings": settings})
+
+
+@login_required
+@require_http_methods(["GET"])
+def api_summary(request: HttpRequest) -> JsonResponse:
+    """集計結果 API（§8.1）。Oracle へは問い合わせない。"""
+    try:
+        result = summary_api_usecase().execute(_query_params(request))
+    except ValueError as exc:
+        return JsonResponse({"ok": False, "message": str(exc)}, status=400)
+
+    return JsonResponse(result)
+
+
+@login_required
+@require_http_methods(["GET"])
+def api_stock_locations(request: HttpRequest) -> JsonResponse:
+    """在庫内訳 API（§8.4）。"""
+    try:
+        result = stock_locations_usecase().execute(request.GET.get("itemCd", ""))
+    except ValueError as exc:
+        return JsonResponse({"ok": False, "message": str(exc)}, status=400)
+
+    return JsonResponse(result)
+
+
+@login_required
+@require_http_methods(["GET"])
+def api_vendors(request: HttpRequest) -> JsonResponse:
+    """仕入先候補 API（§8.9）。集計スナップショットから生成する。"""
+    return JsonResponse(vendors_usecase().execute())
+
+
+@login_required
+@require_http_methods(["GET"])
+def api_dashboard_summary(request: HttpRequest) -> JsonResponse:
+    """メニュー画面アラート帯の集計 API（§8.11）。"""
+    return JsonResponse(dashboard_summary_usecase().execute())
 
 
 @login_required

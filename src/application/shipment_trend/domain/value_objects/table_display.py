@@ -3,7 +3,7 @@ from __future__ import annotations
 from collections.abc import Callable
 from decimal import Decimal
 
-from application.portal.domain.value_objects.list_table import (
+from application.shared.domain.value_objects.list_table import (
     DEFAULT_PAGE_SIZE,
     PAGE_SIZE_OPTIONS,
     PaginatedRows,

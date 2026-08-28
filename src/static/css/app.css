@@ -655,10 +655,17 @@ body.portal-app-page.bare-result-page .content {
 .asset-inventory-page .aiv-results-card {
   min-height: 0;
   overflow: hidden;
-  grid-template-rows: auto minmax(0, 1fr);
+  /* 見出し・メッセージは内容の高さ、本体だけが余白を占める（1fr） */
+  grid-template-rows: auto auto minmax(0, 1fr);
   align-content: stretch;
   padding: 8px 16px 16px;
 }
+
+/* メッセージが hidden でも本体が 1fr の行に載るよう、行位置を明示する */
+.asset-inventory-page .aiv-results-card > .aiv-results-head { grid-row: 1; }
+.asset-inventory-page .aiv-results-card > .aiv-asp-import-message { grid-row: 2; }
+.asset-inventory-page .aiv-results-card > .aiv-results-body,
+.asset-inventory-page .aiv-results-card > .favorite-empty { grid-row: 3; }
 .receipt-comparison-page .receipt-results-card .db-table-wrap {
   min-height: 0;
   overflow: auto;
@@ -899,6 +906,7 @@ button:hover, .button:hover { background: #0369a1; border-color: #0369a1; }
 .favorite-toggle:hover { background: transparent; color: #fda4af; border: 0; }
 .favorite-toggle.is-favorite { color: #f43f5e; }
 .error { color: #b91c1c; font-weight: 700; }
+.warning { color: #b45309; font-weight: 700; }
 .message { margin-bottom: 16px; padding: 12px; background: #ecfeff; border: 1px solid #67e8f9; border-radius: 8px; }
 .history-list { display: grid; gap: 8px; }
 .history-list button { background: white; color: #0f172a; border-color: #cbd5e1; text-align: left; }
@@ -3115,3 +3123,21 @@ body.portal-app-page.shipment-trend-page .st-alert-rules-actions {
   justify-content: flex-end;
 }
 
+.asset-inventory-page .aiv-asp-import-message {
+  margin: 8px 0 0;
+  padding: 8px 12px;
+  border-radius: 6px;
+  /* 警告文は違反理由ごとに改行して組み立てるため、改行を保持する */
+  white-space: pre-line;
+  font-size: var(--portal-font-size-body);
+  background: #f1f5f9;
+  color: #334155;
+}
+.asset-inventory-page .aiv-asp-import-message.is-warning {
+  background: #fef3c7;
+  color: #92400e;
+}
+.asset-inventory-page .aiv-asp-import-message.is-error {
+  background: #fee2e2;
+  color: #991b1b;
+}

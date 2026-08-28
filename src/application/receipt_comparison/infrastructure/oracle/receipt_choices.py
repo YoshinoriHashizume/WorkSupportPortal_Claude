@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from application.gonenkukumi.domain.value_objects.errors import OracleNotConfiguredError, OracleQueryError
+from application.sales.domain.value_objects.errors import OracleNotConfiguredError, OracleQueryError
 from application.receipt_comparison.domain.value_objects.comparison_urls import is_fixed_digit_code
 from application.receipt_comparison.infrastructure.oracle.customers import list_receipt_customers, lookup_receipt_customer_name
 from application.receipt_comparison.infrastructure.oracle.vendors import VENDOR_CODE_DIGIT_LENGTH, list_receipt_vendors, lookup_receipt_vendor_name

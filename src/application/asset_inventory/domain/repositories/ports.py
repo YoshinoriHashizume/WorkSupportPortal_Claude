@@ -55,6 +55,12 @@ class ReconcileRow:
     inventory_operator: str
     inventory_datetime: str
     asset_acquisition_date: str = ""
+    # 棚卸データの管理部門コード（ASP 取り込み用データの 3 列目に用いる）
+    site_code: str = ""
+    # 以下は差異の判定には使わず、ASP 取り込み用データへ出力する値としてのみ持つ（DD-08）
+    manager_code: str = ""          # 画面の「型番」に対応（44 列目 管理者コード）
+    usage_category_code: str = ""   # 使用区分に対応（59 列目 抽出コード１３）
+    manufacturer_code: str = ""     # メーカー名に対応（64 列目 抽出コード１８）
     has_diff: bool = False
     factory_change: bool = False
     css_class: str = ""
@@ -99,6 +105,8 @@ class ListPageResult:
     has_previous: bool = False
     has_next: bool = False
     error_message: str | None = None
+    # 拠点マスタのみ取得に失敗した場合の警告（機能仕様書 §7.4.1）
+    warning_message: str | None = None
 
 
 class DesknetListDataGateway(Protocol):
@@ -109,6 +117,16 @@ ListAllRecordsFn = Callable[[str, str, tuple[str, ...] | None], list[Record]]
 
 # セッション access_key から実効キーを解決する。認証失敗時は DesknetServiceAuthError を送出する。
 ResolveAccessKeyFn = Callable[[str], str]
+
+
+class FetchAttachmentFn(Protocol):
+    """desknet's から添付ファイルの実体を取得する。(コンテンツ, Content-Type) を返す。
+
+    取得に失敗した場合は DesknetApiError を送出する。
+    """
+
+    def __call__(self, *, source_url: str, access_key: str, timeout: float) -> tuple[bytes, str]: ...
+
 
 MANAGEMENT_APP_ID = "401"
 
@@ -127,6 +145,7 @@ ASSET_INVENTORY_TARGET_CODE = "1"
 
 ASSET_ACQUISITION_DATE_FIELD = "取得日付"
 
+# 名称の部品は変化点判定に、コードの部品は ASP 取り込み用データへの出力に用いる（DD-08）
 _SHARED_RECORD_FIELDS = (
     "データID",
     "資産番号",
@@ -134,15 +153,25 @@ _SHARED_RECORD_FIELDS = (
     "管理部門コード",
     "管理部門名称",
     "メーカー",
+    "メーカーコード",
     "管理者名称",
+    "管理者コード",
     "型番",
     "旧資産番号コード",
     "使用区分",
+    "使用区分コード",
     "摘要",
     ASSET_INVENTORY_TARGET_FIELD,
 )
 
-ASSET_FIELDS = _SHARED_RECORD_FIELDS[:8] + (ASSET_ACQUISITION_DATE_FIELD,) + _SHARED_RECORD_FIELDS[8:]
+
+def _with_acquisition_date(fields: tuple[str, ...]) -> tuple[str, ...]:
+    """資産データの部品一覧に取得日付を差し込む（画面の「シリアルNo.」＝ `型番` の直後）。"""
+    index = fields.index("型番") + 1
+    return fields[:index] + (ASSET_ACQUISITION_DATE_FIELD,) + fields[index:]
+
+
+ASSET_FIELDS = _with_acquisition_date(_SHARED_RECORD_FIELDS)
 
 INVENTORY_FIELDS = _SHARED_RECORD_FIELDS + (
     "棚卸日時",

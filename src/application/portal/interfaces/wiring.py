@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from django.utils import timezone
+
 from application.portal.use_cases.access_requests import AccessRequests
 from application.portal.use_cases.bootstrap_local_dev import BootstrapLocalDev
 from application.portal.use_cases.bootstrap_production_admin import BootstrapProductionAdmin
@@ -8,20 +10,28 @@ from application.portal.use_cases.database_page import DatabasePage
 from application.portal.use_cases.favorites import Favorites
 from application.portal.use_cases.menu_access import MenuAccess
 from application.portal.use_cases.notice_management import NoticeManagement
+from application.portal.use_cases.record_usage import RecordUsage
+from application.portal.use_cases.usage_status import UsageStatus
 from application.portal.use_cases.user_management import UserManagement
 from application.portal.domain.repositories.ports import (
     AccessRequestRepository,
     DatabaseBrowser,
     FavoriteRepository,
     MenuAccessRepository,
+    MenuUsageLogRepository,
     NoticeRepository,
+    UsageStatusRepository,
     UserManagementRepository,
 )
 from application.portal.infrastructure.persistence.access_request_repository import DjangoAccessRequestRepository
 from application.portal.infrastructure.persistence.database_browser import DjangoDatabaseBrowser
 from application.portal.infrastructure.persistence.favorite_repository import DjangoFavoriteRepository
 from application.portal.infrastructure.persistence.menu_access_repository import DjangoMenuAccessRepository
+from application.portal.infrastructure.persistence.menu_usage_log_repository import DjangoMenuUsageLogRepository
 from application.portal.infrastructure.persistence.notice_repository import DjangoNoticeRepository
+from application.portal.infrastructure.persistence.usage_status_repository import (
+    DjangoUsageStatusRepository,
+)
 from application.portal.infrastructure.persistence.user_bootstrap_repository import (
     run_bootstrap_local_dev,
     run_bootstrap_production_admin,
@@ -31,6 +41,10 @@ from application.portal.infrastructure.persistence.user_management_repository im
 
 def get_menu_access_repository() -> MenuAccessRepository:
     return DjangoMenuAccessRepository()
+
+
+def get_menu_usage_log_repository() -> MenuUsageLogRepository:
+    return DjangoMenuUsageLogRepository()
 
 
 def get_favorite_repository() -> FavoriteRepository:
@@ -97,3 +111,15 @@ def bootstrap_local_dev_usecase() -> BootstrapLocalDev:
 
 def bootstrap_production_admin_usecase() -> BootstrapProductionAdmin:
     return BootstrapProductionAdmin(run_bootstrap_production_admin)
+
+
+def record_usage_usecase() -> RecordUsage:
+    return RecordUsage(repository=get_menu_usage_log_repository())
+
+
+def get_usage_status_repository() -> UsageStatusRepository:
+    return DjangoUsageStatusRepository()
+
+
+def usage_status_usecase() -> UsageStatus:
+    return UsageStatus(get_usage_status_repository(), tzinfo=timezone.get_current_timezone())

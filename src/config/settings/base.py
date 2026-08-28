@@ -111,6 +111,7 @@ MIDDLEWARE = [
     "django.middleware.csrf.CsrfViewMiddleware",
     "django.contrib.auth.middleware.AuthenticationMiddleware",
     "application.portal.interfaces.middleware.AccessApprovalMiddleware",
+    "application.portal.interfaces.usage_logging.UsageLoggingMiddleware",
     "django.contrib.messages.middleware.MessageMiddleware",
     "django.middleware.clickjacking.XFrameOptionsMiddleware",
 ]

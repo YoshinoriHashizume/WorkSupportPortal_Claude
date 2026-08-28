@@ -1,6 +1,11 @@
 from __future__ import annotations
 
-from application.shipment_trend.domain.value_objects.app_settings import AppSettings, DEFAULT_DECREASE_THRESHOLD_PCT, DEFAULT_INCREASE_THRESHOLD_PCT
+from application.shipment_trend.domain.value_objects.app_settings import (
+    AppSettings,
+    DEFAULT_DECREASE_THRESHOLD_PCT,
+    DEFAULT_INCREASE_THRESHOLD_PCT,
+    clamp_threshold,
+)
 from application.shipment_trend.models import ShipmentTrendSettings
 
 
@@ -12,9 +17,10 @@ def load_app_settings() -> AppSettings:
             "increase_threshold_pct": DEFAULT_INCREASE_THRESHOLD_PCT,
         },
     )
+    # 既存行に範囲外の値が残っていても AppSettings の不変条件を満たす形に丸める。
     return AppSettings(
-        decrease_threshold_pct=float(settings_row.decrease_threshold_pct),
-        increase_threshold_pct=float(settings_row.increase_threshold_pct),
+        decrease_threshold_pct=clamp_threshold(float(settings_row.decrease_threshold_pct)),
+        increase_threshold_pct=clamp_threshold(float(settings_row.increase_threshold_pct)),
     )
 
 

@@ -5,12 +5,12 @@ from urllib.parse import urlencode
 
 from application.inventory_order_alert.domain.value_objects.code_sort import numeric_code_sort_key
 from application.inventory_order_alert.domain.value_objects.table_display import SortSpec, TableDisplayParams
-from application.portal.domain.value_objects.dependent_cust_filter import (
+from application.shared.domain.value_objects.dependent_cust_filter import (
     build_cust_chrg_cust_index,
     cust_options_for_chrg_psn,
     sanitize_cust_code,
 )
-from application.portal.domain.value_objects.prefix_filter import (
+from application.shared.domain.value_objects.prefix_filter import (
     extract_distinct_values_from_rows,
     matches_prefix_filter,
 )

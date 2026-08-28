@@ -7,12 +7,14 @@ from django.shortcuts import render
 from django.urls import reverse
 
 from application.asset_inventory.interfaces.wiring import (
+    export_asp_import_usecase,
     export_csv_usecase,
     fetch_attachment_usecase,
     list_page_usecase,
     resolve_access_key_usecase,
 )
 from application.asset_inventory.domain.value_objects.errors import DesknetApiError
+from application.asset_inventory.domain.value_objects.reconcile_cache import has_amendment_snapshot
 from application.asset_inventory.domain.value_objects.list_client_data import build_list_client_payload
 from application.asset_inventory.domain.value_objects.list_query import (
     build_list_page_query_string,
@@ -92,6 +94,10 @@ def list_page(request: HttpRequest) -> HttpResponse:
         )
     )
     has_list_data = bool(result.selected_management_id) and result.error_message is None
+    # 取り込み用データの作成は、表示中の突合結果スナップショットだけを入力とする（DD-01・DD-05）
+    can_export_asp_import = has_list_data and has_amendment_snapshot(
+        request.session, result.selected_management_id
+    )
     attachment_proxy_base_path = reverse("asset_inventory:attachment")
     row_details_index = (
         build_row_details_index(result.all_rows, attachment_proxy_base_path=attachment_proxy_base_path)
@@ -145,7 +151,9 @@ def list_page(request: HttpRequest) -> HttpResponse:
             "export_csv_href": export_csv_href,
             "row_color_rules": build_row_color_rule_rows(),
             "has_list_data": has_list_data,
+            "can_export_asp_import": can_export_asp_import,
             "error_message": result.error_message,
+            "warning_message": result.warning_message,
             "is_asset_inventory_favorite": is_menu_favorited(request.user, "asset-inventory"),
             "filtered_total": len(result.filtered_rows),
         },
@@ -193,4 +201,31 @@ def export_csv(request: HttpRequest) -> HttpResponse:
     timestamp = datetime.now().strftime("%Y%m%d%H%M%S")
     response = HttpResponse(content, content_type="text/csv; charset=utf-8")
     response["Content-Disposition"] = f'attachment; filename="asset_inventory_{timestamp}.csv"'
+    return response
+
+
+@login_required
+def export_asp_import(request: HttpRequest) -> HttpResponse:
+    """ASP 取り込み用データ（V-306）を作成する（要件定義書 REQ-ASP-IMPORT-DATA-2026-001 §REQ-F-005〜009）。"""
+    from datetime import datetime
+    from urllib.parse import quote
+
+    # 画面が表示した突合結果スナップショットだけを入力とするため、desknet's は呼ばない（DD-01・REQ-NF-003）
+    query = parse_list_page_query(_query_params(request), _query_sites(request))
+    result = export_asp_import_usecase().execute(query, session=request.session)
+
+    # 出力対象が 0 件、またはスナップショットが無いときはダウンロードさせずメッセージを出す（REQ-F-008・REQ-F-009）
+    if result.content is None:
+        response = HttpResponse(result.message, content_type="text/plain; charset=utf-8")
+        response["X-Asp-Import-Status"] = result.status.value
+        return response
+
+    timestamp = datetime.now().strftime("%Y%m%d%H%M%S")
+    response = HttpResponse(result.content, content_type="text/csv; charset=utf-8")
+    response["Content-Disposition"] = f'attachment; filename="asp_import_{timestamp}.csv"'
+    response["X-Asp-Import-Status"] = result.status.value
+    response["X-Asp-Import-Rows"] = str(result.row_count)
+    if result.warning_message:
+        # HTTP ヘッダは latin-1 のみのため URL エンコードして渡す（REQ-F-007）
+        response["X-Asp-Import-Warning"] = quote(result.warning_message)
     return response

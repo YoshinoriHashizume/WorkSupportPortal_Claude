@@ -1,10 +1,7 @@
 from __future__ import annotations
 
-from application.gonenkukumi.domain.value_objects.errors import (
-    NAISAK_NOT_FOUND,
-    OracleQueryError,
-    oracle_error_message,
-)
+from application.gonenkukumi.domain.value_objects.errors import NAISAK_NOT_FOUND, oracle_error_message
+from application.sales.domain.value_objects.errors import OracleQueryError
 
 
 def test_oracle_error_message_maps_naisak_not_found():

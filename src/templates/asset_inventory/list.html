@@ -15,6 +15,10 @@
     <p class="error">{{ error_message }}</p>
   {% endif %}
 
+  {% if warning_message %}
+    <p class="warning">{{ warning_message }}</p>
+  {% endif %}
+
   {% if management_rows %}
   {% include "includes/portal_search_disclosure_open.html" with disclosure_id="aiv-search-disclosure" storage_key="aiv-search-v2" %}
     <form method="get" class="receipt-filter aiv-management-filter">
@@ -44,8 +48,13 @@
         {% if has_list_data %}
           <a class="button secondary-button aiv-export-csv-link" href="{% url 'asset_inventory:export_csv' %}{{ export_csv_href }}">CSV出力</a>
         {% endif %}
+        {# 棚卸未選択・一覧エラー時もボタンは描画し、非活性にする（D-09・DD-05） #}
+        <button type="button" class="button secondary-button aiv-asp-import-button" data-asp-import-url="{% url 'asset_inventory:export_asp_import' %}?managementId={{ selected_management_id|urlencode }}"{% if not can_export_asp_import %} disabled title="棚卸を選ぶと作成できます。"{% endif %}>
+          取り込み用データの作成
+        </button>
       </div>
     </div>
+    <p class="aiv-asp-import-message" role="status" aria-live="polite" hidden></p>
 
     {% if has_list_data %}
     <div class="aiv-results-body">

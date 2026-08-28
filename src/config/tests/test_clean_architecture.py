@@ -152,3 +152,82 @@ def test_wiring_is_manual_di_not_container():
         text = wiring.read_text(encoding="utf-8-sig")
         for marker in container_markers:
             assert marker not in text, f"{app_name} wiring uses container lib: {marker}"
+
+
+# --- 境界コンテキスト間の参照ルール（docs/strategic_design.md §3.1・§4） ---
+
+#: 共有カーネル。どのコンテキストからも参照してよいモジュール接頭辞。
+SHARED_KERNEL_PREFIXES = (
+    # 一覧の絞り込み・並び替え・ページングの共通 VO
+    "application.shared.domain",
+    # 基幹 Oracle（MARI）参照専用 ACL
+    "application.sales.domain.value_objects.errors",
+    "application.sales.infrastructure.oracle",
+    # 認可述語・お気に入り（interfaces 層からのみ利用する）
+    "application.portal.interfaces.favorites",
+    # desknet's NEO 参照 ACL
+    "application.identity.domain.value_objects.errors",
+    "application.identity.infrastructure.desknet",
+)
+
+#: 既知の未解消違反。解消するまでの一時的な許可であり、新規追加を禁止する。
+#: 参照: docs/spec/ddd-review-remediation/tasks.md §2「今回実施しない指摘」
+KNOWN_CONTEXT_LEAKS = {
+    ("identity", "application.portal.domain.value_objects.constants"),
+    ("identity", "application.portal.models"),
+    ("sales", "application.gonenkukumi.infrastructure.oracle.client"),
+    ("sales", "application.gonenkukumi.infrastructure.oracle.customers"),
+}
+
+CONTEXT_PACKAGES = BUSINESS_APPS + ("sales", "shared")
+
+
+def _cross_context_imports(app_name: str) -> list[tuple[Path, str]]:
+    """app_name の本番コードから他コンテキストへの import を列挙する。"""
+    leaks: list[tuple[Path, str]] = []
+    for path in _python_files_under(f"application/{app_name}"):
+        parts = path.relative_to(ROOT).parts
+        if "tests" in parts or "migrations" in parts:
+            continue
+        for module in _imports_in_file(path):
+            segments = module.split(".")
+            if len(segments) < 2 or segments[0] != "application":
+                continue
+            if segments[1] == app_name or segments[1] not in CONTEXT_PACKAGES:
+                continue
+            leaks.append((path, module))
+    return leaks
+
+
+@pytest.mark.parametrize("app_name", CONTEXT_PACKAGES)
+def test_contexts_only_reference_the_shared_kernel(app_name: str):
+    """境界コンテキストは共有カーネル以外の他コンテキストを参照しない。"""
+    for path, module in _cross_context_imports(app_name):
+        if any(module == prefix or module.startswith(prefix + ".") for prefix in SHARED_KERNEL_PREFIXES):
+            continue
+        # 合成ルート（interfaces/wiring.py）だけは他コンテキストの wiring を参照してよい
+        if path.name == "wiring.py" and module.endswith(".interfaces.wiring"):
+            continue
+        if (app_name, module) in KNOWN_CONTEXT_LEAKS:
+            continue
+        raise AssertionError(
+            f"{path.relative_to(ROOT)} が共有カーネル外の {module} を参照しています。"
+            " 共有カーネルへ移すか、合成ルート経由に変更してください。"
+        )
+
+
+def test_known_context_leaks_are_not_stale():
+    """解消済みの既知違反が KNOWN_CONTEXT_LEAKS に残り続けないようにする。"""
+    actual = {(app, module) for app in CONTEXT_PACKAGES for _, module in _cross_context_imports(app)}
+    stale = KNOWN_CONTEXT_LEAKS - actual
+    assert not stale, f"解消済みの例外が残っています: {sorted(stale)}"
+
+
+def test_shared_kernel_has_no_django_or_context_dependency():
+    """共有カーネル（application/shared）は Django にも他コンテキストにも依存しない。"""
+    for path in _python_files_under("application/shared"):
+        if "tests" in path.relative_to(ROOT).parts:
+            continue
+        imports = _imports_in_file(path)
+        assert not _has_django_import(imports), path
+        assert not any(module.startswith("application.") for module in imports), path
