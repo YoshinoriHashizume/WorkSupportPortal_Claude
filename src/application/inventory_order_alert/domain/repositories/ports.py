@@ -30,20 +30,7 @@ class SaveAppSettings(Protocol):
         self,
         *,
         warning_days: int,
-        critical_enabled: bool,
         stock_stale_days: int,
-        updated_by: object | None = ...,
-    ) -> AppSettings: ...
-
-
-class SaveWarningMonthSettings(Protocol):
-    """アラート設定 API（§8.9）で更新できる月数を保存する。"""
-
-    def __call__(
-        self,
-        *,
-        warning_shipment_months: int,
-        warning_incoming_months: int,
         updated_by: object | None = ...,
     ) -> AppSettings: ...
 
@@ -74,7 +61,7 @@ class SaveConfirmation(Protocol):
         input_data: ConfirmationInput,
         *,
         confirmed_by: str,
-        alert_level: str = ...,
+        flow_quadrant: str = ...,
     ) -> ConfirmationRecord: ...
 
 

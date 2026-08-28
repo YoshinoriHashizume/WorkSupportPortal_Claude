@@ -1,82 +1,53 @@
 from __future__ import annotations
 
-from application.inventory_order_alert.domain.value_objects.row_counts import count_rows
+from application.inventory_order_alert.domain.value_objects import row_display
+from application.inventory_order_alert.domain.value_objects.flow_quadrant import (
+    QUADRANT_NORMAL_FLOW,
+    QUADRANT_SUPPLY_RISK,
+)
 from application.inventory_order_alert.domain.value_objects.row_display import (
-    display_alert_level,
+    display_flow_quadrant,
     row_alert_class,
 )
 
+LEGACY_CRITICAL_LABEL = "重点"
 
-def test_row_alert_class_uses_confirmation_color_for_confirmed_row():
-    row = {"alert_level": "重点", "confirmation_status": "確認済み"}
-    assert display_alert_level(row) == "重点"
+
+def test_display_flow_quadrant_returns_label_for_row():
+    row = {"flow_quadrant": QUADRANT_SUPPLY_RISK}
+
+    assert display_flow_quadrant(row) == QUADRANT_SUPPLY_RISK
+
+
+def test_display_flow_quadrant_normalizes_legacy_label():
+    row = {"flow_quadrant": LEGACY_CRITICAL_LABEL}
+
+    assert display_flow_quadrant(row) == QUADRANT_SUPPLY_RISK
+
+
+def test_row_alert_class_returns_confirmed_class_for_confirmed_row():
+    row = {"flow_quadrant": QUADRANT_SUPPLY_RISK, "confirmation_status": "確認済み"}
+
     assert row_alert_class(row) == "確認済"
 
 
-def test_row_alert_class_uses_confirmation_color_for_in_progress_row():
-    row = {"alert_level": "重点", "confirmation_status": "確認中"}
-    assert display_alert_level(row) == "重点"
+def test_row_alert_class_returns_in_progress_class_for_in_progress_row():
+    row = {"flow_quadrant": QUADRANT_SUPPLY_RISK, "confirmation_status": "確認中"}
+
     assert row_alert_class(row) == "確認中"
 
 
-def test_row_alert_class_keeps_alert_level_when_unconfirmed():
-    row = {"alert_level": "警告（出荷あり）", "confirmation_status": "未確認"}
-    assert display_alert_level(row) == "警告（出荷あり）"
-    assert row_alert_class(row) == "警告（出荷あり）"
+def test_row_alert_class_returns_flow_quadrant_key_for_unconfirmed_row():
+    row = {"flow_quadrant": QUADRANT_SUPPLY_RISK, "confirmation_status": "未確認"}
+
+    assert row_alert_class(row) == "supply-risk"
 
 
-def test_row_alert_class_normalizes_legacy_alert_level():
-    row = {"alert_level": "警告（出荷）", "confirmation_status": "未確認"}
-    assert display_alert_level(row) == "警告（出荷あり）"
-    assert row_alert_class(row) == "警告（出荷あり）"
+def test_row_alert_class_returns_normal_flow_key_for_normal_flow_row():
+    row = {"flow_quadrant": QUADRANT_NORMAL_FLOW, "confirmation_status": "未確認"}
+
+    assert row_alert_class(row) == "normal-flow"
 
 
-def test_count_rows_includes_alert_none_count():
-    rows = [
-        {"alert_level": "アラートなし", "confirmation_status": "未確認"},
-        {"alert_level": "重点", "confirmation_status": "未確認"},
-        {"alert_level": "アラートなし", "confirmation_status": "確認済み"},
-    ]
-    counts = count_rows(rows)
-    assert counts.alert_none == 2
-
-
-def test_count_rows_unconfirmed_includes_no_alert_rows():
-    rows = [
-        {"alert_level": "アラートなし", "confirmation_status": "未確認"},
-        {"alert_level": "重点", "confirmation_status": "未確認"},
-        {"alert_level": "アラートなし", "confirmation_status": "確認済み"},
-        {"alert_level": "警告（出荷）", "confirmation_status": "確認中"},
-    ]
-    counts = count_rows(rows)
-    assert counts.unconfirmed == 2
-    assert counts.in_progress == 1
-    assert counts.confirmed == 1
-
-
-def test_count_rows_alert_levels_sum_to_total():
-    rows = [
-        {"alert_level": "重点", "confirmation_status": "確認済み"},
-        {"alert_level": "重点", "confirmation_status": "未確認"},
-        {"alert_level": "警告（出荷）", "confirmation_status": "確認済み"},
-        {"alert_level": "警告（入荷）", "confirmation_status": "確認中"},
-        {"alert_level": "アラートなし", "confirmation_status": "未確認"},
-    ]
-    counts = count_rows(rows)
-    assert counts.critical == 2
-    assert counts.warning_ship == 1
-    assert counts.warning_incoming == 1
-    assert counts.alert_none == 1
-    assert counts.critical + counts.warning_ship + counts.warning_incoming + counts.alert_none == counts.total
-    assert counts.unconfirmed + counts.in_progress + counts.confirmed == counts.total
-
-
-def test_count_rows_alert_levels_sum_to_total_with_legacy_none_label():
-    rows = [
-        {"alert_level": "なし", "confirmation_status": "未確認"},
-        {"alert_level": "重点", "confirmation_status": "未確認"},
-    ]
-    counts = count_rows(rows)
-    assert counts.alert_none == 1
-    assert counts.critical == 1
-    assert counts.critical + counts.alert_none == counts.total
+def test_row_display_module_has_no_counts_toward_alert_summary():
+    assert not hasattr(row_display, "counts_toward_alert_summary")

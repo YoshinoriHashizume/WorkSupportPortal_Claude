@@ -4,6 +4,11 @@ from dataclasses import dataclass
 from urllib.parse import urlencode
 
 from application.inventory_order_alert.domain.value_objects.code_sort import numeric_code_sort_key
+from application.inventory_order_alert.domain.value_objects.flow_quadrant import (
+    FLOW_QUADRANT_LABELS,
+    REFERENCE_FLOW_SELECTION,
+    FlowSelection,
+)
 from application.inventory_order_alert.domain.value_objects.table_display import SortSpec, TableDisplayParams
 from application.shared.domain.value_objects.dependent_cust_filter import (
     build_cust_chrg_cust_index,
@@ -162,6 +167,8 @@ def build_display_query_string(
     *,
     table_params: TableDisplayParams,
     filter_params: ListFilterParams,
+    flow_selection: FlowSelection = REFERENCE_FLOW_SELECTION,
+    flow_quadrant: str = "",
     page: int | None = None,
     sort_specs: tuple[SortSpec, ...] | None = None,
     page_size: int | None = None,
@@ -172,7 +179,13 @@ def build_display_query_string(
         "dir": ",".join(spec.direction for spec in specs),
         "page": page if page is not None else table_params.page,
         "page_size": page_size if page_size is not None else table_params.page_size,
+        # 判定条件はソート・ページング・フィルタのどのリンクにも引き継ぐ（design.md §6.1）。
+        # 既定値でも必ず出力し、axis と period が対で欠けないようにする。
+        "axis": flow_selection.axis,
+        "period": flow_selection.period.value,
     }
+    if flow_quadrant in FLOW_QUADRANT_LABELS:
+        query["flow_quadrant"] = flow_quadrant
     if filter_params.cust_code:
         query["cust_code"] = filter_params.cust_code
     if filter_params.cust_chrg_psn_cd:

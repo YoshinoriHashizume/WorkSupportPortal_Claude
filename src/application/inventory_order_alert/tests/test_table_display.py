@@ -1,8 +1,17 @@
 from __future__ import annotations
 
+from application.inventory_order_alert.domain.value_objects.flow_quadrant import (
+    QUADRANT_DORMANT_STOCK,
+    QUADRANT_EXCESS_STOCK_RISK,
+    QUADRANT_NORMAL_FLOW,
+    QUADRANT_SUPPLY_RISK,
+    responsible_departments,
+)
 from application.inventory_order_alert.domain.value_objects.table_display import (
+    DEFAULT_DIRECTION,
     DEFAULT_PAGE_SIZE,
     DEFAULT_SORT,
+    SORTABLE_COLUMNS,
     SortSpec,
     TableDisplayParams,
     apply_table_display,
@@ -14,10 +23,31 @@ from application.inventory_order_alert.domain.value_objects.table_display import
     toggle_sort_direction,
 )
 
+#: 緊急度ランクの逆順（通常流動品が先頭）。ソートで並べ替えられることを見るための入力順。
+QUADRANTS_IN_REVERSE_RANK = (
+    QUADRANT_NORMAL_FLOW,
+    QUADRANT_EXCESS_STOCK_RISK,
+    QUADRANT_DORMANT_STOCK,
+    QUADRANT_SUPPLY_RISK,
+)
+QUADRANTS_IN_RANK_ORDER = (
+    QUADRANT_SUPPLY_RISK,
+    QUADRANT_DORMANT_STOCK,
+    QUADRANT_EXCESS_STOCK_RISK,
+    QUADRANT_NORMAL_FLOW,
+)
+#: 流動区分キー（ASCII）の辞書順。ランク順とは別物であることを D-106 で確かめる。
+QUADRANTS_IN_KEY_ORDER = (
+    QUADRANT_DORMANT_STOCK,
+    QUADRANT_EXCESS_STOCK_RISK,
+    QUADRANT_NORMAL_FLOW,
+    QUADRANT_SUPPLY_RISK,
+)
+
 
 def _row(**kwargs) -> dict[str, object]:
-    base = {
-        "alert_level": "アラート無し",
+    base: dict[str, object] = {
+        "flow_quadrant": QUADRANT_NORMAL_FLOW,
         "cust_code": "100",
         "cust_name": "A",
         "cust_chrg_psn_cd": "",
@@ -29,10 +59,107 @@ def _row(**kwargs) -> dict[str, object]:
     return base
 
 
+def _quadrant_row(quadrant: str, **kwargs) -> dict[str, object]:
+    return _row(
+        flow_quadrant=quadrant,
+        responsible_department="・".join(responsible_departments(quadrant)),
+        **kwargs,
+    )
+
+
 def _params(**kwargs) -> TableDisplayParams:
     defaults = {"sort_specs": (SortSpec(DEFAULT_SORT, "asc"),), "page": 1, "page_size": DEFAULT_PAGE_SIZE}
     defaults.update(kwargs)
     return TableDisplayParams(**defaults)
+
+
+def test_sortable_columns_first_entry_is_flow_quadrant():
+    assert SORTABLE_COLUMNS[0] == ("flow_quadrant", "流動区分")
+
+
+def test_sortable_columns_include_responsible_department_after_stock_qty():
+    columns = [column for column, _label in SORTABLE_COLUMNS]
+    stock_index = columns.index("stock_qty")
+
+    assert SORTABLE_COLUMNS[stock_index + 1] == ("responsible_department", "責任部署")
+
+
+def test_sortable_columns_do_not_include_alert_level():
+    columns = [column for column, _label in SORTABLE_COLUMNS]
+
+    assert "alert_level" not in columns
+
+
+def test_default_sort_is_flow_quadrant_ascending():
+    assert DEFAULT_SORT == "flow_quadrant"
+    assert DEFAULT_DIRECTION == "asc"
+
+
+def test_sort_summary_rows_orders_flow_quadrant_by_urgency_rank_ascending():
+    rows = [_quadrant_row(quadrant) for quadrant in QUADRANTS_IN_REVERSE_RANK]
+
+    sorted_rows = sort_rows_legacy(rows, sort="flow_quadrant", direction="asc")
+
+    assert [row["flow_quadrant"] for row in sorted_rows] == list(QUADRANTS_IN_RANK_ORDER)
+
+
+def test_sort_summary_rows_orders_flow_quadrant_descending():
+    rows = [_quadrant_row(quadrant) for quadrant in QUADRANTS_IN_REVERSE_RANK]
+
+    sorted_rows = sort_rows_legacy(rows, sort="flow_quadrant", direction="desc")
+
+    assert [row["flow_quadrant"] for row in sorted_rows] == list(reversed(QUADRANTS_IN_RANK_ORDER))
+
+
+def test_sort_summary_rows_uses_rank_not_label_collation():
+    rows = [_quadrant_row(quadrant) for quadrant in QUADRANTS_IN_REVERSE_RANK]
+
+    sorted_rows = sort_rows_legacy(rows, sort="flow_quadrant", direction="asc")
+
+    assert [row["flow_quadrant"] for row in sorted_rows] != list(QUADRANTS_IN_KEY_ORDER)
+    assert sorted_rows[0]["flow_quadrant"] == QUADRANT_SUPPLY_RISK
+
+
+def test_sort_summary_rows_supports_flow_quadrant_in_five_key_multi_sort():
+    rows = [
+        _quadrant_row(QUADRANT_SUPPLY_RISK, cust_code="100", item_cd="A", post_shipment_count=5, stock_qty="10"),
+        _quadrant_row(QUADRANT_SUPPLY_RISK, cust_code="100", item_cd="A", post_shipment_count=5, stock_qty="20"),
+        _quadrant_row(QUADRANT_SUPPLY_RISK, cust_code="100", item_cd="A", post_shipment_count=9, stock_qty="1"),
+        _quadrant_row(QUADRANT_SUPPLY_RISK, cust_code="100", item_cd="B", post_shipment_count=1, stock_qty="1"),
+        _quadrant_row(QUADRANT_SUPPLY_RISK, cust_code="200", item_cd="A", post_shipment_count=1, stock_qty="1"),
+        _quadrant_row(QUADRANT_NORMAL_FLOW, cust_code="100", item_cd="A", post_shipment_count=1, stock_qty="1"),
+    ]
+
+    sorted_rows = sort_rows(
+        rows,
+        sort_specs=(
+            SortSpec("flow_quadrant", "asc"),
+            SortSpec("cust_code", "asc"),
+            SortSpec("item_cd", "asc"),
+            SortSpec("post_shipment_count", "desc"),
+            SortSpec("stock_qty", "desc"),
+        ),
+    )
+
+    assert [
+        (row["flow_quadrant"], row["cust_code"], row["item_cd"], row["post_shipment_count"], row["stock_qty"])
+        for row in sorted_rows
+    ] == [
+        (QUADRANT_SUPPLY_RISK, "100", "A", 9, "1"),
+        (QUADRANT_SUPPLY_RISK, "100", "A", 5, "20"),
+        (QUADRANT_SUPPLY_RISK, "100", "A", 5, "10"),
+        (QUADRANT_SUPPLY_RISK, "100", "B", 1, "1"),
+        (QUADRANT_SUPPLY_RISK, "200", "A", 1, "1"),
+        (QUADRANT_NORMAL_FLOW, "100", "A", 1, "1"),
+    ]
+
+
+def test_sort_summary_rows_orders_responsible_department_by_flow_quadrant_rank():
+    rows = [_quadrant_row(quadrant) for quadrant in QUADRANTS_IN_REVERSE_RANK]
+
+    sorted_rows = sort_rows_legacy(rows, sort="responsible_department", direction="asc")
+
+    assert [row["flow_quadrant"] for row in sorted_rows] == list(QUADRANTS_IN_RANK_ORDER)
 
 
 def test_parse_table_display_params_defaults():
@@ -127,23 +254,23 @@ def test_sort_rows_by_last_incoming_date_puts_empty_last_in_desc():
 
 def test_apply_table_display_sorts_then_paginates():
     rows = [
-        _row(alert_level="アラート無し", post_shipment_total_qty=1),
-        _row(alert_level="重点", post_shipment_total_qty=99),
-        _row(alert_level="警告（出荷あり）", post_shipment_total_qty=50),
+        _quadrant_row(QUADRANT_NORMAL_FLOW, post_shipment_total_qty=1),
+        _quadrant_row(QUADRANT_SUPPLY_RISK, post_shipment_total_qty=99),
+        _quadrant_row(QUADRANT_DORMANT_STOCK, post_shipment_total_qty=50),
     ]
-    params = _params(sort_specs=(SortSpec("alert_level", "asc"),), page=1, page_size=2)
+    params = _params(sort_specs=(SortSpec("flow_quadrant", "asc"),), page=1, page_size=2)
     paginated = apply_table_display(rows, params)
-    assert [row["alert_level"] for row in paginated.rows] == ["重点", "警告（出荷あり）"]
+    assert [row["flow_quadrant"] for row in paginated.rows] == [QUADRANT_SUPPLY_RISK, QUADRANT_DORMANT_STOCK]
     assert paginated.total_pages == 2
 
 
-def test_sort_rows_by_alert_level_uses_cust_code_and_item_cd_as_tiebreakers():
+def test_sort_rows_by_flow_quadrant_uses_cust_code_and_item_cd_as_tiebreakers():
     rows = [
-        _row(alert_level="重点", cust_code="200", item_cd="ITEM-B"),
-        _row(alert_level="重点", cust_code="100", item_cd="ITEM-B"),
-        _row(alert_level="重点", cust_code="100", item_cd="ITEM-A"),
+        _quadrant_row(QUADRANT_SUPPLY_RISK, cust_code="200", item_cd="ITEM-B"),
+        _quadrant_row(QUADRANT_SUPPLY_RISK, cust_code="100", item_cd="ITEM-B"),
+        _quadrant_row(QUADRANT_SUPPLY_RISK, cust_code="100", item_cd="ITEM-A"),
     ]
-    sorted_rows = sort_rows_legacy(rows, sort="alert_level", direction="asc")
+    sorted_rows = sort_rows_legacy(rows, sort="flow_quadrant", direction="asc")
     assert [row["item_cd"] for row in sorted_rows] == ["ITEM-A", "ITEM-B", "ITEM-B"]
     assert [row["cust_code"] for row in sorted_rows] == ["100", "100", "200"]
 
