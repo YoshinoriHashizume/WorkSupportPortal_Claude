@@ -10,8 +10,8 @@ class SnapshotRowPatchResult:
     item_cd: str
     previous_last_ship_date: str
     new_last_ship_date: str
-    previous_alert_level: str
-    new_alert_level: str
+    previous_flow_quadrant: str
+    new_flow_quadrant: str
     confirmation_reset_count: int
 
 

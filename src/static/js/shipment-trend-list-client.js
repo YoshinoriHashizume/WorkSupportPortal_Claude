@@ -268,7 +268,72 @@
         });
         render();
       },
+      updateRowBaselineMetrics(custCode, itemCd, metrics) {
+        const row = allRows.find(
+          (candidate) =>
+            String(candidate.cust_code || "").trim() === String(custCode || "").trim() &&
+            String(candidate.item_cd || "").trim() === String(itemCd || "").trim(),
+        );
+        if (!row) {
+          return false;
+        }
+        const firstYear = metrics.first_fiscal_year;
+        const isManual = Boolean(metrics.baseline_is_manual);
+        const changeRate =
+          metrics.change_rate_pct === null || metrics.change_rate_pct === undefined
+            ? ""
+            : metrics.change_rate_pct;
+        row.first_fiscal_year = firstYear;
+        row.baseline_is_manual = isManual;
+        row.data_first_fiscal_year = metrics.data_first_fiscal_year ?? row.data_first_fiscal_year;
+        row.first_fy_total = metrics.first_fy_total;
+        row.change_qty = metrics.change_qty;
+        row.change_rate_pct = changeRate;
+        const rateValue = changeRate === "" ? null : Number(changeRate);
+        row.alertRowClass = classifyRow(
+          rateValue,
+          defaults.decreaseThresholdPct,
+          defaults.increaseThresholdPct,
+        );
+        if (!row.display || typeof row.display !== "object") {
+          row.display = {};
+        }
+        row.display.first_fiscal_year = formatBaselineYearLabel(firstYear, isManual);
+        row.display.first_fy_total = formatQuantityLabel(metrics.first_fy_total);
+        row.display.change_qty = formatQuantityLabel(metrics.change_qty);
+        row.display.change_rate_pct = formatChangeRateLabel(changeRate);
+        render();
+        return true;
+      },
     };
+  }
+
+  function formatBaselineYearLabel(value, isManual) {
+    if (value === null || value === undefined || value === "") {
+      return "—";
+    }
+    const label = String(value);
+    return isManual ? `${label}（手動）` : label;
+  }
+
+  function formatQuantityLabel(value) {
+    const number = Number(value || 0);
+    if (!Number.isFinite(number)) {
+      return "0";
+    }
+    return Math.trunc(number).toLocaleString("en-US");
+  }
+
+  function formatChangeRateLabel(value) {
+    if (value === null || value === undefined || value === "") {
+      return "—";
+    }
+    const number = Number(value);
+    if (!Number.isFinite(number)) {
+      return "—";
+    }
+    const sign = number > 0 ? "+" : "";
+    return `${sign}${number.toFixed(2)}%`;
   }
 
   function classifyRow(rate, decreaseThreshold, increaseThreshold) {
@@ -284,5 +349,11 @@
     return "st-row-neutral";
   }
 
-  window.ShipmentTrendListClient = { init: initListClient, classifyRow };
+  window.ShipmentTrendListClient = {
+    init: initListClient,
+    classifyRow,
+    formatBaselineYearLabel,
+    formatQuantityLabel,
+    formatChangeRateLabel,
+  };
 })();

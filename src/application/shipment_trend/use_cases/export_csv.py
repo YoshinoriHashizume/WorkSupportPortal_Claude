@@ -8,7 +8,7 @@ from application.shipment_trend.domain.value_objects.list_filter import (
     build_filter_options,
     parse_list_filter_params,
 )
-from application.shipment_trend.domain.repositories.ports import LoadLatestRows
+from application.shipment_trend.domain.repositories.ports import LoadBaselineOverrides, LoadLatestRows
 from application.shipment_trend.domain.value_objects.trend_metrics import hydrate_rows_metrics
 
 
@@ -19,8 +19,13 @@ class ExportCsvResult:
 
 
 class ExportCsv:
-    def __init__(self, load_summary: LoadLatestRows) -> None:
+    def __init__(
+        self,
+        load_summary: LoadLatestRows,
+        load_baseline_overrides: LoadBaselineOverrides,
+    ) -> None:
         self._load_summary = load_summary
+        self._load_baseline_overrides = load_baseline_overrides
 
     def execute(self, *, query_params: dict[str, str]) -> ExportCsvResult:
         summary = self._load_summary()
@@ -29,7 +34,11 @@ class ExportCsv:
 
         options = build_filter_options(summary.rows)
         filter_params = parse_list_filter_params(query_params, options)
-        hydrated_rows = hydrate_rows_metrics(summary.rows, summary.as_of_date)
+        hydrated_rows = hydrate_rows_metrics(
+            summary.rows,
+            summary.as_of_date,
+            baseline_overrides=self._load_baseline_overrides(),
+        )
         rows = apply_list_filters(hydrated_rows, filter_params)
         as_of_label = summary.as_of_date.strftime("%Y%m%d") if summary.as_of_date else "unknown"
         result = build_csv_export(rows, as_of_date_label=as_of_label)

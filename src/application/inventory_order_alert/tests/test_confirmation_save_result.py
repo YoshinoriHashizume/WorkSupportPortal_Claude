@@ -8,7 +8,11 @@ from django.contrib.auth.models import Group
 
 from application.inventory_order_alert.interfaces.wiring import save_confirmation_usecase
 from application.inventory_order_alert.infrastructure.persistence.summary_snapshot_repository import store_summary_snapshot
-from application.inventory_order_alert.models import ConfirmationStatus, SlimsStockImport
+from application.inventory_order_alert.models import (
+    ConfirmationStatus,
+    InventoryOrderAlertConfirmation,
+    SlimsStockImport,
+)
 from application.portal.models import PortalMenuGroupAccess
 
 
@@ -25,7 +29,6 @@ def _sample_row(**overrides):
     row = {
         "cust_code": "112",
         "item_cd": "ITEM-A",
-        "alert_level": "重点",
         "confirmation_status": "未確認",
         "last_incoming_date": "",
         "last_ship_date": "2026/06/10",
@@ -64,6 +67,29 @@ def test_save_confirmation_usecase_returns_row_class_and_counts(production_user)
     assert result["ok"] is True
     assert result["confirmationStatusKey"] == ConfirmationStatus.CONFIRMED
     assert result["alertRowClass"] == "確認済"
-    assert result["counts"]["critical"] == 1
-    assert result["counts"]["warningIncoming"] == 1
+    assert result["counts"]["supplyRisk"] == 1
+    assert result["counts"]["dormantStock"] == 1
+    assert result["counts"]["attention"] == 2
     assert result["counts"]["unconfirmed"] == 1
+    assert result["counts"]["confirmed"] == 1
+
+
+@pytest.mark.django_db
+def test_save_confirmation_records_flow_quadrant_from_reference_selection(production_user):
+    """一覧で死蔵5年を選択中でも、保存される流動区分は低流動3か月基準（design.md §5.2）。"""
+    import_record = SlimsStockImport.objects.create(file_name="sample.csv", row_count=1)
+    store_summary_snapshot(import_record, [_sample_row()], as_of_date=date(2026, 6, 17))
+
+    save_confirmation_usecase().execute(
+        {
+            "custCode": "112",
+            "itemCd": "ITEM-A",
+            "status": "confirmed",
+            "axis": "dormant",
+            "period": "5",
+        },
+        confirmed_by=production_user.username,
+    )
+
+    confirmation = InventoryOrderAlertConfirmation.objects.get(cust_code="112", item_cd="ITEM-A")
+    assert confirmation.confirmed_flow_quadrant == "供給リスク品"

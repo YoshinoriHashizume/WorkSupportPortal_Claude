@@ -1,0 +1,9 @@
+{
+  "permissions": {
+    "allow": [
+      "PowerShell(Select-String -Path \"src\\\\application\\\\gonenkukumi\\\\interfaces\\\\views.py\" -Pattern '\"ok\"|\"success\"|status=|def api_|JsonResponse' | Select-Object -First 60 | ForEach-Object { \"$\\($_.LineNumber\\): $\\($_.Line.Trim\\(\\)\\)\" })",
+      "PowerShell(docker compose -f docker-compose.devcontainer.yaml ps 2>&1)",
+      "PowerShell(Select-String -Path CLAUDE.md -Pattern \"wiring\\\\.py|\\\\.cursor/rules|inventory_management|HTMX|WeasyPrint|SLIMS\" | ForEach-Object { \"L$\\($_.LineNumber\\): $\\($_.Line.Trim\\(\\)\\)\" })"
+    ]
+  }
+}

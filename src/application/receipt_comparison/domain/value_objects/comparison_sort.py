@@ -12,11 +12,11 @@ COMPARISON_SORT_COLUMNS: dict[str, str] = {
     "mari_date": "売上計上日(MARI)",
     "mari_qty": "売上実績数量(MARI)",
     "delivery_place": "得意先指定納品場所コード",
-    "supplier_item_cd": "品番(取引先)",
-    "supplier_delivery_month_day": "納入月日(取引先)",
-    "supplier_qty": "納入数(取引先)",
-    "supplier_cancel_qty": "キャンセル数(取引先)",
-    "supplier_name": "取引先名",
+    "supplier_item_cd": "品番(受領書)",
+    "supplier_delivery_month_day": "納入月日(受領書)",
+    "supplier_qty": "納入数(受領書)",
+    "supplier_cancel_qty": "キャンセル数(受領書)",
+    "supplier_name": "子取引先名",
     "remarks": "備考",
 }
 

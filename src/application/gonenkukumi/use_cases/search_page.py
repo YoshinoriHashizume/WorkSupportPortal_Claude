@@ -4,7 +4,7 @@ from collections.abc import Mapping
 from dataclasses import dataclass
 from datetime import date
 
-from application.gonenkukumi.domain.value_objects.errors import OracleNotConfiguredError, OracleQueryError
+from application.sales.domain.value_objects.errors import OracleNotConfiguredError, OracleQueryError
 from application.gonenkukumi.domain.repositories.ports import GonenKukumiHistoryRepository, GonenKukumiSearchGateway
 
 

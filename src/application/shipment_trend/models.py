@@ -52,3 +52,29 @@ class ShipmentTrendSummarySnapshot(models.Model):
     class Meta:
         verbose_name = "出荷トレンド集計スナップショット"
         verbose_name_plural = "出荷トレンド集計スナップショット"
+
+
+class ShipmentTrendBaselineYear(models.Model):
+    """得意先×内作品番ごとの比較基準年オーバーライド（全ユーザー共通）。"""
+
+    cust_code = models.CharField(max_length=32)
+    item_cd = models.CharField(max_length=64)
+    baseline_fiscal_year = models.PositiveIntegerField()
+    updated_at = models.DateTimeField(auto_now=True)
+    updated_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="shipment_trend_baseline_year_updates",
+    )
+
+    class Meta:
+        verbose_name = "出荷トレンド比較基準年"
+        verbose_name_plural = "出荷トレンド比較基準年"
+        constraints = [
+            models.UniqueConstraint(
+                fields=["cust_code", "item_cd"],
+                name="shipment_trend_baseline_cust_item_uniq",
+            ),
+        ]

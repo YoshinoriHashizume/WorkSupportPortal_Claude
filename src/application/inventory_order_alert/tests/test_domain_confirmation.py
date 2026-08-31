@@ -7,11 +7,28 @@ from application.inventory_order_alert.domain.value_objects.confirmation import 
     STATUS_CONFIRMED,
     STATUS_IN_PROGRESS,
     STATUS_UNCONFIRMED,
+    ConfirmationRecord,
     confirmation_label,
     confirmation_status_key,
     confirmation_status_sort_key,
     confirmation_status_sort_rank,
 )
+from application.inventory_order_alert.domain.value_objects.flow_quadrant import QUADRANT_SUPPLY_RISK
+
+
+def test_confirmation_record_has_confirmed_flow_quadrant_field():
+    record = ConfirmationRecord(
+        cust_code="112",
+        item_cd="90249-10112",
+        status=STATUS_CONFIRMED,
+        memo="",
+        confirmed_flow_quadrant=QUADRANT_SUPPLY_RISK,
+        confirmed_at=None,
+        confirmed_by="10001",
+    )
+
+    assert record.confirmed_flow_quadrant == QUADRANT_SUPPLY_RISK
+    assert not hasattr(record, "confirmed_alert_level")
 
 
 def test_confirmation_label_returns_japanese_label():

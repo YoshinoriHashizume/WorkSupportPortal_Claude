@@ -99,6 +99,12 @@ MENU_ITEMS = [
         href="/app/management/database",
         group_key="management",
     ),
+    PortalMenuItem(
+        key="usage-status",
+        title="利用状況",
+        href="/app/management/usage-status",
+        group_key="management",
+    ),
 ]
 
 

@@ -63,14 +63,14 @@ def test_save_confirmation_upserts_and_sets_confirmed_metadata(production_user):
             status=ConfirmationStatus.CONFIRMED,
         ),
         confirmed_by=production_user.username,
-        alert_level="アラート無し",
+        flow_quadrant="通常流動品",
     )
 
     confirmation = InventoryOrderAlertConfirmation.objects.get(cust_code="112", item_cd="ITEM-A")
     assert confirmation.status == ConfirmationStatus.CONFIRMED
     assert confirmation.confirmed_by == "10002"
     assert confirmation.confirmed_at is not None
-    assert confirmation.confirmed_alert_level == "アラート無し"
+    assert confirmation.confirmed_flow_quadrant == "通常流動品"
 
 
 @pytest.mark.django_db
@@ -103,7 +103,7 @@ def test_save_confirmation_preserves_existing_memo(production_user):
     assert confirmation.memo == "旧メモ"
     assert confirmation.confirmed_by == ""
     assert confirmation.confirmed_at is None
-    assert confirmation.confirmed_alert_level == ""
+    assert confirmation.confirmed_flow_quadrant == ""
 
 
 @pytest.mark.django_db

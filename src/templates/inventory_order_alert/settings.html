@@ -1,0 +1,87 @@
+{% extends "base.html" %}
+{% block title %}在庫発注アラート 設定{% endblock %}
+{% block body_class %}inventory-order-alert-settings-page{% endblock %}
+{% block content %}
+<section class="ioa-settings">
+  <div class="portal-section-head">
+    <div>
+      <h1>在庫発注アラート 設定</h1>
+      <p class="portal-page-description">SLIMS 取込の警告日数を設定します。変更は一覧・ダッシュボード帯に即時反映されます。流動区分の判定条件は一覧画面で切り替えます。</p>
+    </div>
+    <a class="button secondary-button" href="{% url 'inventory_order_alert:list_page' %}">一覧へ戻る</a>
+  </div>
+
+  <p class="error ioa-settings-error" id="ioa-settings-error" hidden></p>
+
+  <form class="card ioa-settings-form" id="ioa-settings-form">
+    <div class="ioa-settings-grid">
+      <label class="ioa-settings-field">
+        <span>警告アラート閾値（日数）</span>
+        <input type="number" id="ioa-setting-warning-days" name="warningDays"
+               min="1" max="3650" step="1" value="{{ warning_days }}" required>
+        <small>1〜3650 の範囲で指定します。</small>
+      </label>
+
+      <label class="ioa-settings-field">
+        <span>SLIMS 取込警告日数</span>
+        <input type="number" id="ioa-setting-stock-stale-days" name="stockStaleDays"
+               min="1" max="365" step="1" value="{{ stock_stale_days }}" required>
+        <small>最終取込からこの日数を超えると警告バナーを表示します（1〜365）。</small>
+      </label>
+    </div>
+
+    <div class="ioa-settings-actions">
+      <button type="submit" id="ioa-settings-save">保存</button>
+    </div>
+  </form>
+</section>
+
+<script>
+  (function () {
+    const form = document.getElementById("ioa-settings-form");
+    const saveButton = document.getElementById("ioa-settings-save");
+    const errorBox = document.getElementById("ioa-settings-error");
+    if (!form || !saveButton || !errorBox) {
+      return;
+    }
+
+    function showError(message) {
+      errorBox.textContent = message;
+      errorBox.hidden = false;
+    }
+
+    async function put(url, body) {
+      const response = await fetch(url, {
+        method: "PUT",
+        headers: {
+          "Content-Type": "application/json",
+          "X-CSRFToken": window.portalCsrfToken || "",
+        },
+        body: JSON.stringify(body),
+      });
+      const payload = await response.json().catch(() => ({}));
+      if (!response.ok || !payload.ok) {
+        throw new Error(payload.message || "設定の保存に失敗しました。");
+      }
+      return payload;
+    }
+
+    form.addEventListener("submit", async (event) => {
+      event.preventDefault();
+      errorBox.hidden = true;
+      saveButton.disabled = true;
+      try {
+        await put("/api/inventory-order-alert/settings", {
+          warningDays: Number(document.getElementById("ioa-setting-warning-days").value),
+          stockStaleDays: Number(document.getElementById("ioa-setting-stock-stale-days").value),
+        });
+        window.location.reload();
+      } catch (error) {
+        showError(error.message || "設定の保存に失敗しました。");
+      } finally {
+        saveButton.disabled = false;
+      }
+    });
+  })();
+</script>
+{% endblock %}

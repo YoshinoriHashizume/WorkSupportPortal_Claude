@@ -5,7 +5,7 @@ from datetime import date
 
 from django.http import HttpRequest
 
-from application.receipt_comparison.domain.value_objects.comparison import ComparisonRow
+from application.receipt_comparison.domain.entities.comparison_row import ComparisonRow
 from application.receipt_comparison.domain.value_objects.comparison_display import (
     comparison_row_from_dict,
     comparison_row_to_dict,

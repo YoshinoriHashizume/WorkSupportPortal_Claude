@@ -23,15 +23,6 @@ def _grant_menu_groups(user: object) -> int:
     return granted
 
 
-def _ensure_ioa_settings_row() -> None:
-    try:
-        from application.inventory_order_alert.models import InventoryOrderAlertSettings
-
-        InventoryOrderAlertSettings.objects.get_or_create(pk=1)
-    except Exception:
-        pass
-
-
 def run_bootstrap_local_dev(config: BootstrapLocalDevConfig) -> BootstrapUserResult:
     User = get_user_model()
     admin_group, _ = Group.objects.get_or_create(name=ADMIN_GROUP_NAME)
@@ -50,7 +41,6 @@ def run_bootstrap_local_dev(config: BootstrapLocalDevConfig) -> BootstrapUserRes
     access_request.save(update_fields=["status", "reviewed_at"])
 
     granted = _grant_menu_groups(user)
-    _ensure_ioa_settings_row()
     return BootstrapUserResult(created=created, username=config.username, menu_groups_granted=granted)
 
 
@@ -72,5 +62,4 @@ def run_bootstrap_production_admin(config: BootstrapProductionAdminConfig) -> Bo
     access_request.save(update_fields=["status", "reviewed_at"])
 
     granted = _grant_menu_groups(user)
-    _ensure_ioa_settings_row()
     return BootstrapUserResult(created=created, username=config.username, menu_groups_granted=granted)

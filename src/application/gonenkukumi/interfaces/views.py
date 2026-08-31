@@ -11,11 +11,8 @@ from django.views.decorators.http import require_GET, require_POST
 
 from application.portal.interfaces.favorites import favorite_keys_for_user
 
-from application.gonenkukumi.domain.value_objects.errors import (
-    OracleNotConfiguredError,
-    OracleQueryError,
-    oracle_error_message,
-)
+from application.gonenkukumi.domain.value_objects.errors import oracle_error_message
+from application.sales.domain.value_objects.errors import OracleNotConfiguredError, OracleQueryError
 from application.gonenkukumi.interfaces.wiring import (
     export_excel_usecase,
     list_cust_items_usecase,

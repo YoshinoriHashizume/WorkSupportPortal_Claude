@@ -6,21 +6,36 @@ class DesknetAccessKeyMissingError(DesknetApiError):
     pass
 
 
-class DesknetServiceAuthError(DesknetApiError):
-    """サービス連携アカウントでの desknet's 認証に失敗した。"""
+class DesknetAccessKeyExpiredError(DesknetApiError):
+    """desknet's がアクセスキーを拒否した(HTTP 401 / 403)。
+
+    アプリの参照権限不足(HTTP 200 + W10008)とは別で、認証そのものが通っていない状態。
+    アクセスキーはログイン時に取得したものを使うため、再ログインでしか復旧できない。
+    """
 
 
-def format_desknet_user_error_message(message: str, *, has_service_account: bool = False) -> str:
+#: セッションにアクセスキーが無いときに利用者へ出す文言。
+MISSING_KEY_ERROR_MESSAGE = "desknet's のアクセスキーがありません。再ログインしてください。"
+
+#: ログイン時に取得したアクセスキーが失効したときに利用者へ出す文言。
+SESSION_EXPIRED_MESSAGE = (
+    "desknet's とのセッションが切れました。お手数ですが、もう一度ログインしてください。"
+)
+
+#: desknet's 側の棚卸関連アプリに参照権限がないときに利用者へ出す文言。
+NO_APP_PERMISSION_MESSAGE = (
+    "desknet's の棚卸関連アプリにアクセス権がありません。"
+    "閲覧が必要な場合は、システムグループへ desknet's のアクセス権付与をご依頼ください。"
+)
+
+
+def format_desknet_user_error_message(message: str) -> str:
+    """desknet's が返したエラーメッセージを利用者向けの文言に直す。
+
+    参照権限がない場合(W10008)は、desknet's の生メッセージではなく
+    誰に何を依頼すればよいかが分かる文言に差し替える。
+    """
     text = (message or "").strip()
     if "W10008" in text or "アクセス権がありません" in text:
-        if has_service_account:
-            return (
-                "desknet's の棚卸データ取得に失敗しました。"
-                "サービス連携アカウント（DESKNETS_ASSET_INVENTORY_LOGIN_ID）の参照権限を管理者にご確認ください。"
-            )
-        return (
-            "desknet's の棚卸関連アプリに参照権限がありません。"
-            "ポータルの総務権限とは別に、desknet's 側のアプリ参照権限が必要です。"
-            "管理者へ desknet's の権限設定、またはポータルのサービス連携アカウント設定を依頼してください。"
-        )
+        return NO_APP_PERMISSION_MESSAGE
     return text

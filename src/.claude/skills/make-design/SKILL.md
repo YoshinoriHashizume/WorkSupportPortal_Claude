@@ -34,9 +34,11 @@ Step 3: アーキテクチャreferenceを読み取る（バージョンチェッ
   ↓
 Step 4: 機能設計書を作成する
   ↓
-Step 5: ユーザーに確認する
+Step 5: 自己レビューと改善を3回繰り返す
   ↓
-Step 6: ファイルとして保存する
+Step 6: ユーザーに確認する
+  ↓
+Step 7: ファイルとして保存する
 ```
 
 ## Step 1: 要件定義書の読み取り
@@ -44,7 +46,7 @@ Step 6: ファイルとして保存する
 $ARGUMENTS
 
 - ファイルパスが指定されている場合は Read ツールで読み取る
-- 指定がない場合は `application/{app_name}/docs/specs/` 配下を Glob で探し、ユーザーに確認する
+- 指定がない場合は `application/{app_name}/docs/spec/` 配下を Glob で探し、ユーザーに確認する
 - **要件定義書が承認済みであることを確認する**。未承認の場合は「要件定義書が承認されていません。先に承認を得てください」と案内する
 
 ## Step 2: 関連文書の読み取り
@@ -79,7 +81,7 @@ CLAUDE.mdのセクション1（Project Overview）の技術スタックテーブ
 以下のスキルに同名のreferenceが存在する場合、Read ツールで先頭のメタデータのみを確認する:
 
 - `design-review-l1/references/{同名ファイル}`
-- `design-review-l3/references/{同名ファイル}`
+- `implement-review-l1/references/{同名ファイル}`
 
 **チェック項目:**
 - version が一致しているか
@@ -95,9 +97,9 @@ CLAUDE.mdのセクション1（Project Overview）の技術スタックテーブ
 ⚠️ アーキテクチャreferenceのバージョンが不一致です。
 設計と設計レビューで異なる基準が使われる可能性があります。
 
-  make-design:      version {v1}, updated {d1}
-  design-review-l1: version {v2}, updated {d2}
-  design-review-l3: version {v3}, updated {d3}
+  make-design:        version {v1}, updated {d1}
+  design-review-l1:   version {v2}, updated {d2}
+  implement-review-l1: version {v3}, updated {d3}
 
 referenceを同期してから設計を進めることを推奨します。
 このまま続行しますか？
@@ -168,16 +170,33 @@ referenceを同期してから設計を進めることを推奨します。
   - ビジネスルールはドメインモデル内に配置
 - `strategic_design.md` のコンテキスト境界を守る
 
-## Step 5: ユーザーへの確認
+## Step 5: 自己レビューと改善（3回反復）
+
+ユーザーに提示する前に、以下のレビューと改善を **3回繰り返す**。
+各回で観点をチェックし、問題があればその場で設計書を修正する。
+
+- 1回目: 整合性 — 要件定義書の全要件が設計でカバーされているか、strategic_design.md の
+  コンテキスト境界を越えていないか、ユビキタス言語と用語が一致しているか
+- 2回目: アーキテクチャ — referenceのレイヤー配置に従っているか、依存方向
+  （interfaces → use_cases → domain ← infrastructure）が守られているか、
+  domain/use_cases にフレームワーク依存が混入していないか
+- 3回目: 実現可能性 — ドメインモデル（エンティティ/VO/集約境界）が妥当か、
+  データモデルとの対応が取れているか、異常系・エラーハンドリングに漏れがないか、
+  既存コードへの変更点が具体的に列挙されているか
+
+各回の改善内容は簡潔に記録し、Step 6でユーザーに「3回の自己レビューで何を改善したか」を
+添えて提示する。
+
+## Step 6: ユーザーへの確認
 
 設計書全文をユーザーに提示し、承認を求める。
 
-## Step 6: ファイルの保存
+## Step 7: ファイルの保存
 
 承認後、以下のパスに保存する:
 
 ```
-application/{app_name}/docs/specs/{feature-name}/design.md
+application/{app_name}/docs/spec/{feature-name}/design.md
 ```
 
 保存後、「テスト設計書（test-design.md）の作成に進みますか？」と案内する。

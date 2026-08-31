@@ -59,10 +59,10 @@ def parse_args() -> argparse.Namespace:
         help="SLIMS 在庫 CSV パス（任意）",
     )
     parser.add_argument(
-        "--alert-only",
+        "--attention-only",
         action=argparse.BooleanOptionalAction,
         default=True,
-        help="アラート行のみ出力（既定: true）",
+        help="対応が要る流動区分の行のみ出力（通常流動品を除く。既定: true）",
     )
     return parser.parse_args()
 
@@ -84,7 +84,7 @@ def main() -> int:
     summary_path = output_dir / f"{timestamp}_inventory_order_alert.csv"
 
     slims_text = read_csv_text(Path(args.slims_csv)) if args.slims_csv else None
-    query = ListQuery(as_of_date=as_of_date, alert_only=args.alert_only)
+    query = ListQuery(as_of_date=as_of_date, attention_only=args.attention_only)
 
     try:
         with oracle_connection() as connection:

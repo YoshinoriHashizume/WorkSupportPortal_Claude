@@ -11,8 +11,8 @@ CSV_BASE_COLUMNS: tuple[tuple[str, str], ...] = (
     ("cust_chrg_psn_cd", "担当者コード"),
     ("cust_code", "得意先コード"),
     ("cust_name", "得意先名"),
-    ("item_cd", "得意先品番"),
-    ("first_fiscal_year", "初年度"),
+    ("item_cd", "内作品番"),
+    ("first_fiscal_year", "比較基準年"),
     ("change_rate_pct", "変動率"),
     ("change_qty", "変動数"),
 )

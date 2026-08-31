@@ -7,18 +7,30 @@ from django.http import HttpRequest, HttpResponse, JsonResponse
 from django.shortcuts import render
 from django.views.decorators.http import require_GET, require_http_methods
 
-from application.portal.interfaces.favorites import is_menu_favorited, page_favorite_toggle_context
+from application.portal.interfaces.favorites import page_favorite_toggle_context
 from application.shipment_trend.interfaces.wiring import (
     chart_data_usecase,
+    delete_baseline_year_usecase,
     export_csv_usecase,
     list_page_usecase,
     save_alert_settings_usecase,
+    save_baseline_year_usecase,
 )
 from application.shipment_trend.domain.value_objects.list_filter import visible_cust_options
 
 
 def _query_params(request: HttpRequest) -> dict[str, str]:
     return {key: values[-1] for key, values in request.GET.lists() if values}
+
+
+def _json_body(request: HttpRequest) -> dict[str, object]:
+    try:
+        payload = json.loads(request.body.decode("utf-8"))
+    except (json.JSONDecodeError, UnicodeDecodeError) as exc:
+        raise ValueError("JSON の形式が不正です。") from exc
+    if not isinstance(payload, dict):
+        raise ValueError("JSON の形式が不正です。")
+    return payload
 
 
 @login_required
@@ -83,9 +95,9 @@ def api_chart_data(request: HttpRequest) -> JsonResponse:
 @require_http_methods(["PUT"])
 def api_save_alert_settings(request: HttpRequest) -> JsonResponse:
     try:
-        payload = json.loads(request.body.decode("utf-8"))
-    except (json.JSONDecodeError, UnicodeDecodeError):
-        return JsonResponse({"ok": False, "message": "JSON の形式が不正です。"}, status=400)
+        payload = _json_body(request)
+    except ValueError as exc:
+        return JsonResponse({"ok": False, "message": str(exc)}, status=400)
 
     try:
         settings = save_alert_settings_usecase().execute(payload, updated_by=request.user)
@@ -99,6 +111,49 @@ def api_save_alert_settings(request: HttpRequest) -> JsonResponse:
             "increaseThresholdPct": settings.increase_threshold_pct,
         }
     )
+
+
+@login_required
+@require_http_methods(["PUT", "DELETE"])
+def api_baseline_year(request: HttpRequest) -> JsonResponse:
+    try:
+        payload = _json_body(request)
+        cust_code = str(payload.get("custCode") or "")
+        item_cd = str(payload.get("itemCd") or "")
+        if request.method == "PUT":
+            baseline_year = payload.get("baselineYear")
+            if baseline_year is None or baseline_year == "":
+                raise ValueError("baselineYear を指定してください。")
+            try:
+                year_int = int(baseline_year)
+            except (TypeError, ValueError) as exc:
+                raise ValueError("baselineYear は整数で指定してください。") from exc
+            result = save_baseline_year_usecase().execute(
+                cust_code=cust_code,
+                item_cd=item_cd,
+                baseline_fiscal_year=year_int,
+                updated_by=request.user,
+            )
+            return JsonResponse(
+                {
+                    "ok": True,
+                    "custCode": result.cust_code,
+                    "itemCd": result.item_cd,
+                    "baselineYear": result.baseline_fiscal_year,
+                    "dataFirstFiscalYear": result.data_first_fiscal_year,
+                }
+            )
+        result = delete_baseline_year_usecase().execute(cust_code=cust_code, item_cd=item_cd)
+        return JsonResponse(
+            {
+                "ok": True,
+                "custCode": result.cust_code,
+                "itemCd": result.item_cd,
+                "deleted": result.deleted,
+            }
+        )
+    except ValueError as exc:
+        return JsonResponse({"ok": False, "message": str(exc)}, status=400)
 
 
 @login_required

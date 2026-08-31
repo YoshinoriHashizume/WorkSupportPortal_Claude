@@ -22,7 +22,7 @@ def test_TC_AIV_DOM_07B_fetch_reconcile_source_data_requests_acquisition_date_in
         asset_app_id="415",
         inventory_app_id="inv",
     )
-    assets, inventory, sites = fetch_reconcile_source_data(list_all, "key", management_row)
+    assets, inventory, sites, site_warning = fetch_reconcile_source_data(list_all, "key", management_row)
 
     assert calls[0] == ASSET_FIELDS
     assert calls[1] == INVENTORY_FIELDS
@@ -30,3 +30,4 @@ def test_TC_AIV_DOM_07B_fetch_reconcile_source_data_requests_acquisition_date_in
     assert assets[0]["取得日付"] == "2026-03-01"
     assert inventory == []
     assert sites == []
+    assert site_warning == ""

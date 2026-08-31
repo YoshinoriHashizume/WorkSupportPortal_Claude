@@ -116,10 +116,10 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 |---------|--------|------|
 | 0: 壁打ち | 整理メモ（5W1H + 制約） | 不要 |
 | 1: ユビキタス言語整理 | `application/{app_name}/docs/ubiquitous_language.md` 更新 | **必要** |
-| 2: 要件定義書 | `application/{app_name}/docs/specs/{feature}/requirements.md` | **必要** |
+| 2: 要件定義書 | `application/{app_name}/docs/spec/{feature}/requirements.md` | **必要** |
 | 2.5: Design Level Event Storming | イベントフロー図（オプション） | **必要**（実施する場合） |
-| 3: 設計書 | `application/{app_name}/docs/specs/{feature}/design.md` + `test-design.md` | **必要** |
-| 4: タスク分解 | `application/{app_name}/docs/specs/{feature}/tasks.md` | **必要** |
+| 3: 設計書 | `application/{app_name}/docs/spec/{feature}/design.md` + `test-design.md` | **必要** |
+| 4: タスク分解 | `application/{app_name}/docs/spec/{feature}/tasks.md` | **必要** |
 | 5: 実装 | コード + テスト | タスクごとに確認・報告 |
 
 **各フェーズの承認が得られるまで次のフェーズに進んではならない。**
@@ -195,7 +195,7 @@ docs/                                              # プロジェクト全体
 
 application/{app_name}/docs/                       # アプリケーション（コンテキスト）ごと
 ├── ubiquitous_language.md                         # ユビキタス言語（コンテキスト固有）
-└── specs/{feature-name}/
+└── spec/{feature-name}/
     ├── requirements.md                            # 要件定義書（問題空間: WHAT）
     ├── design.md                                  # 機能設計書（解決空間: HOW）
     ├── test-design.md                             # テスト設計書（テスト戦略・テストケース）
@@ -212,7 +212,7 @@ application/{app_name}/docs/                       # アプリケーション（
 ### タスクファイルの配置
 
 ```
-application/{app_name}/docs/specs/{feature-name}/tasks.md
+application/{app_name}/docs/spec/{feature-name}/tasks.md
 ```
 
 ※ タスクは必ず仕様書と同じディレクトリに置く。

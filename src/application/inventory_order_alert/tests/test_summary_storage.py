@@ -30,9 +30,16 @@ def _sample_row() -> dict[str, object]:
         "stock_location_summary": "2D0-03-5",
         "stock_location_detail": "2D0-03-5=100",
         "stock_as_of_label": "2026年6月17日時点の在庫",
-        "alert_level": "重点",
+        "mari_stock_qty": 95,
         "confirmation_status": "未確認",
     }
+
+
+def _legacy_row() -> dict[str, object]:
+    """本機能の導入前に作られたスナップショットの行（MARI 在庫のキーが無い）。"""
+    row = _sample_row()
+    del row["mari_stock_qty"]
+    return row
 
 
 @pytest.mark.django_db
@@ -51,10 +58,63 @@ def test_store_and_load_latest_summary():
     assert summary is not None
     assert summary.total_count == 1
     assert summary.critical_count == 1
-    assert summary.rows[0]["alert_level"] == "重点"
+    assert summary.rows[0]["flow_quadrant"] == "供給リスク品"
     assert summary.rows[0]["item_cd"] == "43522-D1020-00"
     assert summary.stock_info is not None
     assert summary.stock_info.file_name == "sample.csv"
+
+
+@pytest.mark.django_db
+def test_snapshot_roundtrip_keeps_mari_stock_qty():
+    import_record = SlimsStockImport.objects.create(file_name="sample.csv", row_count=1)
+    store_summary_snapshot(import_record, [_sample_row()], as_of_date=date(2026, 6, 17))
+
+    summary = load_latest_summary()
+
+    assert summary.rows[0]["mari_stock_qty"] == 95
+
+
+@pytest.mark.django_db
+def test_snapshot_roundtrip_keeps_zero_mari_stock_qty():
+    import_record = SlimsStockImport.objects.create(file_name="sample.csv", row_count=1)
+    store_summary_snapshot(
+        import_record, [_sample_row() | {"mari_stock_qty": 0}], as_of_date=date(2026, 6, 17)
+    )
+
+    summary = load_latest_summary()
+
+    # 在庫 0 は空にしない
+    assert summary.rows[0]["mari_stock_qty"] == 0
+
+
+@pytest.mark.django_db
+def test_legacy_snapshot_row_has_no_mari_stock_key():
+    import_record = SlimsStockImport.objects.create(file_name="sample.csv", row_count=1)
+    store_summary_snapshot(import_record, [_legacy_row()], as_of_date=date(2026, 6, 17))
+
+    summary = load_latest_summary()
+
+    # キーを作らないことで「未取得」を保つ。None や空で埋めると「該当なし」と区別できなくなる
+    assert "mari_stock_qty" not in summary.rows[0]
+
+
+@pytest.mark.django_db
+def test_legacy_snapshot_does_not_raise_on_load():
+    import_record = SlimsStockImport.objects.create(file_name="sample.csv", row_count=1)
+    store_summary_snapshot(import_record, [_legacy_row()], as_of_date=date(2026, 6, 17))
+
+    summary = load_latest_summary()
+
+    assert summary is not None
+    assert summary.rows[0]["item_cd"] == "43522-D1020-00"
+
+
+@pytest.mark.django_db
+def test_snapshot_schema_has_no_new_column():
+    columns = {field.name for field in InventoryOrderAlertSummarySnapshot._meta.get_fields()}
+
+    # MARI 在庫は rows(JSONField) の要素に持たせる。カラムは増やさない
+    assert "mari_stock_qty" not in columns
 
 
 @pytest.mark.django_db

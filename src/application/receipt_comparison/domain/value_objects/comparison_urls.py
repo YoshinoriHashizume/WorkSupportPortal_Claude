@@ -22,6 +22,20 @@ def parse_date(value: object) -> date | None:
         return None
 
 
+INVALID_DATE_RANGE_MESSAGE = "開始日は終了日以前を指定してください。"
+
+
+def date_range_error(start_date: date, end_date: date) -> str | None:
+    """比較日の妥当性を検証する。開始日 > 終了日 ならエラーメッセージを返す。
+
+    比較画面・CSV 出力で共通の規則とし、日付の自動入れ替えは行わない
+    （利用者が意図しない期間の帳票を気づかず出力するのを防ぐため）。
+    """
+    if start_date > end_date:
+        return INVALID_DATE_RANGE_MESSAGE
+    return None
+
+
 def is_fixed_digit_code(value: object, length: int) -> bool:
     text = str(value or "").strip()
     return len(text) == length and text.isdigit()

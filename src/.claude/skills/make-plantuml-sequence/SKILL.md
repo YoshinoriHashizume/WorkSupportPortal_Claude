@@ -34,7 +34,7 @@ Step 5: ファイルとして保存
 $ARGUMENTS
 
 - ファイルパスが指定されている場合は Read ツールで読み取る
-- 処理名が指定されている場合は、対応する設計書を `application/{app_name}/docs/specs/` 配下から探す
+- 処理名が指定されている場合は、対応する設計書を `application/{app_name}/docs/spec/` 配下から探す
 - 指定がない場合はユーザーに「どの処理のシーケンス図を作成しますか？」と質問する
 
 以下の関連文書も読み取る:
@@ -183,7 +183,7 @@ note right of repo : DBトランザクション内で実行
 承認後、以下のパスに保存する:
 
 ```
-application/{app_name}/docs/specs/{feature-name}/{diagram-name}.puml
+application/{app_name}/docs/spec/{feature-name}/{diagram-name}.puml
 ```
 
 ファイル名の例:

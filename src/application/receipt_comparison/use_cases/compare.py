@@ -3,7 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from datetime import date
 
-from application.gonenkukumi.domain.value_objects.errors import OracleNotConfiguredError, OracleQueryError
+from application.sales.domain.value_objects.errors import OracleNotConfiguredError, OracleQueryError
 from application.receipt_comparison.domain.value_objects.comparison import compare_receipts
 from application.receipt_comparison.domain.value_objects.comparison_sort import default_sort_params
 from application.receipt_comparison.domain.value_objects.comparison_type import SUPPLIED_PARTS

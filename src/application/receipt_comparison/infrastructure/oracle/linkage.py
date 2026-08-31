@@ -71,7 +71,7 @@ def get_customer_vendor_link(customer_code: str) -> dict[str, str]:
     except (OracleNotConfiguredError, OracleQueryError):
         raise
     except Exception as exc:
-        raise OracleQueryError("客先と取引先の紐づけ取得に失敗しました。") from exc
+        raise OracleQueryError("得意先と購買取引先の紐づけ取得に失敗しました。") from exc
 
     if not rows:
         return {"customerCode": customer_code, "purchaseVendorCode": "", "vendorName": ""}

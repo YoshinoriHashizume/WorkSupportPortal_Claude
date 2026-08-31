@@ -11,6 +11,12 @@ urlpatterns = [
     path("app/management/notices", views.notice_management, name="notice_management"),
     path("app/management/access-requests", views.access_requests, name="access_requests"),
     path("app/management/users", views.user_management, name="user_management"),
+    path("app/management/usage-status", views.usage_status_page, name="usage_status"),
+    path(
+        "app/management/usage-status/export.csv",
+        views.usage_status_export_csv,
+        name="usage_status_export_csv",
+    ),
     path("app/management/<str:slug>", views.management_page, name="management_page"),
     path("api/favorite-menus", views.favorite_menus, name="favorite_menus"),
     path("api/favorite-menus/order", views.favorite_menu_order, name="favorite_menu_order"),

@@ -21,7 +21,8 @@ def test_parse_optional_ymd_parses_slash_format():
 def test_summary_headers_are_japanese():
     assert SUMMARY_HEADER_LABELS["last_incoming_date"] == "最終入荷日"
     assert SUMMARY_HEADER_LABELS["post_shipment_total_qty"] == "最終入荷日以降の出荷数合計"
-    assert "階層1品番" in SUMMARY_HEADER_LABELS["level1_item_cd"]
+    # 列名は「仕入先品番」が正（機能仕様書 §4.1.3・§7.1.2、テスト仕様書 3.9 で旧称「階層1品番」から改称）
+    assert "仕入先品番" in SUMMARY_HEADER_LABELS["level1_item_cd"]
 
 
 def test_fetch_customer_shipment_stats_after_incoming_date():

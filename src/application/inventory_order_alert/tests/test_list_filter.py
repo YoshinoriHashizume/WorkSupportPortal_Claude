@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from urllib.parse import parse_qs
+
 from application.inventory_order_alert.domain.value_objects.list_filter import (
     FilterOption,
     ListFilterOptions,
@@ -12,7 +14,16 @@ from application.inventory_order_alert.domain.value_objects.list_filter import (
     matches_level1_item_cd_filter,
     parse_list_filter_params,
 )
+from application.inventory_order_alert.domain.value_objects.flow_quadrant import (
+    EvaluationPeriod,
+    FLOW_AXIS_DORMANT,
+    FLOW_AXIS_LOW_FLOW,
+    FlowSelection,
+)
 from application.inventory_order_alert.domain.value_objects.table_display import SortSpec, TableDisplayParams
+
+SELECTION_D5 = FlowSelection(EvaluationPeriod(FLOW_AXIS_DORMANT, 5))
+SELECTION_L3 = FlowSelection(EvaluationPeriod(FLOW_AXIS_LOW_FLOW, 3))
 
 
 def _row(**kwargs) -> dict[str, object]:
@@ -101,7 +112,7 @@ def test_visible_cust_options_filters_by_chrg():
 
 
 def test_build_display_query_string_includes_active_filters():
-    table_params = TableDisplayParams(sort_specs=(SortSpec("alert_level", "asc"),), page=2, page_size=50)
+    table_params = TableDisplayParams(sort_specs=(SortSpec("flow_quadrant", "asc"),), page=2, page_size=50)
     query = build_display_query_string(
         table_params=table_params,
         filter_params=parse_list_filter_params(
@@ -131,13 +142,21 @@ def test_apply_list_filters_item_cd_prefix():
 
 
 def test_apply_list_filters_level1_item_cd_prefix():
+    """仕入先品番は前方一致（機能仕様書 §4.1.3a、TC-IOA-FLT-008）。
+
+    共通の接頭辞 `90249-10112` は両行に一致するため、絞り込みには
+    分岐後まで含めた接頭辞を与える。
+    """
     rows = [
         _row(level1_item_cd="90249-10112-9209"),
         _row(level1_item_cd="90249-10112-9999"),
     ]
-    filtered = apply_list_filters(rows, ListFilterParams(level1_item_cd="90249-10112"))
+    filtered = apply_list_filters(rows, ListFilterParams(level1_item_cd="90249-10112-92"))
     assert len(filtered) == 1
     assert filtered[0]["level1_item_cd"] == "90249-10112-9209"
+
+    # 共通接頭辞では両方が残る（前方一致の仕様どおり）
+    assert len(apply_list_filters(rows, ListFilterParams(level1_item_cd="90249-10112"))) == 2
 
 
 def test_matches_item_cd_filter_prefix_only():
@@ -161,13 +180,72 @@ def test_parse_list_filter_params_item_cd_and_level1():
 
 
 def test_build_display_query_string_includes_prefix_filters():
-    table_params = TableDisplayParams(sort_specs=(SortSpec("alert_level", "asc"),), page=1, page_size=50)
+    table_params = TableDisplayParams(sort_specs=(SortSpec("flow_quadrant", "asc"),), page=1, page_size=50)
     query = build_display_query_string(
         table_params=table_params,
         filter_params=ListFilterParams(item_cd="ITEM-1", level1_item_cd="L1"),
     )
     assert "item_cd=ITEM-1" in query
     assert "level1_item_cd=L1" in query
+
+
+def test_build_display_query_string_includes_axis_period_and_flow_quadrant():
+    table_params = TableDisplayParams(sort_specs=(SortSpec("flow_quadrant", "asc"),), page=1, page_size=50)
+
+    query = build_display_query_string(
+        table_params=table_params,
+        filter_params=ListFilterParams(),
+        flow_selection=SELECTION_D5,
+        flow_quadrant="supply-risk",
+    )
+
+    assert "axis=dormant" in query
+    assert "period=5" in query
+    assert "flow_quadrant=supply-risk" in query
+
+
+def test_build_display_query_string_keeps_selection_when_sort_changes():
+    table_params = TableDisplayParams(sort_specs=(SortSpec("flow_quadrant", "asc"),), page=1, page_size=50)
+
+    query = build_display_query_string(
+        table_params=table_params,
+        filter_params=ListFilterParams(),
+        flow_selection=SELECTION_D5,
+        sort_specs=(SortSpec("item_cd", "desc"),),
+    )
+
+    assert "sort=item_cd" in query
+    assert "axis=dormant" in query
+    assert "period=5" in query
+
+
+def test_build_display_query_string_keeps_selection_when_page_changes():
+    table_params = TableDisplayParams(sort_specs=(SortSpec("flow_quadrant", "asc"),), page=1, page_size=50)
+
+    query = build_display_query_string(
+        table_params=table_params,
+        filter_params=ListFilterParams(),
+        flow_selection=SELECTION_D5,
+        page=3,
+    )
+
+    assert "page=3" in query
+    assert "axis=dormant" in query
+    assert "period=5" in query
+
+
+def test_build_display_query_string_omits_empty_flow_quadrant():
+    table_params = TableDisplayParams(sort_specs=(SortSpec("flow_quadrant", "asc"),), page=1, page_size=50)
+
+    query = build_display_query_string(
+        table_params=table_params,
+        filter_params=ListFilterParams(),
+        flow_selection=SELECTION_L3,
+        flow_quadrant="",
+    )
+
+    # `sort=flow_quadrant` と紛れないよう、クエリを解析してキーの有無で判定する。
+    assert "flow_quadrant" not in parse_qs(query)
 
 
 def test_list_filter_params_from_client_payload():

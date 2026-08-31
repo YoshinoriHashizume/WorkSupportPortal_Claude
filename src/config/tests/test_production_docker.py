@@ -133,7 +133,6 @@ def test_env_production_example_includes_oracle_and_gunicorn_keys():
     for key in (
         "ORACLE_HOST",
         "ORACLE_CONNECT_TIMEOUT_SECONDS",
-        "DESKNETS_ASSET_INVENTORY_LOGIN_ID",
         "GUNICORN_WORKERS",
         "GUNICORN_TIMEOUT_SECONDS",
         "DJANGO_ALLOWED_HOSTS=192.168.3.196",

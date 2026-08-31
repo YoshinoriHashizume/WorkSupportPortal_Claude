@@ -111,6 +111,7 @@ MIDDLEWARE = [
     "django.middleware.csrf.CsrfViewMiddleware",
     "django.contrib.auth.middleware.AuthenticationMiddleware",
     "application.portal.interfaces.middleware.AccessApprovalMiddleware",
+    "application.portal.interfaces.usage_logging.UsageLoggingMiddleware",
     "django.contrib.messages.middleware.MessageMiddleware",
     "django.middleware.clickjacking.XFrameOptionsMiddleware",
 ]
@@ -201,5 +202,3 @@ AUTH_DEV_LAST_NAME = os.environ.get("AUTH_DEV_LAST_NAME", "開発")
 AUTH_DEV_FIRST_NAME = os.environ.get("AUTH_DEV_FIRST_NAME", "管理者")
 DESKNETS_LOGIN_URL = os.environ.get("DESKNETS_LOGIN_URL", "https://maruei01.dn-cloud.com/cgi-bin/dneo/dneo.cgi")
 DESKNETS_TIMEOUT_SECONDS = float(os.environ.get("DESKNETS_TIMEOUT_SECONDS", "10"))
-DESKNETS_ASSET_INVENTORY_LOGIN_ID = os.environ.get("DESKNETS_ASSET_INVENTORY_LOGIN_ID", "").strip()
-DESKNETS_ASSET_INVENTORY_PASSWORD = os.environ.get("DESKNETS_ASSET_INVENTORY_PASSWORD", "")

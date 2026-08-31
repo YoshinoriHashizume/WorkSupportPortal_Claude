@@ -77,7 +77,8 @@ class ConfirmationRecord:
     item_cd: str
     status: str
     memo: str
-    confirmed_alert_level: str
+    #: 確認時点の流動区分（design.md §5.2）。既存データには旧アラートレベルのラベルが入りうる。
+    confirmed_flow_quadrant: str
     confirmed_at: datetime | None
     confirmed_by: str
     memo_history: str = ""

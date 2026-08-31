@@ -60,7 +60,7 @@ def test_excel_export_hides_zero_values_and_keeps_number_format():
     assert sheet.column_dimensions["A"].width >= 10
     assert sheet.column_dimensions["B"].width >= 14
     assert sheet.freeze_panes == "A8"
-    assert sheet["A8"].value == "得意先：得意先A（101） 出荷 得意先品目：ITEM-001 手番：0 安全在庫：0"
+    assert sheet["A8"].value == "得意先：得意先A（101） 出荷 得意先品番：ITEM-001 手番：0 安全在庫：0"
     assert "A8:AH8" in {str(range_ref) for range_ref in sheet.merged_cells.ranges}
     assert sheet["A8"].border.left.style == "medium"
     assert sheet["A8"].border.top.style == "medium"

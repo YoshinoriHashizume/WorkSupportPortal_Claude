@@ -28,8 +28,8 @@ def test_csv_base_columns_item_cd_label():
     from application.shipment_trend.domain.value_objects.export_csv import CSV_BASE_COLUMNS
     from application.shipment_trend.domain.value_objects.table_display import COLUMN_LABELS
 
-    assert dict(CSV_BASE_COLUMNS)["item_cd"] == "得意先品番"
-    assert COLUMN_LABELS["item_cd"] == "得意先品番"
+    assert dict(CSV_BASE_COLUMNS)["item_cd"] == "内作品番"
+    assert COLUMN_LABELS["item_cd"] == "内作品番"
 
 
 def test_build_month_range_spans_global_min_to_max():
@@ -59,9 +59,9 @@ def test_build_csv_export_uses_monthly_columns_instead_of_fy_totals():
     result = build_csv_export(rows, as_of_date_label="2025/06/01")
     lines = result.content.splitlines()
     header = lines[0].lstrip("\ufeff")
-    assert "初年度" in header
+    assert "比較基準年" in header
     assert "変動率" in header
-    assert "初年度出荷合計" not in header
+    assert "基準年出荷合計" not in header
     assert "2025-04" in header
     assert "2025-06" in header
     assert "2025-07" not in header

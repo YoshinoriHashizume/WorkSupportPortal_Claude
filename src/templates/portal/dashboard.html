@@ -39,13 +39,14 @@
         <p>{{ inventory_order_alert_banner.error_message }}</p>
       {% elif inventory_order_alert_banner.has_alerts %}
         <p>
-          重点 <strong>{{ inventory_order_alert_banner.critical }}</strong> 件 /
-          警告（出荷あり） <strong>{{ inventory_order_alert_banner.warning_ship }}</strong> 件 /
-          警告（出荷なし） <strong>{{ inventory_order_alert_banner.warning_incoming }}</strong> 件 /
+          供給リスク品 <strong>{{ inventory_order_alert_banner.supply_risk }}</strong> 件 /
+          在庫死蔵品 <strong>{{ inventory_order_alert_banner.dormant_stock }}</strong> 件 /
+          在庫過剰リスク品 <strong>{{ inventory_order_alert_banner.excess_stock_risk }}</strong> 件 /
           未確認 <strong>{{ inventory_order_alert_banner.unconfirmed }}</strong> 件
         </p>
+        <p class="inventory-order-alert-banner-condition muted">（{{ inventory_order_alert_banner.flow_condition_label }}）</p>
       {% else %}
-        <p>現在、アラート対象はありません。</p>
+        <p>現在、対応が必要な品目はありません。</p>
       {% endif %}
       {% if inventory_order_alert_banner.stock_as_of_label %}
         <p class="inventory-order-alert-banner-stock">{{ inventory_order_alert_banner.stock_as_of_label }}</p>

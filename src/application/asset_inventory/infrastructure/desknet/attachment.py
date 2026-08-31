@@ -3,7 +3,8 @@ from __future__ import annotations
 import urllib.error
 import urllib.request
 
-from application.asset_inventory.domain.value_objects.errors import DesknetApiError
+from application.asset_inventory.domain.value_objects.errors import DesknetAccessKeyExpiredError, DesknetApiError
+from application.asset_inventory.infrastructure.desknet.client import ACCESS_KEY_REJECTED_STATUS_CODES
 
 
 def fetch_attachment_content(
@@ -25,6 +26,10 @@ def fetch_attachment_content(
             content_type = response.headers.get("Content-Type") or "application/octet-stream"
             return response.read(), content_type
     except urllib.error.HTTPError as exc:
+        if exc.code in ACCESS_KEY_REJECTED_STATUS_CODES:
+            raise DesknetAccessKeyExpiredError(
+                f"desknet's がアクセスキーを受け付けませんでした(HTTP {exc.code})。"
+            ) from exc
         raise DesknetApiError(f"desknet's 添付ファイル HTTP エラー: {exc.code}") from exc
     except urllib.error.URLError as exc:
         raise DesknetApiError(f"desknet's 添付ファイル接続エラー: {exc.reason}") from exc

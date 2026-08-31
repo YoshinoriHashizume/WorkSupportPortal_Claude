@@ -16,7 +16,7 @@ logger = logging.getLogger(__name__)
 DAY_NUMBER_PATTERN = re.compile(r"(\d{1,2})")
 
 
-from application.gonenkukumi.domain.value_objects.errors import OracleNotConfiguredError, OracleQueryError
+from application.sales.domain.value_objects.errors import OracleNotConfiguredError, OracleQueryError
 
 
 def use_mock() -> bool:
@@ -233,7 +233,7 @@ def list_cust_items(cust_code: str, keyword: str = "", as_of_date: date | None =
     except Exception as exc:
         if isinstance(exc, OracleNotConfiguredError):
             raise
-        raise OracleQueryError("得意先品目の取得に失敗しました。") from exc
+        raise OracleQueryError("得意先品番の取得に失敗しました。") from exc
 
     return [
         {

@@ -1,6 +1,7 @@
 (function () {
   const csrfToken = window.portalCsrfToken || "";
   const CHART_API = "/api/shipment-trend/chart";
+  const BASELINE_API = "/api/shipment-trend/baseline-year";
 
   function getListClient() {
     return window.__shipmentTrendListClient || null;
@@ -116,8 +117,16 @@
       .replace(/</g, "&lt;");
   }
 
-  function buildMarkerTooltipLabel(yearMonth, qty, kind) {
-    const kindLabel = kind === "forecast" ? "予測" : "実績";
+  function buildMarkerTooltipLabel(yearMonth, qty, kind, granularity) {
+    const kindLabel =
+      kind === "forecast"
+        ? granularity === "year"
+          ? "集計基準年（予測込み）"
+          : "予測"
+        : "実績";
+    if (granularity === "year") {
+      return `${yearMonth}年 ${kindLabel}: ${formatChartQtyLabel(qty)}`;
+    }
     return `${yearMonth} ${kindLabel}: ${formatChartQtyLabel(qty)}`;
   }
 
@@ -158,7 +167,8 @@
       const yearMonth = marker.getAttribute("data-year-month") || "";
       const qty = marker.getAttribute("data-qty") || "0";
       const kind = marker.getAttribute("data-kind") || "actual";
-      tooltip.textContent = buildMarkerTooltipLabel(yearMonth, qty, kind);
+      const granularity = marker.getAttribute("data-granularity") || "year";
+      tooltip.textContent = buildMarkerTooltipLabel(yearMonth, qty, kind, granularity);
       tooltip.hidden = false;
       const rect = canvasWrap.getBoundingClientRect();
       tooltip.style.left = `${event.clientX - rect.left}px`;
@@ -206,6 +216,10 @@
     return `${year}/${Number(monthText)}`;
   }
 
+  function formatYearAxisLabel(yearMonth) {
+    return `${String(yearMonth || "").replace(/-.*/, "")}年`;
+  }
+
   function shouldShowSemiannualAxisLabel(yearMonth, index, totalCount) {
     if (index === 0 || index === totalCount - 1) {
       return true;
@@ -213,6 +227,28 @@
     const [, monthText] = String(yearMonth || "").split("-");
     const monthNum = Number(monthText);
     return monthNum === 1 || monthNum === 7;
+  }
+
+  function shouldShowAxisLabel(yearMonth, index, totalCount, granularity) {
+    if (granularity === "year") {
+      return true;
+    }
+    return shouldShowSemiannualAxisLabel(yearMonth, index, totalCount);
+  }
+
+  function resolveChartSeries(chart, granularity) {
+    if (granularity === "year") {
+      return {
+        points: Array.isArray(chart.yearPoints) ? chart.yearPoints : [],
+        regression: chart.yearRegression || null,
+        granularity: "year",
+      };
+    }
+    return {
+      points: Array.isArray(chart.points) ? chart.points : [],
+      regression: chart.regression || null,
+      granularity: "month",
+    };
   }
 
   function formatChartQtyLabel(value) {
@@ -242,8 +278,9 @@
     return { axisMax, ticks };
   }
 
-  function buildChartSvgMarkup(chart, containerWidth) {
-    const points = chart.points || [];
+  function buildChartSvgMarkup(chart, containerWidth, granularity) {
+    const series = resolveChartSeries(chart, granularity || "year");
+    const points = series.points || [];
     if (!points.length) {
       return "";
     }
@@ -253,7 +290,12 @@
     const innerWidth = layout.innerWidth;
     const height = layout.height;
     const innerHeight = height - padding.top - padding.bottom;
-    const maxQty = Math.max(...points.map((point) => Number(point.qty) || 0), 1);
+    const regressionPoints = Array.isArray(series.regression?.points) ? series.regression.points : [];
+    const maxQty = Math.max(
+      ...points.map((point) => Number(point.qty) || 0),
+      ...regressionPoints.map((point) => Number(point.qty) || 0),
+      1,
+    );
     const yAxis = buildYAxisScale(maxQty, 5);
     const chartBottom = padding.top + innerHeight;
     const width = innerWidth + padding.left + padding.right;
@@ -293,6 +335,11 @@
     const forecastCoords = plotted.filter((point) => point.kind === "forecast");
     const lastActual = actualCoords[actualCoords.length - 1];
     const forecastLineCoords = lastActual ? [lastActual, ...forecastCoords] : forecastCoords;
+    const regressionCoords = regressionPoints.map((point, index) => ({
+      ...coordForIndex(index, point.qty),
+      yearMonth: point.yearMonth,
+      qty: Number(point.qty) || 0,
+    }));
 
     const actualPath =
       actualCoords.length > 1
@@ -301,31 +348,39 @@
     const forecastPath = forecastLineCoords.length > 1
       ? `<path d="${pathFromCoords(forecastLineCoords)}" fill="none" stroke="#60a5fa" stroke-width="2.5" stroke-dasharray="7 5" stroke-linejoin="round" stroke-linecap="round" />`
       : "";
+    const regressionPath = regressionCoords.length > 1
+      ? `<path d="${pathFromCoords(regressionCoords)}" fill="none" stroke="#f59e0b" stroke-width="2" stroke-linejoin="round" stroke-linecap="round" />`
+      : "";
     const markers = plotted
       .map((point) => {
         const fill = point.kind === "forecast" ? "#60a5fa" : "#22c55e";
-        const label = buildMarkerTooltipLabel(point.yearMonth, point.qty, point.kind);
+        const label = buildMarkerTooltipLabel(point.yearMonth, point.qty, point.kind, series.granularity);
         const hitRadius = Math.max(markerRadius + 5, 9);
         const attrs = [
           `data-year-month="${escapeChartAttr(point.yearMonth)}"`,
           `data-qty="${escapeChartAttr(point.qty)}"`,
           `data-kind="${escapeChartAttr(point.kind)}"`,
+          `data-granularity="${escapeChartAttr(series.granularity)}"`,
         ].join(" ");
         return `<g class="st-chart-marker-group"><circle class="st-chart-marker-hit" cx="${point.x.toFixed(1)}" cy="${point.y.toFixed(1)}" r="${hitRadius}" fill="transparent" ${attrs}><title>${escapeChartAttr(label)}</title></circle><circle class="st-chart-marker" cx="${point.x.toFixed(1)}" cy="${point.y.toFixed(1)}" r="${markerRadius}" fill="${fill}" pointer-events="none" /></g>`;
       })
       .join("");
-    const monthGridLines = points
-      .map((_, index) => {
-        const x = padding.left + index * monthSlotWidth;
-        return `<line x1="${x.toFixed(1)}" y1="${padding.top}" x2="${x.toFixed(1)}" y2="${chartBottom.toFixed(1)}" stroke="#e2e8f0" stroke-width="1" />`;
+    const horizontalGridLines = yAxis.ticks
+      .filter((value) => value > 0)
+      .map((value) => {
+        const y = yCoordForValue(value);
+        return `<line x1="${padding.left}" y1="${y.toFixed(1)}" x2="${(width - padding.right).toFixed(1)}" y2="${y.toFixed(1)}" stroke="#e2e8f0" stroke-width="1" />`;
       })
       .join("");
     const labels = points
-      .filter((point, index) => shouldShowSemiannualAxisLabel(point.yearMonth, index, points.length))
+      .filter((point, index) => shouldShowAxisLabel(point.yearMonth, index, points.length, series.granularity))
       .map((point) => {
         const index = points.indexOf(point);
         const x = xForIndex(index);
-        const label = formatMonthAxisLabel(point.yearMonth);
+        const label =
+          series.granularity === "year"
+            ? formatYearAxisLabel(point.yearMonth)
+            : formatMonthAxisLabel(point.yearMonth);
         return `<text x="${x.toFixed(1)}" y="${height - 24}" font-size="10" fill="#475569" text-anchor="middle">${label}</text>`;
       })
       .join("");
@@ -338,18 +393,19 @@
       .join("");
     const yAxisLine = `<line x1="${padding.left}" y1="${padding.top}" x2="${padding.left}" y2="${chartBottom}" stroke="#94a3b8" stroke-width="1" />`;
     const baseline = `<line x1="${padding.left}" y1="${chartBottom}" x2="${width - padding.right}" y2="${chartBottom}" stroke="#cbd5e1" stroke-width="1" />`;
-    return `<svg class="st-chart-svg" width="100%" height="${height}" viewBox="0 0 ${width} ${height}" preserveAspectRatio="xMidYMid meet" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="出荷推移グラフ">${monthGridLines}${yAxisLine}${yAxisTicks}${baseline}${actualPath}${forecastPath}${markers}${labels}</svg>`;
+    return `<svg class="st-chart-svg" width="100%" height="${height}" viewBox="0 0 ${width} ${height}" preserveAspectRatio="xMidYMid meet" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="出荷推移グラフ">${horizontalGridLines}${yAxisLine}${yAxisTicks}${baseline}${actualPath}${forecastPath}${regressionPath}${markers}${labels}</svg>`;
   }
 
-  function renderChart(canvasWrap, chart, dialog) {
+  function renderChart(canvasWrap, chart, dialog, granularity) {
     if (!canvasWrap) {
       return;
     }
+    const mode = granularity || "year";
     canvasWrap.style.minHeight = `${CHART_HEIGHT}px`;
     const render = () => {
       const { plot } = ensureChartCanvasStructure(canvasWrap);
       const containerWidth = measureChartContainerWidth(canvasWrap, dialog);
-      plot.innerHTML = buildChartSvgMarkup(chart, containerWidth);
+      plot.innerHTML = buildChartSvgMarkup(chart, containerWidth, mode);
     };
     render();
     if (typeof window !== "undefined" && typeof window.requestAnimationFrame === "function") {
@@ -369,7 +425,7 @@
     return `${sign}${number.toFixed(2)}%`;
   }
 
-  function renderFiscalYearRows(tableBody, fiscalYears) {
+  function renderFiscalYearRows(tableBody, fiscalYears, baselineFiscalYear) {
     if (!tableBody) {
       return;
     }
@@ -378,10 +434,20 @@
       tableBody.innerHTML = `<tr><td colspan="5" class="st-detail-metrics-empty">年度別データがありません。</td></tr>`;
       return;
     }
+    const baselineYear =
+      baselineFiscalYear ??
+      rows.find((row) => row.isFirstYear)?.fiscalYear ??
+      null;
     tableBody.innerHTML = rows
       .map((row) => {
         const year = row.fiscalYear ?? "";
-        return `<tr>
+        const isBeforeBaseline =
+          baselineYear !== null &&
+          baselineYear !== undefined &&
+          baselineYear !== "" &&
+          Number(year) < Number(baselineYear);
+        const rowClass = isBeforeBaseline ? ' class="st-detail-metrics-row--before-baseline"' : "";
+        return `<tr${rowClass}>
           <td>${escapeChartAttr(year)}</td>
           <td>${escapeChartAttr(formatChartQtyLabel(row.fyTotal))}</td>
           <td>${escapeChartAttr(formatChartQtyLabel(row.fyWithForecastTotal))}</td>
@@ -401,6 +467,67 @@
     return code || name || "詳細";
   }
 
+  function formatRegressionStats(regression, granularity) {
+    if (!regression || regression.slope === null || regression.slope === undefined) {
+      return "";
+    }
+    const slope = Number(regression.slope);
+    const rSquared = Number(regression.rSquared);
+    if (!Number.isFinite(slope) || !Number.isFinite(rSquared)) {
+      return "";
+    }
+    const slopeSign = slope > 0 ? "+" : "";
+    const unit = granularity === "year" ? "年" : "月";
+    return `傾き: ${slopeSign}${slope.toFixed(2)} / ${unit} · R²: ${rSquared.toFixed(4)}`;
+  }
+
+  function renderRegressionStats(el, regression, granularity) {
+    if (!el) {
+      return;
+    }
+    el.textContent = formatRegressionStats(regression, granularity);
+  }
+
+  function syncChartLegend(dialog, granularity) {
+    const monthLegend = dialog?.querySelector(".st-legend-forecast--month");
+    const yearLegend = dialog?.querySelector(".st-legend-forecast--year");
+    if (monthLegend) {
+      monthLegend.hidden = granularity !== "month";
+    }
+    if (yearLegend) {
+      yearLegend.hidden = granularity !== "year";
+    }
+  }
+
+  function fillBaselineSelect(select, chart) {
+    if (!select) {
+      return;
+    }
+    const years = Array.isArray(chart.availableBaselineYears) ? chart.availableBaselineYears : [];
+    const selected = chart.baselineFiscalYear ?? chart.dataFirstFiscalYear ?? "";
+    select.innerHTML = years
+      .map((year) => {
+        const isDataFirst = Number(year) === Number(chart.dataFirstFiscalYear);
+        const label = isDataFirst ? `${year}（自動）` : String(year);
+        const selectedAttr = Number(year) === Number(selected) ? " selected" : "";
+        return `<option value="${escapeChartAttr(year)}"${selectedAttr}>${escapeChartAttr(label)}</option>`;
+      })
+      .join("");
+  }
+
+  function syncBaselineControls(select, revertButton, statusEl, chart) {
+    fillBaselineSelect(select, chart);
+    const isManual = Boolean(chart.baselineIsManual);
+    if (revertButton) {
+      revertButton.disabled = !isManual;
+    }
+    if (statusEl) {
+      statusEl.textContent = isManual
+        ? `手動設定中（データ初年度: ${chart.dataFirstFiscalYear ?? "—"}）`
+        : "自動（データ初年度）";
+    }
+  }
+
   function bindDetailDialog() {
     const pageRoot = document.querySelector(".shipment-trend-page");
     const tableWrap = pageRoot?.querySelector(".st-table-wrap");
@@ -411,9 +538,22 @@
     const canvasWrap = dialog?.querySelector(".st-chart-canvas-wrap");
     const errorEl = dialog?.querySelector(".st-detail-error");
     const closeButton = dialog?.querySelector(".st-detail-close");
+    const baselineSelect = dialog?.querySelector(".st-baseline-year-select");
+    const baselineRevert = dialog?.querySelector(".st-baseline-revert-button");
+    const baselineStatus = dialog?.querySelector(".st-baseline-status");
+    const regressionStats = dialog?.querySelector(".st-regression-stats");
+    const granularitySelect = dialog?.querySelector(".st-chart-granularity-select");
     if (!pageRoot || !tableWrap || !dialog || !canvasWrap) {
       return;
     }
+
+    let activeCustCode = "";
+    let activeItemCd = "";
+    let activeCustName = "";
+    let baselineBusy = false;
+    let suppressBaselineChange = false;
+    let lastChart = null;
+    let chartGranularity = granularitySelect?.value === "month" ? "month" : "year";
 
     bindChartMarkerTooltips(canvasWrap);
 
@@ -424,40 +564,82 @@
       }
     });
 
-    tableWrap.addEventListener("click", async (event) => {
-      const target = event.target;
-      if (!(target instanceof Element)) {
+    function updateListFromChart(chart) {
+      getListClient()?.updateRowBaselineMetrics?.(
+        String(chart.custCode || activeCustCode || ""),
+        String(chart.itemCd || activeItemCd || ""),
+        {
+          first_fiscal_year: chart.baselineFiscalYear,
+          baseline_is_manual: Boolean(chart.baselineIsManual),
+          first_fy_total: chart.firstFyTotal,
+          change_qty: chart.changeQty,
+          change_rate_pct: chart.changeRatePct,
+        },
+      );
+    }
+
+    function hasChartSeries(chart, granularity) {
+      const series = resolveChartSeries(chart, granularity);
+      return (series.points || []).length > 0;
+    }
+
+    async function applyDetailChart(chart) {
+      lastChart = chart;
+      suppressBaselineChange = true;
+      try {
+        renderFiscalYearRows(metricsTableBody, chart.fiscalYears || [], chart.baselineFiscalYear);
+        syncBaselineControls(baselineSelect, baselineRevert, baselineStatus, chart);
+        const series = resolveChartSeries(chart, chartGranularity);
+        renderRegressionStats(regressionStats, series.regression, chartGranularity);
+        syncChartLegend(dialog, chartGranularity);
+      } finally {
+        suppressBaselineChange = false;
+      }
+      if (!hasChartSeries(chart, chartGranularity)) {
+        if (errorEl) {
+          errorEl.hidden = false;
+          errorEl.textContent =
+            chartGranularity === "year"
+              ? "グラフ用の年度データがありません。"
+              : "グラフ用の月次データがありません。";
+        }
+        clearChartCanvas(canvasWrap);
         return;
       }
-      const row = target.closest(".st-data-row");
-      if (!row) {
-        return;
+      if (errorEl) {
+        errorEl.hidden = true;
+        errorEl.textContent = "";
       }
-      if (target.closest("select, option, button, a, label, textarea")) {
-        return;
-      }
-      const custCode = row.getAttribute("data-cust-code") || "";
-      const custName = row.getAttribute("data-cust-name") || "";
-      const itemCd = row.getAttribute("data-item-cd") || "";
-      if (!custCode || !itemCd) {
-        return;
-      }
+      renderChart(canvasWrap, chart, dialog, chartGranularity);
+    }
+
+    async function loadDetail(custCode, itemCd, custName) {
+      activeCustCode = custCode;
+      activeItemCd = itemCd;
+      activeCustName = custName || "";
       if (title) {
         title.textContent = buildDetailTitle(custCode, custName);
       }
       if (meta) {
-        meta.textContent = `得意先品番: ${itemCd}`;
+        meta.textContent = `内作品番: ${itemCd}`;
       }
       if (errorEl) {
         errorEl.hidden = true;
         errorEl.textContent = "";
       }
       renderFiscalYearRows(metricsTableBody, []);
+      renderRegressionStats(regressionStats, null);
       clearChartCanvas(canvasWrap);
-      if (typeof dialog.showModal === "function") {
-        dialog.showModal();
-      } else {
-        dialog.setAttribute("open", "open");
+      if (baselineSelect) {
+        suppressBaselineChange = true;
+        baselineSelect.innerHTML = "";
+        suppressBaselineChange = false;
+      }
+      if (baselineRevert) {
+        baselineRevert.disabled = true;
+      }
+      if (baselineStatus) {
+        baselineStatus.textContent = "";
       }
       try {
         const response = await fetch(
@@ -481,7 +663,7 @@
           }
           renderFiscalYearRows(metricsTableBody, []);
           clearChartCanvas(canvasWrap);
-          return;
+          return null;
         }
         const chart = body.chart || {};
         if (title) {
@@ -489,18 +671,11 @@
         }
         if (meta) {
           const chrg = chart.custChrgPsnCd ? ` / 担当者コード: ${chart.custChrgPsnCd}` : "";
-          meta.textContent = `得意先品番: ${chart.itemCd || itemCd}${chrg}`;
+          meta.textContent = `内作品番: ${chart.itemCd || itemCd}${chrg}`;
         }
-        renderFiscalYearRows(metricsTableBody, chart.fiscalYears || []);
-        if (!(chart.points || []).length) {
-          if (errorEl) {
-            errorEl.hidden = false;
-            errorEl.textContent = "グラフ用の月次データがありません。";
-          }
-          clearChartCanvas(canvasWrap);
-          return;
-        }
-        renderChart(canvasWrap, chart, dialog);
+        activeCustName = String(chart.custName || custName || "");
+        await applyDetailChart(chart);
+        return chart;
       } catch (_error) {
         if (errorEl) {
           errorEl.hidden = false;
@@ -508,7 +683,134 @@
         }
         renderFiscalYearRows(metricsTableBody, []);
         clearChartCanvas(canvasWrap);
+        return null;
       }
+    }
+
+    function restoreBaselineControls() {
+      if (lastChart) {
+        suppressBaselineChange = true;
+        try {
+          syncBaselineControls(baselineSelect, baselineRevert, baselineStatus, lastChart);
+        } finally {
+          suppressBaselineChange = false;
+        }
+      }
+    }
+
+    async function saveBaselineYear(baselineYear) {
+      if (baselineBusy || !activeCustCode || !activeItemCd) {
+        return;
+      }
+      baselineBusy = true;
+      try {
+        const response = await fetch(BASELINE_API, {
+          method: "PUT",
+          credentials: "same-origin",
+          headers: {
+            "Content-Type": "application/json",
+            "X-CSRFToken": csrfToken,
+            Accept: "application/json",
+          },
+          body: JSON.stringify({
+            custCode: activeCustCode,
+            itemCd: activeItemCd,
+            baselineYear: Number(baselineYear),
+          }),
+        });
+        const body = await response.json();
+        if (!response.ok || !body.ok) {
+          window.alert(body.message || "比較基準年の保存に失敗しました。");
+          restoreBaselineControls();
+          return;
+        }
+        const chart = await loadDetail(activeCustCode, activeItemCd, activeCustName);
+        if (chart) {
+          updateListFromChart(chart);
+        }
+      } catch (_error) {
+        window.alert("比較基準年の保存に失敗しました。");
+        restoreBaselineControls();
+      } finally {
+        baselineBusy = false;
+      }
+    }
+
+    async function revertBaselineYear() {
+      if (baselineBusy || !activeCustCode || !activeItemCd) {
+        return;
+      }
+      baselineBusy = true;
+      try {
+        const response = await fetch(BASELINE_API, {
+          method: "DELETE",
+          credentials: "same-origin",
+          headers: {
+            "Content-Type": "application/json",
+            "X-CSRFToken": csrfToken,
+            Accept: "application/json",
+          },
+          body: JSON.stringify({
+            custCode: activeCustCode,
+            itemCd: activeItemCd,
+          }),
+        });
+        const body = await response.json();
+        if (!response.ok || !body.ok) {
+          window.alert(body.message || "比較基準年の復帰に失敗しました。");
+          return;
+        }
+        const chart = await loadDetail(activeCustCode, activeItemCd, activeCustName);
+        if (chart) {
+          updateListFromChart(chart);
+        }
+      } catch (_error) {
+        window.alert("比較基準年の復帰に失敗しました。");
+      } finally {
+        baselineBusy = false;
+      }
+    }
+
+    baselineSelect?.addEventListener("change", () => {
+      if (suppressBaselineChange || baselineBusy || !baselineSelect.value) {
+        return;
+      }
+      saveBaselineYear(baselineSelect.value);
+    });
+    baselineRevert?.addEventListener("click", () => {
+      revertBaselineYear();
+    });
+    granularitySelect?.addEventListener("change", () => {
+      chartGranularity = granularitySelect.value === "month" ? "month" : "year";
+      if (lastChart) {
+        applyDetailChart(lastChart);
+      }
+    });
+
+    tableWrap.addEventListener("click", async (event) => {
+      const target = event.target;
+      if (!(target instanceof Element)) {
+        return;
+      }
+      const row = target.closest(".st-data-row");
+      if (!row) {
+        return;
+      }
+      if (target.closest("select, option, button, a, label, textarea")) {
+        return;
+      }
+      const custCode = row.getAttribute("data-cust-code") || "";
+      const custName = row.getAttribute("data-cust-name") || "";
+      const itemCd = row.getAttribute("data-item-cd") || "";
+      if (!custCode || !itemCd) {
+        return;
+      }
+      if (typeof dialog.showModal === "function") {
+        dialog.showModal();
+      } else {
+        dialog.setAttribute("open", "open");
+      }
+      await loadDetail(custCode, itemCd, custName);
     });
   }
 
@@ -546,6 +848,9 @@
     buildDetailTitle,
     formatChangeRateLabel,
     renderFiscalYearRows,
+    formatRegressionStats,
+    fillBaselineSelect,
+    resolveChartSeries,
     CHART_HEIGHT,
   };
 })();

@@ -10,7 +10,7 @@ from application.gonenkukumi.use_cases.list_history import ListHistory
 from application.gonenkukumi.use_cases.result_page import ResultPage
 from application.gonenkukumi.use_cases.search import Search
 from application.gonenkukumi.use_cases.search_page import SearchPage
-from application.gonenkukumi.domain.value_objects.errors import OracleQueryError
+from application.sales.domain.value_objects.errors import OracleQueryError
 from application.gonenkukumi.domain.value_objects.result import build_multi_month_result, month_label
 from application.gonenkukumi.domain.value_objects.schemas import GonenKukumiSearchParams
 

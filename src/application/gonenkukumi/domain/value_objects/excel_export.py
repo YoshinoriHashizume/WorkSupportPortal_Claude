@@ -192,7 +192,7 @@ def block_title(block: dict[str, object], result: dict[str, object]) -> str:
         [
             f"得意先：{customer_name}（{cust_code}）",
             "出荷",
-            f"得意先品目：{meta.get('custItem') or result.get('custItem', '')}",
+            f"得意先品番：{meta.get('custItem') or result.get('custItem', '')}",
             f"手番：{meta.get('teban', '0')}",
             f"安全在庫：{meta.get('anzen', '0')}",
         ]
@@ -206,7 +206,7 @@ def build_gonenkukumi_workbook(result: dict[str, object]) -> bytes:
 
     condition_rows = [
         ("得意先", f"{result.get('customerName', '')}（{result.get('custCode', '')}）"),
-        ("得意先品目", result.get("custItem", "")),
+        ("得意先品番", result.get("custItem", "")),
         ("品目任意変換値", result.get("optionChange", "")),
         ("検索年月", display_year_month(result.get("yearMonth", ""))),
         ("対象日付", display_date(result.get("asOfDate", ""))),

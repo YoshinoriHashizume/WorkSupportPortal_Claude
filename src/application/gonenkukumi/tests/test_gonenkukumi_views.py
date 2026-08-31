@@ -7,7 +7,7 @@ from django.contrib.auth import get_user_model
 from django.contrib.auth.models import Group
 from django.utils import timezone
 
-from application.gonenkukumi.domain.value_objects.errors import OracleQueryError
+from application.sales.domain.value_objects.errors import OracleQueryError
 from application.gonenkukumi.models import GonenKukumiSearchHistory
 from application.portal.models import PortalMenuGroupAccess, UserFavoriteMenu
 
@@ -108,7 +108,7 @@ def test_search_page_defaults_to_empty_and_current_month(client, user):
     assert 'name="optionChange" value="*"' in html
     assert "品目任意変換値" in html
     assert "設変値" not in html
-    assert html.index("得意先品目") < html.index("品目任意変換値") < html.index("検索年月")
+    assert html.index("得意先品番") < html.index("品目任意変換値") < html.index("検索年月")
     assert 'class="favorite-toggle portal-title-favorite"' in html
     assert 'data-menu-key="five-year-nine"' in html
     assert "♡" in html
@@ -455,7 +455,7 @@ def test_search_page_uses_gonen_search_body_class(client, user):
     assert 'class="gonen-search"' in html
     assert 'class="portal-section-head gonen-search-head"' in html
     assert 'class="portal-page-description"' in html
-    assert "得意先品目の内示・受注・出荷・仕入・入荷の推移を検索します。" in html
+    assert "得意先品番の内示・受注・出荷・仕入・入荷の推移を検索します。" in html
     assert 'class="gonen-search-body"' in html
     assert 'class="gonen-search-sidebar"' in html
     assert 'class="gonen-setting-form card gonen-search-card"' in html

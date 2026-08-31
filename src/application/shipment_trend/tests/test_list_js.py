@@ -68,7 +68,7 @@ def test_shipment_trend_alert_rules_dialog_table_fits_popup_with_row_colors():
     portal_select_block = css.split("body.portal-app-page .portal-alert-rules-select {", 1)[1].split("}", 1)[0]
     assert "padding: 6px 10px" in portal_select_block
     assert "border: 1px solid #cbd5e1" in portal_select_block
-    shared_block = css.split("/* ポータル共通: 一覧・警告条件ダイアログの行背景色 */", 1)[1]
+    shared_block = css.split("/* ポータル共通: 一覧・判定ルールダイアログの行背景色", 1)[1]
     assert ".shipment-trend-page .st-row-decrease-strong," in shared_block
     assert "#fde8e8" in shared_block
     assert "#fff8e1" in shared_block
@@ -89,7 +89,67 @@ def test_shipment_trend_list_template_detail_dialog_has_fiscal_year_table():
     assert "st-detail-metrics-table" in source
     assert "年度別出荷" in source
     assert "出荷推移" in source
-    assert "初年度比変動率" in source
+    assert "基準年比変動率" in source
+    assert "st-baseline-year-select" in source
+    assert "st-filter-select" in source.split('id="st-baseline-year-select"', 1)[1].split("</select>", 1)[0]
+    assert "自動（データ初年度）に戻す" in source
+    assert ">初年度に戻す<" not in source
+    assert "最小二乗法" in source
+    assert "st-regression-stats" in source
+    css = CSS.read_text(encoding="utf-8")
+    detail_dialog_block = css.split("body.portal-app-page.shipment-trend-page .st-detail-dialog {", 1)[1].split("}", 1)[0]
+    assert "overflow: hidden" in detail_dialog_block
+    content_block = css.split("body.portal-app-page.shipment-trend-page .st-detail-content {", 1)[1].split("}", 1)[0]
+    assert "overflow-y: auto" in content_block
+    assert "overflow-x: hidden" in content_block
+
+
+def test_shipment_trend_list_js_supports_year_month_chart_toggle():
+    source = LIST_JS.read_text(encoding="utf-8")
+    assert "resolveChartSeries" in source
+    assert 'granularity === "year"' in source
+    assert "yearPoints" in source
+    assert "yearRegression" in source
+    assert "st-chart-granularity-select" in source
+    template = TEMPLATE.read_text(encoding="utf-8")
+    assert 'value="year" selected' in template
+    assert 'value="month"' in template
+    assert "表示単位" in template
+
+
+def test_shipment_trend_list_js_hatches_years_before_baseline():
+    source = LIST_JS.read_text(encoding="utf-8")
+    assert "st-detail-metrics-row--before-baseline" in source
+    assert "baselineFiscalYear" in source.split("function renderFiscalYearRows", 1)[1].split(
+        "function buildDetailTitle", 1
+    )[0]
+    assert "Number(year) < Number(baselineYear)" in source
+    css = CSS.read_text(encoding="utf-8")
+    hatch_block = css.split(".st-detail-metrics-row--before-baseline td {", 1)[1].split("}", 1)[0]
+    assert "repeating-linear-gradient" in hatch_block
+    assert "#e2e8f0" in hatch_block
+
+
+def test_shipment_trend_list_js_draws_regression_and_baseline_api():
+    source = LIST_JS.read_text(encoding="utf-8")
+    assert "BASELINE_API" in source
+    assert 'stroke="#f59e0b"' in source
+    assert "chart.regression" in source
+    assert "formatRegressionStats" in source
+    assert "saveBaselineYear" in source
+    assert "revertBaselineYear" in source
+    assert "updateListFromChart" in source
+    assert "window.location.reload()" not in source.split("async function saveBaselineYear", 1)[1].split(
+        "async function revertBaselineYear", 1
+    )[0]
+    assert "window.location.reload()" not in source.split("async function revertBaselineYear", 1)[1].split(
+        "baselineSelect?.addEventListener", 1
+    )[0]
+    assert "await loadDetail(" in source.split("async function saveBaselineYear", 1)[1]
+    svg_block = source.split("function buildChartSvgMarkup", 1)[1].split("function renderChart", 1)[0]
+    assert "regressionPath" in svg_block
+    client = CLIENT_JS.read_text(encoding="utf-8")
+    assert "updateRowBaselineMetrics" in client
 
 
 def test_shipment_trend_list_template_includes_first_fiscal_year_column():
@@ -116,8 +176,8 @@ def test_shipment_trend_list_template_includes_item_cd_filter_with_autocomplete(
 
 def test_shipment_trend_list_template_item_cd_filter_label_is_cust_item_cd():
     source = TEMPLATE.read_text(encoding="utf-8")
-    assert 'label="得意先品番"' in source
-    assert 'placeholder="得意先品番"' in source
+    assert 'label="内作品番"' in source
+    assert 'placeholder="内作品番"' in source
 
 
 def test_shipment_trend_list_client_clears_item_cd_on_cust_change():
@@ -169,8 +229,11 @@ def test_shipment_trend_chart_renders_monthly_axis():
     assert "shouldShowSemiannualAxisLabel" in source
     assert "CHART_HEIGHT = 440" in source
     assert 'width="100%"' in svg_block
-    assert "monthGridLines" in svg_block
+    assert "horizontalGridLines" in svg_block
+    assert "monthGridLines" not in svg_block
     assert "monthSlotWidth" in svg_block
+    assert 'y1="${y.toFixed(1)}"' in svg_block.split("horizontalGridLines", 1)[1].split("const labels", 1)[0]
+    assert "chartBottom.toFixed(1)" not in svg_block.split("horizontalGridLines", 1)[1].split("const labels", 1)[0]
     css = CSS.read_text(encoding="utf-8")
     canvas_block = css.split(".st-chart-canvas-wrap {", 1)[1].split("}", 1)[0]
     assert "overflow-x: hidden" in canvas_block

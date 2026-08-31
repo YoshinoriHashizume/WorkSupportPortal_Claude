@@ -7,7 +7,7 @@
     <div class="portal-page-title-row">
       <h1>検収書比較（{{ comparison_type_page_label }}）</h1>
       {% include "includes/page_favorite_toggle.html" with menu_key=favorite_menu_key menu_title=favorite_menu_title is_favorite=is_comparison_favorite %}
-      <p class="portal-page-description">取引先受領書と MARI のデータを比較します。</p>
+      <p class="portal-page-description">得意先の受領書と MARI のデータを比較します。</p>
     </div>
     {% if show_settings %}
       <a class="button secondary-button" href="{% url 'receipt_comparison:settings' %}?type={{ type_slug }}">設定</a>

@@ -23,6 +23,7 @@
     initSortDialog(listClient);
     initRowColorDialog();
     initRowDetailDialog(listClient);
+    initAspImportButton();
   });
 
   function initRowColorDialog() {
@@ -292,6 +293,84 @@
 
     zoomDialog.addEventListener("close", () => {
       resetPhotoZoom();
+    });
+  }
+  // ASP 取り込み用データの作成（要件定義書 REQ-ASP-IMPORT-DATA-2026-001 §REQ-F-005〜008）。
+  // 0 件・チェック警告を画面に出すため、リンク遷移ではなく fetch でヘッダを読んでからダウンロードする。
+  function initAspImportButton() {
+    const button = document.querySelector(".asset-inventory-page .aiv-asp-import-button");
+    const message = document.querySelector(".asset-inventory-page .aiv-asp-import-message");
+    if (!button) {
+      return;
+    }
+
+    function showMessage(text, modifier) {
+      if (!message) {
+        return;
+      }
+      message.textContent = text;
+      message.classList.remove("is-warning", "is-error");
+      if (modifier) {
+        message.classList.add(modifier);
+      }
+      message.hidden = !text;
+    }
+
+    function download(blob, filename) {
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = filename;
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      URL.revokeObjectURL(url);
+    }
+
+    function filenameFromResponse(response) {
+      const disposition = response.headers.get("Content-Disposition") || "";
+      const match = disposition.match(/filename="([^"]+)"/);
+      return match ? match[1] : "asp_import.csv";
+    }
+
+    button.addEventListener("click", async () => {
+      const url = button.dataset.aspImportUrl;
+      if (!url) {
+        return;
+      }
+      // 押下前の状態を覚えておき、非活性のボタンを勝手に活性化しない（DD-05）
+      const wasDisabled = button.disabled;
+      button.disabled = true;
+      showMessage("取り込み用データを作成しています…", null);
+      try {
+        const response = await fetch(url, { credentials: "same-origin" });
+        if (!response.ok) {
+          showMessage(await response.text(), "is-error");
+          return;
+        }
+        const status = response.headers.get("X-Asp-Import-Status");
+        if (status === "empty") {
+          showMessage(await response.text(), null);
+          return;
+        }
+        // 突合結果のスナップショットが失効している（棚卸の選び直しを促す。C-16）
+        if (status === "unavailable") {
+          showMessage(await response.text(), "is-error");
+          return;
+        }
+        const warning = response.headers.get("X-Asp-Import-Warning");
+        const rows = response.headers.get("X-Asp-Import-Rows") || "";
+        download(await response.blob(), filenameFromResponse(response));
+        if (warning) {
+          showMessage(decodeURIComponent(warning), "is-warning");
+        } else {
+          showMessage(rows + " 件の取り込み用データを作成しました。", null);
+        }
+      } catch (error) {
+        showMessage("取り込み用データの作成に失敗しました。", "is-error");
+      } finally {
+        button.disabled = wasDisabled;
+      }
     });
   }
 })();

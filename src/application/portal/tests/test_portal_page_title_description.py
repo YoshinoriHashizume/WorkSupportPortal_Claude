@@ -34,7 +34,7 @@ def test_receipt_comparison_page_description_is_beside_favorite():
     title_row = html.split('class="portal-page-title-row"', 1)[1].split("</div>", 1)[0]
     assert "page_favorite_toggle.html" in title_row
     assert 'class="portal-page-description"' in title_row
-    assert "取引先受領書と MARI のデータを比較します。" in title_row
+    assert "得意先の受領書と MARI のデータを比較します。" in title_row
 
 
 def test_gonen_search_page_has_description_beside_favorite():
@@ -42,7 +42,7 @@ def test_gonen_search_page_has_description_beside_favorite():
     title_row = html.split('class="portal-page-title-row"', 1)[1].split("</div>", 1)[0]
     assert "page_favorite_toggle.html" in title_row
     assert 'class="portal-page-description"' in title_row
-    assert "得意先品目の内示・受注・出荷・仕入・入荷の推移を検索します。" in title_row
+    assert "得意先品番の内示・受注・出荷・仕入・入荷の推移を検索します。" in title_row
     assert title_row.index("page_favorite_toggle.html") < title_row.index("portal-page-description")
 
 

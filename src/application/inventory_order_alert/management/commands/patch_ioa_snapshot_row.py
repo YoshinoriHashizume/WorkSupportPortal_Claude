@@ -15,7 +15,7 @@ class Command(BaseCommand):
 
     def add_arguments(self, parser):
         parser.add_argument("--cust-code", required=True, help="得意先コード")
-        parser.add_argument("--item-cd", required=True, help="品番")
+        parser.add_argument("--item-cd", required=True, help="得意先品番")
         parser.add_argument(
             "--last-ship-date",
             help="最終出荷日（YYYY/MM/DD, YYYYMMDD, today）",
@@ -67,7 +67,7 @@ class Command(BaseCommand):
                 "パッチ完了: "
                 f"cust_code={result.cust_code}, item_cd={result.item_cd}\n"
                 f"  最終出荷日: {result.previous_last_ship_date or '(空)'} -> {result.new_last_ship_date or '(空)'}\n"
-                f"  アラート: {result.previous_alert_level} -> {result.new_alert_level}\n"
+                f"  流動区分: {result.previous_flow_quadrant} -> {result.new_flow_quadrant}\n"
                 f"  確認状態復帰: {result.confirmation_reset_count} 件"
             )
         )
