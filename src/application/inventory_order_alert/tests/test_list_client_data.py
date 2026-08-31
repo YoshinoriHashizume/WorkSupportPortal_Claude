@@ -13,6 +13,7 @@ from application.inventory_order_alert.domain.value_objects.list_client_data imp
     row_to_client_dict,
 )
 from application.inventory_order_alert.domain.value_objects.list_filter import build_filter_options
+from application.inventory_order_alert.domain.value_objects.stock_quantity import STOCK_NOT_FETCHED
 
 PERIOD_KEYS = {period.key for period in EVALUATION_PERIODS}
 LEGACY_PAYLOAD_KEYS = ("alertLevel", "alertOnly")
@@ -100,6 +101,46 @@ def test_build_list_client_payload_row_includes_responsible_department():
     payload = _payload([_row()])
 
     assert payload["rows"][0]["responsibleDepartment"] == "調達G・営業G・生産管理"
+
+
+def test_payload_row_includes_mari_stock_quantity():
+    payload = _payload([_row(mari_stock_qty=95)])
+
+    # ソートは行の生値を引く。camelCase の別名は配信しない（同じ値の二重配信になるため）。
+    assert payload["rows"][0]["mari_stock_qty"] == 95
+    assert "mariStockQty" not in payload["rows"][0]
+
+
+def test_payload_display_includes_both_stock_columns():
+    payload = _payload([_row(stock_qty="100", mari_stock_qty=95)])
+
+    display = payload["rows"][0]["display"]
+    assert display["stock_qty"] == "100"
+    assert display["mari_stock_qty"] == "95"
+
+
+def test_payload_display_shows_marker_for_not_fetched_mari_stock():
+    row = _row()
+    row.pop("mari_stock_qty", None)
+
+    payload = _payload([row])
+
+    # 未取得（キーなし）は「－」。該当なし（空）と区別する
+    assert payload["rows"][0]["display"]["mari_stock_qty"] == STOCK_NOT_FETCHED
+    assert "mariStockQty" not in payload["rows"][0]
+
+
+def test_payload_display_shows_empty_for_missing_mari_stock():
+    payload = _payload([_row(mari_stock_qty="")])
+
+    assert payload["rows"][0]["display"]["mari_stock_qty"] == ""
+
+
+def test_payload_display_has_no_responsible_department():
+    payload = _payload([_row()])
+
+    # 責任部署は詳細ダイアログへ移した
+    assert "responsible_department" not in payload["rows"][0]["display"]
 
 
 def test_build_list_client_payload_has_no_alert_level_keys():

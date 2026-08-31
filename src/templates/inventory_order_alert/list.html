@@ -169,7 +169,16 @@
             data-cust-code="{{ row.cust_code }}"
             data-cust-name="{{ row.cust_name|default:'' }}"
             data-item-cd="{{ row.item_cd }}"
-            data-stock-qty="{{ row.stock_qty|default:'' }}"
+            {# 詳細ダイアログはこれらの属性から組み立てる。JS 側の行描画と対で維持する（design.md §6.3.1）。 #}
+            data-level1-vend-cd="{{ row.level1_vend_cd|default:'' }}"
+            data-level1-vend-name="{{ row.level1_vend_name|default:'' }}"
+            data-level1-item-cd="{{ row.level1_item_cd|default:'' }}"
+            data-last-incoming-date="{{ row|ioa_display:'last_incoming_date' }}"
+            data-last-ship-date="{{ row|ioa_display:'last_ship_date' }}"
+            data-flow-quadrant="{{ row.flow_quadrant_key|default:'' }}"
+            data-no-incoming-record="{% if row.no_incoming_record %}1{% endif %}"
+            data-stock-qty="{{ row|ioa_display:'stock_qty' }}"
+            data-mari-stock-qty="{{ row|ioa_display:'mari_stock_qty' }}"
             data-stock-location-detail="{{ row.stock_location_detail|default:'' }}"
             data-stock-as-of-label="{{ row.stock_as_of_label|default:'' }}"
             data-confirmation-status="{{ row.confirmation_status_key }}">
@@ -323,8 +332,32 @@
 <dialog id="ioa-location-dialog" class="ioa-location-dialog">
   <div class="ioa-location-content">
     <h3 class="ioa-location-title">詳細</h3>
-    <p class="ioa-location-meta muted"></p>
-    <h4 class="ioa-detail-section-title">在庫内訳(SLIMS)</h4>
+    <section class="ioa-detail-item-section">
+      <h4 class="ioa-detail-section-title">品目</h4>
+      <dl class="ioa-detail-fields">
+        <dt>得意先</dt><dd class="ioa-detail-item-cust"></dd>
+        <dt>得意先品番</dt><dd class="ioa-detail-item-cd mono"></dd>
+        <dt>仕入先</dt><dd class="ioa-detail-item-vend"></dd>
+        <dt>仕入先品番</dt><dd class="ioa-detail-item-level1-cd mono"></dd>
+        <dt>最終入荷日</dt><dd class="ioa-detail-item-last-incoming"></dd>
+        <dt>最終出荷日</dt><dd class="ioa-detail-item-last-ship"></dd>
+      </dl>
+    </section>
+    <section class="ioa-detail-flow-section">
+      <h4 class="ioa-detail-section-title">流動区分</h4>
+      <p class="ioa-detail-flow-quadrant"></p>
+      <dl class="ioa-detail-fields">
+        <dt>責任部署</dt><dd class="ioa-detail-department"></dd>
+        <dt>判定条件</dt><dd class="ioa-detail-condition"></dd>
+      </dl>
+    </section>
+    <section class="ioa-detail-stock-section">
+      <h4 class="ioa-detail-section-title">在庫</h4>
+      <dl class="ioa-detail-fields ioa-detail-stock-fields">
+        <dt>在庫数(SLIMS)</dt><dd class="ioa-detail-stock-slims"></dd>
+        <dt>在庫数(MARI)</dt><dd class="ioa-detail-stock-mari"></dd>
+      </dl>
+    <h5 class="ioa-detail-section-subtitle">在庫内訳(SLIMS)</h5>
     <div class="ioa-location-table-wrap">
       <table class="ioa-location-table">
         <colgroup>
@@ -343,6 +376,8 @@
       </table>
     </div>
     <p class="ioa-location-empty muted" hidden>SLIMS 在庫に該当するロケーションがありません。</p>
+    <p class="ioa-location-as-of muted"></p>
+    </section>
     <section class="ioa-detail-memo-section">
       <h4 class="ioa-detail-section-title">メモ</h4>
       <div class="ioa-detail-memo-table-wrap">
@@ -372,7 +407,6 @@
         placeholder="仕入先への確認内容、回答概要、発注可否など"
       ></textarea>
     </section>
-    <p class="ioa-location-as-of muted"></p>
     <div class="ioa-location-actions">
       <button type="button" class="button-link ioa-detail-save">保存</button>
       <button type="button" class="button-link ioa-location-close">閉じる</button>
@@ -383,6 +417,6 @@
 <script src="/static/js/portal-list-prefix-filter.js?v=20260629-dependent-cust" defer></script>
 <script src="/static/js/portal-list-dependent-cust-filter.js?v=20260629-dependent-cust" defer></script>
 <script src="/static/js/portal-list-sort-dialog.js?v=20260629-dependent-cust" defer></script>
-<script src="/static/js/inventory-order-alert-list-client.js?v=20260828-flow-quadrant" defer></script>
-<script src="/static/js/inventory-order-alert-list.js?v=20260828-flow-quadrant" defer></script>
+<script src="/static/js/inventory-order-alert-list-client.js?v=20260831-mari-stock" defer></script>
+<script src="/static/js/inventory-order-alert-list.js?v=20260831-mari-stock" defer></script>
 {% endblock %}

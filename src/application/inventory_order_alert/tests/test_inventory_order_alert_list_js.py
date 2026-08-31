@@ -31,7 +31,7 @@ def test_inventory_order_alert_list_client_js_sorts_confirmation_status_by_key_r
 
 def test_inventory_order_alert_list_js_init_location_dialog_has_no_duplicate_table_body():
     source = JS_PATH.read_text(encoding="utf-8")
-    block = source.split("function initLocationDialog()", 1)[1].split("function initConfirmationReset", 1)[0]
+    block = source.split("function initLocationDialog(", 1)[1].split("function initConfirmationReset", 1)[0]
     assert "const tableBody" not in block
     assert "const listTableBody" in block
     assert "const locationTableBody" in block
@@ -128,6 +128,53 @@ def test_inventory_order_alert_list_js_initializes_location_dialog():
     assert "formatIncomingDate" in source
     assert "incomingDate" in source
     assert "localeCompare" in source
+
+
+def test_inventory_order_alert_list_client_js_renders_detail_data_attributes():
+    source = CLIENT_JS_PATH.read_text(encoding="utf-8")
+    row_block = source.split('<tr class="alert-row alert-row--', 1)[1].split("</tr>", 1)[0]
+
+    # 詳細ダイアログは行の data-* 属性から組み立てる（design.md §6.3.1）。
+    for attribute in (
+        "data-mari-stock-qty",
+        "data-flow-quadrant",
+        "data-no-incoming-record",
+        "data-level1-vend-cd",
+        "data-level1-vend-name",
+        "data-level1-item-cd",
+        "data-last-incoming-date",
+        "data-last-ship-date",
+    ):
+        assert attribute in row_block
+
+
+def test_inventory_order_alert_list_client_js_sorts_mari_stock_like_slims_stock():
+    source = CLIENT_JS_PATH.read_text(encoding="utf-8")
+
+    assert 'column === "stock_qty" || column === "mari_stock_qty"' in source
+    assert 'column === "mari_stock_qty"' in source.split("function defaultDirectionForColumn", 1)[1]
+    # 責任部署は一覧列ではなくなったのでソート・描画の分岐も残さない。
+    assert 'column === "responsible_department"' not in source
+    assert 'column.key === "responsible_department"' not in source
+
+
+def test_inventory_order_alert_list_client_js_keeps_flow_quadrant_departments():
+    source = CLIENT_JS_PATH.read_text(encoding="utf-8")
+
+    # 一覧列からは外すが、詳細ダイアログが流動区分キーで引くため対応表は残す（design.md §7.3）。
+    assert "flowQuadrantDepartments" in source
+
+
+def test_inventory_order_alert_list_js_fills_detail_dialog_sections():
+    source = JS_PATH.read_text(encoding="utf-8")
+    block = source.split("function initLocationDialog(", 1)[1].split("function initConfirmationReset", 1)[0]
+
+    assert "ioa-detail-item" in block
+    assert "ioa-detail-flow" in block
+    assert "ioa-detail-department" in block
+    assert "ioa-detail-condition" in block
+    assert "ioa-detail-stock-slims" in block
+    assert "ioa-detail-stock-mari" in block
 
 
 def test_inventory_order_alert_list_js_import_overlay_has_spinner_css():

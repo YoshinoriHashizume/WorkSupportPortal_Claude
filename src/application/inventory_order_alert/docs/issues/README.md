@@ -16,6 +16,7 @@
 | [ISSUE-0004](ISSUE-0004-requirements-missing-exception-cases.md) | 改善 | 要件定義書の異常系に同時実行と集計エラーの記載がない（L3レビュー L3F-4 / L3F-5） | 低 | Triaged | なし | 2026/08/31 |
 | [ISSUE-0005](ISSUE-0005-no-payload-size-requirement.md) | 改善 | 配信データ量の非機能要件がなく、見積り誤りを検出できなかった（L3レビュー L3F-6） | 中 | Triaged | なし | 2026/08/31 |
 | [ISSUE-0006](ISSUE-0006-large-replacement-release-strategy-unstated.md) | 改善 | 大規模な置換要件で段階リリースの可否が要件段階で示されていない（L3レビュー L3F-7） | 低 | Triaged | なし | 2026/08/31 |
+| [ISSUE-0007](ISSUE-0007-empty-stock-sort-sentinel-collides-with-negative.md) | 不具合 | 在庫数ソートの空値センチネル `-1` が負の在庫数と衝突する（実装レビュー IL1-4） | 低 | Triaged | [spec/03](../spec/03_mari-stock-visibility/design.md) | 2026/08/31 |
 
 ## クローズ済み
 

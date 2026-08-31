@@ -18,6 +18,10 @@ from application.inventory_order_alert.domain.value_objects.flow_quadrant import
 from application.inventory_order_alert.domain.value_objects.format_display import format_cell_display
 from application.inventory_order_alert.domain.value_objects.list_filter import ListFilterOptions
 from application.inventory_order_alert.domain.value_objects.row_display import display_flow_quadrant, row_alert_class
+from application.inventory_order_alert.domain.value_objects.stock_quantity import (
+    format_stock_quantity,
+    is_stock_fetched,
+)
 from application.inventory_order_alert.domain.value_objects.table_display import (
     DEFAULT_DIRECTION,
     DEFAULT_PAGE_SIZE,
@@ -47,6 +51,21 @@ def _json_value(value: object) -> object:
     return value
 
 
+#: 未取得（キーなし）と該当なし（空）を区別して表示する在庫数の列。
+STOCK_COLUMNS = ("stock_qty", "mari_stock_qty")
+
+
+def _display_cell(row: dict[str, object], column: str, quadrant: str) -> str:
+    if column == "flow_quadrant":
+        return quadrant
+    if column in STOCK_COLUMNS:
+        return format_stock_quantity(
+            row.get(column, ""),
+            fetched=is_stock_fetched(row, column),
+        )
+    return format_cell_display(row.get(column, ""), column)
+
+
 def row_to_client_dict(row: dict[str, object]) -> dict[str, object]:
     client_row: dict[str, object] = {
         key: _json_value(value) for key, value in row.items()
@@ -65,12 +84,10 @@ def row_to_client_dict(row: dict[str, object]) -> dict[str, object]:
     client_row["flowQuadrantKey"] = str(row.get("flow_quadrant_key") or FLOW_QUADRANT_KEYS[quadrant])
     client_row["noIncomingRecord"] = bool(row.get("no_incoming_record"))
     client_row["responsibleDepartment"] = str(row.get("responsible_department") or "")
+    # MARI 在庫は行の生値（mari_stock_qty）がソートに、display が表示に使われる。
+    # camelCase の別名は増やさない（同じ値を二重に配信することになるため。design.md §6.4）。
     client_row["display"] = {
-        column: (
-            quadrant
-            if column == "flow_quadrant"
-            else format_cell_display(row.get(column, ""), column)
-        )
+        column: _display_cell(row, column, quadrant)
         for column, _label in SORTABLE_COLUMNS
         if column != "confirmation_status"
     }

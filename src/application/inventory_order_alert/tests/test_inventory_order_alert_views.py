@@ -592,6 +592,98 @@ def test_list_page_includes_row_selection_markup(client, production_user):
     assert 'class="ioa-location-col-location"' in html
     assert 'class="ioa-location-col-qty"' in html
     assert 'class="ioa-confirmation-status"' in html
+
+
+@pytest.mark.django_db
+def test_list_page_labels_stock_columns_by_source(client, production_user):
+    import_record = SlimsStockImport.objects.create(file_name="sample.csv", row_count=1)
+    store_summary_snapshot(
+        import_record, [_sample_export_row() | {"mari_stock_qty": 95}], as_of_date=date(2026, 6, 17)
+    )
+
+    client.force_login(production_user)
+    html = client.get("/app/production/inventory-order-alert").content.decode("utf-8")
+
+    assert "在庫数(SLIMS)" in html
+    assert "在庫数(MARI)" in html
+
+
+@pytest.mark.django_db
+def test_list_page_has_no_responsible_department_column(client, production_user):
+    import_record = SlimsStockImport.objects.create(file_name="sample.csv", row_count=1)
+    store_summary_snapshot(import_record, [_sample_export_row()], as_of_date=date(2026, 6, 17))
+
+    client.force_login(production_user)
+    html = client.get("/app/production/inventory-order-alert").content.decode("utf-8")
+
+    # 責任部署は一覧列から外し詳細ダイアログへ移した（REQ-MSV-F-005）。
+    assert '"key": "responsible_department"' not in html
+
+
+@pytest.mark.django_db
+def test_list_page_keeps_zero_mari_stock_distinct_from_blank(client, production_user):
+    import_record = SlimsStockImport.objects.create(file_name="sample.csv", row_count=1)
+    store_summary_snapshot(
+        import_record, [_sample_export_row() | {"mari_stock_qty": 0}], as_of_date=date(2026, 6, 17)
+    )
+
+    client.force_login(production_user)
+    html = client.get("/app/production/inventory-order-alert").content.decode("utf-8")
+
+    # 0 は「在庫なし」であって「該当なし」ではない（design.md §9 R-2）。
+    assert '"mari_stock_qty": "0"' in html
+
+
+@pytest.mark.django_db
+def test_list_page_server_rendered_row_carries_detail_data_attributes(client, production_user):
+    import_record = SlimsStockImport.objects.create(file_name="sample.csv", row_count=1)
+    store_summary_snapshot(
+        import_record, [_sample_export_row() | {"mari_stock_qty": 95}], as_of_date=date(2026, 6, 17)
+    )
+
+    client.force_login(production_user)
+    html = client.get("/app/production/inventory-order-alert").content.decode("utf-8")
+
+    # JS の行描画と対で維持する（JS 初期化前・失敗時も詳細ダイアログを埋められるように）。
+    assert 'data-mari-stock-qty="95"' in html
+    assert 'data-level1-vend-cd="9209"' in html
+    assert 'data-level1-item-cd="90249-10112-9209"' in html
+    assert "data-flow-quadrant=" in html
+    assert "data-no-incoming-record=" in html
+    assert "data-last-ship-date=" in html
+
+
+@pytest.mark.django_db
+def test_list_page_server_rendered_row_marks_not_fetched_mari_stock(client, production_user):
+    import_record = SlimsStockImport.objects.create(file_name="sample.csv", row_count=1)
+    store_summary_snapshot(import_record, [_sample_export_row()], as_of_date=date(2026, 6, 17))
+
+    client.force_login(production_user)
+    html = client.get("/app/production/inventory-order-alert").content.decode("utf-8")
+
+    # 既存スナップショットは未取得。サーバ描画でも JS 描画と同じ「－」を出す。
+    assert 'data-mari-stock-qty="－"' in html
+
+
+@pytest.mark.django_db
+def test_list_page_detail_dialog_has_four_sections(client, production_user):
+    import_record = SlimsStockImport.objects.create(file_name="sample.csv", row_count=1)
+    store_summary_snapshot(import_record, [_sample_export_row()], as_of_date=date(2026, 6, 17))
+
+    client.force_login(production_user)
+    html = client.get("/app/production/inventory-order-alert").content.decode("utf-8")
+
+    # design.md §6.3 の 4 区分。
+    assert "ioa-detail-item-section" in html
+    assert "ioa-detail-flow-section" in html
+    assert "ioa-detail-stock-section" in html
+    assert "ioa-detail-memo-section" in html
+    assert "ioa-detail-department" in html
+    assert "ioa-detail-condition" in html
+    assert "ioa-detail-stock-slims" in html
+    assert "ioa-detail-stock-mari" in html
+    # 圧縮された 1 行のメタ表示は 4 区分に置き換えた。
+    assert "ioa-location-meta" not in html
     assert "/static/js/inventory-order-alert-list.js" in html
 
 

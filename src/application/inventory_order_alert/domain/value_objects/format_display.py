@@ -2,7 +2,9 @@ from __future__ import annotations
 
 from decimal import Decimal
 
-QUANTITY_COLUMNS = frozenset({"post_shipment_count", "post_shipment_total_qty", "stock_qty"})
+QUANTITY_COLUMNS = frozenset(
+    {"post_shipment_count", "post_shipment_total_qty", "stock_qty", "mari_stock_qty"}
+)
 
 
 def format_quantity_display(value: object) -> str:

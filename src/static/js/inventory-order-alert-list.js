@@ -275,14 +275,27 @@
     });
   }
 
-  function initLocationDialog() {
+  function initLocationDialog(listClient) {
     const dialog = document.getElementById("ioa-location-dialog");
     const listTableBody = document.querySelector(".inventory-order-alert-page .ioa-table tbody");
     if (!dialog || !listTableBody) {
       return;
     }
 
-    const meta = dialog.querySelector(".ioa-location-meta");
+    // 詳細ダイアログの 4 区分（design.md §6.3）。値は行の data-* 属性から流し込む（§6.3.1）。
+    const detailFields = {
+        cust: dialog.querySelector(".ioa-detail-item-cust"),
+        itemCd: dialog.querySelector(".ioa-detail-item-cd"),
+        vend: dialog.querySelector(".ioa-detail-item-vend"),
+        level1ItemCd: dialog.querySelector(".ioa-detail-item-level1-cd"),
+        lastIncoming: dialog.querySelector(".ioa-detail-item-last-incoming"),
+        lastShip: dialog.querySelector(".ioa-detail-item-last-ship"),
+        flowQuadrant: dialog.querySelector(".ioa-detail-flow-quadrant"),
+        department: dialog.querySelector(".ioa-detail-department"),
+        condition: dialog.querySelector(".ioa-detail-condition"),
+        stockSlims: dialog.querySelector(".ioa-detail-stock-slims"),
+        stockMari: dialog.querySelector(".ioa-detail-stock-mari"),
+    };
     const locationTableBody = dialog.querySelector(".ioa-location-table-body");
     const tableWrap = dialog.querySelector(".ioa-location-table-wrap");
     const emptyMessage = dialog.querySelector(".ioa-location-empty");
@@ -400,8 +413,39 @@
       renderMemoEntries(payload.memos || []);
     }
 
+    function setDetailText(element, value) {
+      if (element) {
+        element.textContent = value;
+      }
+    }
+
+    function fillDetailSections(row) {
+      const custCode = row.dataset.custCode || "";
+      const custName = row.dataset.custName || "";
+      const vendCd = row.dataset.level1VendCd || "";
+      const vendName = row.dataset.level1VendName || "";
+      const quadrantKey = row.dataset.flowQuadrant || "";
+      const quadrantLabel = listClient?.getFlowQuadrantLabel?.(quadrantKey) || "";
+
+      setDetailText(detailFields.cust, custName ? `${custCode} - ${custName}` : custCode || "-");
+      setDetailText(detailFields.itemCd, row.dataset.itemCd || "-");
+      setDetailText(detailFields.vend, vendName ? `${vendCd} - ${vendName}` : vendCd || "-");
+      setDetailText(detailFields.level1ItemCd, row.dataset.level1ItemCd || "-");
+      setDetailText(detailFields.lastIncoming, row.dataset.lastIncomingDate || "-");
+      setDetailText(detailFields.lastShip, row.dataset.lastShipDate || "-");
+      setDetailText(
+        detailFields.flowQuadrant,
+        row.dataset.noIncomingRecord ? `${quadrantLabel}（入荷実績なし）` : quadrantLabel || "-",
+      );
+      setDetailText(detailFields.department, listClient?.getResponsibleDepartment?.(quadrantKey) || "-");
+      setDetailText(detailFields.condition, listClient?.getFlowConditionLabel?.() || "-");
+      // 在庫数は一覧と同じ表示文字列をそのまま出す（未取得の「－」と 0 を取り違えないため）。
+      setDetailText(detailFields.stockSlims, row.dataset.stockQty || "-");
+      setDetailText(detailFields.stockMari, row.dataset.mariStockQty || "-");
+    }
+
     async function openLocationDialog(row) {
-      if (!meta || !locationTableBody || !tableWrap || !emptyMessage || !asOfLabel || !memoInput) {
+      if (!locationTableBody || !tableWrap || !emptyMessage || !asOfLabel || !memoInput) {
         return;
       }
 
@@ -413,17 +457,9 @@
       });
       row.classList.add("is-selected");
 
-      const custCode = row.dataset.custCode || "";
-      const custName = row.dataset.custName || "";
-      const itemCd = row.dataset.itemCd || "";
-      const stockQty = row.dataset.stockQty || "";
+      fillDetailSections(row);
+
       const locations = parseLocationDetail(row.dataset.stockLocationDetail || "");
-      const customerLabel = custName ? `${custCode} - ${custName}` : custCode;
-
-      meta.textContent = `得意先: ${customerLabel} / 得意先品番: ${itemCd}${
-        stockQty ? ` / 在庫数合計: ${formatStockQty(stockQty)}` : ""
-      }`;
-
       locationTableBody.innerHTML = "";
       if (locations.length) {
         tableWrap.hidden = false;
@@ -605,7 +641,7 @@
     initSlimsImport();
     initSortDialog(listClient);
     initAlertRulesDialog();
-    initLocationDialog();
+    initLocationDialog(listClient);
     initConfirmationStatusSelects(listClient);
     initConfirmationReset(listClient);
   }

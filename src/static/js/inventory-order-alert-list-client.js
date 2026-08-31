@@ -108,10 +108,15 @@
   }
 
   function defaultDirectionForColumn(column) {
-    if (column === "flow_quadrant" || column === "responsible_department") {
+    if (column === "flow_quadrant") {
       return "asc";
     }
-    if (column === "post_shipment_count" || column === "post_shipment_total_qty" || column === "stock_qty") {
+    if (
+      column === "post_shipment_count" ||
+      column === "post_shipment_total_qty" ||
+      column === "stock_qty" ||
+      column === "mari_stock_qty"
+    ) {
       return "desc";
     }
     return "asc";
@@ -272,15 +277,15 @@
 
   function sortValue(row, column, state) {
     const value = row[column] ?? "";
-    if (column === "flow_quadrant" || column === "responsible_department") {
-      // 責任部署は流動区分からの導出値なので同じランクで並べる（design.md §6.6.2）。
+    if (column === "flow_quadrant") {
       return flowQuadrantSortRank(rowFlowQuadrantKey(row, state));
     }
     if (column === "post_shipment_count" || column === "post_shipment_total_qty") {
       const number = Number.parseInt(String(value || "0"), 10);
       return Number.isFinite(number) ? number : 0;
     }
-    if (column === "stock_qty") {
+    if (column === "stock_qty" || column === "mari_stock_qty") {
+      // 空（該当なし）も未取得の「－」も末尾へ落とす（design.md §6.1）。
       const text = String(value || "").replace(/,/g, "").trim();
       if (!text) {
         return -1;
@@ -532,12 +537,9 @@
                   identity,
                 )}</td>`;
               }
-              // 判定条件を切り替えたら流動区分と責任部署は引き直す（design.md §3.2 案B）。
+              // 判定条件を切り替えたら流動区分は引き直す（design.md §3.2 案B）。
               if (column.key === "flow_quadrant") {
                 return `<td>${Core.escapeHtml(flowQuadrantLabels[quadrantKey] || "")}</td>`;
-              }
-              if (column.key === "responsible_department") {
-                return `<td>${Core.escapeHtml(flowQuadrantDepartments[quadrantKey] || "")}</td>`;
               }
               return `<td>${Core.escapeHtml(display[column.key] ?? "")}</td>`;
             })
@@ -547,7 +549,15 @@
             data-cust-code="${Core.escapeHtml(identity.custCode)}"
             data-cust-name="${Core.escapeHtml(row.cust_name || "")}"
             data-item-cd="${Core.escapeHtml(identity.itemCd)}"
-            data-stock-qty="${Core.escapeHtml(row.stock_qty || "")}"
+            data-level1-vend-cd="${Core.escapeHtml(row.level1_vend_cd || "")}"
+            data-level1-vend-name="${Core.escapeHtml(row.level1_vend_name || "")}"
+            data-level1-item-cd="${Core.escapeHtml(row.level1_item_cd || "")}"
+            data-last-incoming-date="${Core.escapeHtml(display.last_incoming_date ?? "")}"
+            data-last-ship-date="${Core.escapeHtml(display.last_ship_date ?? "")}"
+            data-flow-quadrant="${Core.escapeHtml(quadrantKey)}"
+            data-no-incoming-record="${row.noIncomingRecord ? "1" : ""}"
+            data-stock-qty="${Core.escapeHtml(display.stock_qty ?? "")}"
+            data-mari-stock-qty="${Core.escapeHtml(display.mari_stock_qty ?? "")}"
             data-stock-location-detail="${Core.escapeHtml(row.stock_location_detail || "")}"
             data-stock-as-of-label="${Core.escapeHtml(row.stock_as_of_label || "")}"
             data-confirmation-status="${Core.escapeHtml(row.confirmationStatusKey || "unconfirmed")}">${cells}</tr>`;
@@ -685,6 +695,21 @@
       },
       getSortableColumns() {
         return sortableColumns.map((column) => ({ ...column }));
+      },
+      // 詳細ダイアログ用（design.md §6.3.1）。責任部署は流動区分からの導出値であり、
+      // 判定軸の切替に追随させるため属性ではなく対応表から引く。
+      getFlowQuadrantLabel(quadrantKey) {
+        return flowQuadrantLabels[quadrantKey] || "";
+      },
+      getResponsibleDepartment(quadrantKey) {
+        return flowQuadrantDepartments[quadrantKey] || "";
+      },
+      getFlowConditionLabel() {
+        const axis = flowAxes.find((option) => option.value === state.flowAxis);
+        const period = (flowPeriods[state.flowAxis] || []).find(
+          (option) => Number(option.value) === Number(state.flowPeriod),
+        );
+        return axis && period ? `${axis.label}・${period.label}で判定` : "";
       },
       getListFilterParams() {
         return {
