@@ -77,6 +77,9 @@ def test_inventory_order_alert_list_js_initializes_alert_rules_dialog():
     assert "initAlertRulesDialog" in source
     assert "ioa-alert-rules-open" in source
     assert "ioa-alert-rules-dialog" in source
+    # 開くボタンが複数あっても全件に結線する（querySelector 単数だと 2 個目以降が無反応）。
+    assert 'document.querySelectorAll(".inventory-order-alert-page .ioa-alert-rules-open")' in source
+    assert 'document.querySelector(".inventory-order-alert-page .ioa-alert-rules-open")' not in source
     # 判定ルールダイアログは読み取り専用。保存処理は撤去した（design.md §6.6.5）。
     assert "/api/inventory-order-alert/alert-settings" not in source
     assert "ioa-alert-rules-save" not in source

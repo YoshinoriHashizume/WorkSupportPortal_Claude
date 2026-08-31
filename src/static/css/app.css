@@ -1371,13 +1371,16 @@ body.shipment-trend-page.st-refresh-loading {
 .inventory-order-alert-page .ioa-filter-panel .ioa-filter-select,
 .inventory-order-alert-page .ioa-filter-panel .ioa-filter-item-cd,
 .inventory-order-alert-page .ioa-filter-panel .ioa-filter-level1-item-cd,
+.inventory-order-alert-page .ioa-flow-selector .ioa-filter-select,
 .shipment-trend-page .st-filter-panel .st-filter-select,
 .shipment-trend-page .st-filter-panel .st-filter-item-cd {
   width: var(--portal-list-filter-control-width);
   max-width: var(--portal-list-filter-control-width);
   min-width: 0;
 }
-.inventory-order-alert-page .ioa-filter-panel {
+/* 判定条件セレクタはフィルタパネルと同じ枠・同じコントロールで見せる（design.md §6.6.1）。 */
+.inventory-order-alert-page .ioa-filter-panel,
+.inventory-order-alert-page .ioa-flow-selector {
   margin: 0;
   padding: 8px 10px;
   border: 1px solid #e2e8f0;
@@ -1847,31 +1850,22 @@ body.inventory-order-alert-page .ioa-detail-memo {
 .inventory-order-alert-page .ioa-table td {
   white-space: nowrap;
 }
-/* 判定条件セレクタ（design.md §6.6.1）。一覧の上部に常時表示する。 */
-.inventory-order-alert-page .ioa-flow-selector {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: flex-end;
-  gap: 12px;
-  padding: 10px 12px;
-  margin-bottom: 8px;
-  border: 1px solid #e2e8f0;
-  border-radius: 6px;
-  background: #f8fafc;
+/* 判定条件セレクタ（design.md §6.6.1）。フィルタパネルの上に常時表示する。
+   枠とコントロールは .ioa-filter-panel と共有し、ここでは差分のみ定義する。
+   余白は下側に来るフィルタパネルへ付ける。 */
+.inventory-order-alert-page .ioa-flow-selector + .ioa-filter-panel {
+  margin-top: 8px;
 }
-.inventory-order-alert-page .ioa-flow-selector-title {
-  font-weight: 600;
-  align-self: center;
+.inventory-order-alert-page .ioa-flow-selector-actions {
+  justify-content: flex-end;
 }
-.inventory-order-alert-page .ioa-flow-selector-field {
-  display: grid;
-  gap: 4px;
-  font-size: 0.85rem;
+.inventory-order-alert-page .ioa-flow-selector-actions .ioa-alert-rules-open {
+  height: var(--portal-control-height);
+  min-height: var(--portal-control-height);
+  white-space: nowrap;
 }
 .inventory-order-alert-page .ioa-flow-selector-help {
-  flex-basis: 100%;
-  margin: 0;
-  font-size: 0.8rem;
+  margin: 6px 0 0;
 }
 .inventory-order-alert-page .ioa-flow-condition-label {
   margin: 0;

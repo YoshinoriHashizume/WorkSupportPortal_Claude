@@ -153,6 +153,20 @@ def test_list_page_shows_flow_quadrant_rules_button_and_dialog(client, productio
 
 
 @pytest.mark.django_db
+def test_list_page_has_exactly_one_alert_rules_open_button(client, production_user):
+    """開くボタンが重複すると JS の結線先とずれて無反応になるため 1 個に保つ。"""
+    import_record = SlimsStockImport.objects.create(file_name="sample.csv", row_count=1)
+    store_summary_snapshot(import_record, [_sample_export_row()], as_of_date=date(2026, 6, 17))
+
+    client.force_login(production_user)
+    html = client.get("/app/production/inventory-order-alert").content.decode("utf-8")
+
+    assert html.count("ioa-alert-rules-open") == 1
+    # 旧「警告条件」ボタンは判定ルールに置換済み（design.md §6.6.5）。
+    assert "警告条件" not in html
+
+
+@pytest.mark.django_db
 def test_list_page_shows_flow_selection_controls(client, production_user):
     import_record = SlimsStockImport.objects.create(file_name="sample.csv", row_count=1)
     store_summary_snapshot(import_record, [_sample_export_row()], as_of_date=date(2026, 6, 17))
@@ -167,6 +181,57 @@ def test_list_page_shows_flow_selection_controls(client, production_user):
     assert "死蔵判定軸" in html
     assert "低流動判定軸・3か月で判定" in html
     assert "判定期間内に入出荷のない品目（低流動品）を洗い出します" in html
+
+
+@pytest.mark.django_db
+def test_list_page_shows_flow_selector_above_filter_panel(client, production_user):
+    """判定条件セレクタはフィルタパネルの上に置く（design.md §6.6.1）。"""
+    import_record = SlimsStockImport.objects.create(file_name="sample.csv", row_count=1)
+    store_summary_snapshot(import_record, [_sample_export_row()], as_of_date=date(2026, 6, 17))
+
+    client.force_login(production_user)
+    html = client.get("/app/production/inventory-order-alert").content.decode("utf-8")
+
+    flow_selector_pos = html.index('class="ioa-flow-selector"')
+    filter_panel_pos = html.index('class="ioa-filter-panel"')
+    table_pos = html.index('class="ioa-table-wrap"')
+    assert flow_selector_pos < filter_panel_pos < table_pos
+
+
+@pytest.mark.django_db
+def test_list_page_flow_selects_reuse_filter_panel_appearance(client, production_user):
+    """判定条件のセレクトは既存フィルタと同じ見た目のクラスを使う。"""
+    import_record = SlimsStockImport.objects.create(file_name="sample.csv", row_count=1)
+    store_summary_snapshot(import_record, [_sample_export_row()], as_of_date=date(2026, 6, 17))
+
+    client.force_login(production_user)
+    html = client.get("/app/production/inventory-order-alert").content.decode("utf-8")
+
+    for select_id in ("ioa-flow-axis", "ioa-flow-period", "ioa-flow-quadrant"):
+        marker = f'id="{select_id}"'
+        opening_tag = html[html.index(marker) : html.index(">", html.index(marker))]
+        # 枠線・高さ・幅は ioa-filter-select、幅の伸縮は ioa-filter-control が担う。
+        assert "ioa-filter-select" in opening_tag
+        assert "ioa-filter-control" in opening_tag
+
+    # ラベルの体裁も既存フィルタと同じ span を使う。
+    assert '<span class="ioa-filter-field-label">判定軸</span>' in html
+    assert '<span class="ioa-filter-field-label">判定期間</span>' in html
+    assert '<span class="ioa-filter-field-label">流動区分</span>' in html
+
+
+def test_app_css_shares_control_and_panel_styles_with_flow_selector():
+    css = (Path(__file__).resolve().parents[3] / "static" / "css" / "app.css").read_text(encoding="utf-8")
+
+    # セレクトの幅指定と外枠のスタイルを ioa-filter-panel と共有していること。
+    assert ".inventory-order-alert-page .ioa-flow-selector .ioa-filter-select," in css
+    # 余白は下側に来るフィルタパネルへ付ける。
+    assert ".inventory-order-alert-page .ioa-flow-selector + .ioa-filter-panel {\n  margin-top: 8px;\n}" in css
+    panel_block = css.split(".inventory-order-alert-page .ioa-filter-panel,", 1)[1].split("}", 1)[0]
+    assert ".ioa-flow-selector" in panel_block
+    # 独自に持っていた枠・フォント指定は撤去済み。
+    assert "ioa-flow-selector-title" not in css
+    assert "ioa-flow-selector-field" not in css
 
 
 @pytest.mark.django_db

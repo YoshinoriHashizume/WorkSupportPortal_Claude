@@ -572,16 +572,20 @@
   function initAlertRulesDialog() {
     // 判定ルールダイアログは読み取り専用の凡例。開閉のみを担う（design.md §6.6.5）。
     const dialog = document.getElementById("ioa-alert-rules-dialog");
-    const openButton = document.querySelector(".inventory-order-alert-page .ioa-alert-rules-open");
+    // 開くボタンは複数箇所に置かれうるため全件に結線する。
+    // querySelector 単数だと 2 個目以降が無反応になる。
+    const openButtons = document.querySelectorAll(".inventory-order-alert-page .ioa-alert-rules-open");
     const closeButton = dialog?.querySelector(".ioa-alert-rules-close");
-    if (!dialog || !openButton || !closeButton) {
+    if (!dialog || !openButtons.length || !closeButton) {
       return;
     }
 
-    openButton.addEventListener("click", () => {
-      if (typeof dialog.showModal === "function") {
-        dialog.showModal();
-      }
+    openButtons.forEach((openButton) => {
+      openButton.addEventListener("click", () => {
+        if (typeof dialog.showModal === "function") {
+          dialog.showModal();
+        }
+      });
     });
 
     closeButton.addEventListener("click", () => {

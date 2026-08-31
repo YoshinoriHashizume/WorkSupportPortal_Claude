@@ -39,9 +39,7 @@
       {% endif %}
     </div>
     <div class="ioa-table-actions">
-      <button type="button" class="button-link ioa-alert-rules-open" aria-haspopup="dialog" aria-controls="ioa-alert-rules-dialog">
-        警告条件
-      </button>
+      {# 判定ルールを開くボタンは判定条件セレクタ側に置く（design.md §6.6.1）。 #}
       <form method="post" enctype="multipart/form-data" class="ioa-import-form">
         {% csrf_token %}
         <input type="file" id="ioa-slims-csv" name="slims_csv" accept=".csv" class="ioa-file-picker-input">
@@ -66,6 +64,51 @@
   {% endif %}
 
   {% if has_list_data %}
+  {# 判定条件セレクタはフィルタパネルの上に置く（design.md §6.6.1）。 #}
+  <div class="ioa-flow-selector" data-flow-axis="{{ flow_selection.axis }}" data-flow-period="{{ flow_selection.period.value }}">
+    <div class="ioa-filter-panel-fields">
+      <label class="ioa-filter-field">
+        <span class="ioa-filter-field-label">判定軸</span>
+        <select id="ioa-flow-axis" name="axis" class="ioa-filter-select ioa-filter-control">
+          {% for option in flow_axis_options %}
+            <option value="{{ option.value }}" data-help-text="{{ option.help_text }}" {% if flow_selection.axis == option.value %}selected{% endif %}>{{ option.label }}</option>
+          {% endfor %}
+        </select>
+      </label>
+      <label class="ioa-filter-field">
+        <span class="ioa-filter-field-label">判定期間</span>
+        <select id="ioa-flow-period" name="period" class="ioa-filter-select ioa-filter-control">
+          {% comment %}軸別の選択肢をすべて描画し、選択中の軸以外は隠す。切り替えは JS が行う（design.md §6.6.1）。{% endcomment %}
+          {% for axis, options in flow_period_options.items %}
+            {% for option in options %}
+              <option value="{{ option.value }}" data-axis="{{ axis }}"
+                      {% if flow_selection.axis != axis %}hidden{% endif %}
+                      {% if flow_selection.axis == axis and flow_selection.period.value == option.value %}selected{% endif %}>{{ option.label }}</option>
+            {% endfor %}
+          {% endfor %}
+        </select>
+      </label>
+      <label class="ioa-filter-field">
+        <span class="ioa-filter-field-label">流動区分</span>
+        <select id="ioa-flow-quadrant" name="flow_quadrant" class="ioa-filter-select ioa-filter-control">
+          <option value="">全て</option>
+          {% for rule in flow_quadrant_rule_rows %}
+            <option value="{{ rule.quadrant_key }}" {% if flow_quadrant_filter == rule.quadrant_key %}selected{% endif %}>{{ rule.quadrant }}</option>
+          {% endfor %}
+        </select>
+      </label>
+      <div class="ioa-filter-field ioa-flow-selector-actions">
+        <span class="ioa-filter-field-label" aria-hidden="true">&nbsp;</span>
+        <button type="button" class="button-link ioa-alert-rules-open" aria-haspopup="dialog" aria-controls="ioa-alert-rules-dialog">
+          判定ルール
+        </button>
+      </div>
+    </div>
+    <p class="ioa-flow-selector-help muted" id="ioa-flow-axis-help">
+      {% for option in flow_axis_options %}{% if flow_selection.axis == option.value %}{{ option.help_text }}{% endif %}{% endfor %}
+    </p>
+  </div>
+
   <div class="ioa-filter-panel">
     <div class="ioa-filter-panel-fields">
       <label class="ioa-filter-field">
@@ -89,46 +132,6 @@
       {% include "includes/portal_prefix_filter_field.html" with label="得意先品番" name="item_cd" value=list_filter.item_cd datalist_id="ioa-item-cd-options" placeholder="得意先品番" field_class="ioa-filter-field" label_class="ioa-filter-field-label" input_class="ioa-filter-control ioa-filter-item-cd" options=filter_options.item_cd_options %}
       {% include "includes/portal_prefix_filter_field.html" with label="仕入先品番" name="level1_item_cd" value=list_filter.level1_item_cd datalist_id="ioa-level1-item-cd-options" placeholder="仕入先品番" field_class="ioa-filter-field" label_class="ioa-filter-field-label" input_class="ioa-filter-control ioa-filter-level1-item-cd" options=filter_options.level1_item_cd_options %}
     </div>
-  </div>
-
-  <div class="ioa-flow-selector" data-flow-axis="{{ flow_selection.axis }}" data-flow-period="{{ flow_selection.period.value }}">
-    <span class="ioa-flow-selector-title">判定条件</span>
-    <label class="ioa-flow-selector-field">
-      判定軸
-      <select id="ioa-flow-axis" name="axis" class="ioa-filter-control">
-        {% for option in flow_axis_options %}
-          <option value="{{ option.value }}" data-help-text="{{ option.help_text }}" {% if flow_selection.axis == option.value %}selected{% endif %}>{{ option.label }}</option>
-        {% endfor %}
-      </select>
-    </label>
-    <label class="ioa-flow-selector-field">
-      判定期間
-      <select id="ioa-flow-period" name="period" class="ioa-filter-control">
-        {% comment %}軸別の選択肢をすべて描画し、選択中の軸以外は隠す。切り替えは JS が行う（design.md §6.6.1）。{% endcomment %}
-        {% for axis, options in flow_period_options.items %}
-          {% for option in options %}
-            <option value="{{ option.value }}" data-axis="{{ axis }}"
-                    {% if flow_selection.axis != axis %}hidden{% endif %}
-                    {% if flow_selection.axis == axis and flow_selection.period.value == option.value %}selected{% endif %}>{{ option.label }}</option>
-          {% endfor %}
-        {% endfor %}
-      </select>
-    </label>
-    <label class="ioa-flow-selector-field">
-      流動区分
-      <select id="ioa-flow-quadrant" name="flow_quadrant" class="ioa-filter-control">
-        <option value="">全て</option>
-        {% for rule in flow_quadrant_rule_rows %}
-          <option value="{{ rule.quadrant_key }}" {% if flow_quadrant_filter == rule.quadrant_key %}selected{% endif %}>{{ rule.quadrant }}</option>
-        {% endfor %}
-      </select>
-    </label>
-    <button type="button" class="button-link ioa-alert-rules-open" aria-haspopup="dialog" aria-controls="ioa-alert-rules-dialog">
-      判定ルール
-    </button>
-    <p class="ioa-flow-selector-help muted" id="ioa-flow-axis-help">
-      {% for option in flow_axis_options %}{% if flow_selection.axis == option.value %}{{ option.help_text }}{% endif %}{% endfor %}
-    </p>
   </div>
 
   <div class="ioa-table-toolbar">
@@ -380,6 +383,6 @@
 <script src="/static/js/portal-list-prefix-filter.js?v=20260629-dependent-cust" defer></script>
 <script src="/static/js/portal-list-dependent-cust-filter.js?v=20260629-dependent-cust" defer></script>
 <script src="/static/js/portal-list-sort-dialog.js?v=20260629-dependent-cust" defer></script>
-<script src="/static/js/inventory-order-alert-list-client.js?v=20260629-confirmation-rowkey" defer></script>
-<script src="/static/js/inventory-order-alert-list.js?v=20260629-confirmation-rowkey" defer></script>
+<script src="/static/js/inventory-order-alert-list-client.js?v=20260828-flow-quadrant" defer></script>
+<script src="/static/js/inventory-order-alert-list.js?v=20260828-flow-quadrant" defer></script>
 {% endblock %}
