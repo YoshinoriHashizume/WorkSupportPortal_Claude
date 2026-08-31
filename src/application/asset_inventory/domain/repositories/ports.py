@@ -115,9 +115,6 @@ class DesknetListDataGateway(Protocol):
 
 ListAllRecordsFn = Callable[[str, str, tuple[str, ...] | None], list[Record]]
 
-# セッション access_key から実効キーを解決する。認証失敗時は DesknetServiceAuthError を送出する。
-ResolveAccessKeyFn = Callable[[str], str]
-
 
 class FetchAttachmentFn(Protocol):
     """desknet's から添付ファイルの実体を取得する。(コンテンツ, Content-Type) を返す。

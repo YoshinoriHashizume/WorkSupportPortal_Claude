@@ -1,9 +1,11 @@
 from __future__ import annotations
 
 from django.conf import settings
+from django.contrib import messages
+from django.contrib.auth import logout
 from django.contrib.auth.decorators import login_required
 from django.http import HttpRequest, HttpResponse, HttpResponseForbidden
-from django.shortcuts import render
+from django.shortcuts import redirect, render
 from django.urls import reverse
 
 from application.asset_inventory.interfaces.wiring import (
@@ -11,9 +13,13 @@ from application.asset_inventory.interfaces.wiring import (
     export_csv_usecase,
     fetch_attachment_usecase,
     list_page_usecase,
-    resolve_access_key_usecase,
 )
-from application.asset_inventory.domain.value_objects.errors import DesknetApiError
+from application.asset_inventory.domain.value_objects.errors import (
+    MISSING_KEY_ERROR_MESSAGE,
+    SESSION_EXPIRED_MESSAGE,
+    DesknetAccessKeyExpiredError,
+    DesknetApiError,
+)
 from application.asset_inventory.domain.value_objects.reconcile_cache import has_amendment_snapshot
 from application.asset_inventory.domain.value_objects.list_client_data import build_list_client_payload
 from application.asset_inventory.domain.value_objects.list_query import (
@@ -30,8 +36,22 @@ from application.portal.interfaces.favorites import is_menu_favorited
 
 
 def _resolve_access_key(request: HttpRequest) -> tuple[str, str | None]:
+    """ログイン時に取得した desknet's のアクセスキーを取り出す。"""
     session_key = str(request.session.get("desknet_access_key") or "").strip()
-    return resolve_access_key_usecase().execute(session_key)
+    if not session_key:
+        return "", MISSING_KEY_ERROR_MESSAGE
+    return session_key, None
+
+
+def _handle_access_key_expired(request: HttpRequest) -> HttpResponse:
+    """アクセスキーを拒否されたときの復旧導線。
+
+    アクセスキーはログイン時にしか取得できないため、再ログインでしか復旧できない。
+    ログアウトしたうえでログイン画面へ誘導する。
+    """
+    logout(request)
+    messages.error(request, SESSION_EXPIRED_MESSAGE)
+    return redirect("identity:login")
 
 
 def _query_params(request: HttpRequest) -> dict[str, str]:
@@ -50,7 +70,10 @@ def list_page(request: HttpRequest) -> HttpResponse:
     if access_error:
         result = empty_list_page_result(error_message=access_error)
     else:
-        result = list_page_usecase().execute(access_key, query, session=request.session)
+        try:
+            result = list_page_usecase().execute(access_key, query, session=request.session)
+        except DesknetAccessKeyExpiredError:
+            return _handle_access_key_expired(request)
     table_params = query.table_params
 
     selected_row = next(
@@ -173,6 +196,8 @@ def attachment_proxy(request: HttpRequest) -> HttpResponse:
             access_key=access_key,
             timeout=float(settings.DESKNETS_TIMEOUT_SECONDS),
         )
+    except DesknetAccessKeyExpiredError:
+        return _handle_access_key_expired(request)
     except DesknetApiError as exc:
         return HttpResponse(str(exc), status=502, content_type="text/plain; charset=utf-8")
 
@@ -194,7 +219,10 @@ def export_csv(request: HttpRequest) -> HttpResponse:
     if access_error:
         return HttpResponse(access_error, status=503, content_type="text/plain; charset=utf-8")
 
-    content, error = export_csv_usecase().execute_safe(access_key, query, session=request.session)
+    try:
+        content, error = export_csv_usecase().execute_safe(access_key, query, session=request.session)
+    except DesknetAccessKeyExpiredError:
+        return _handle_access_key_expired(request)
     if error:
         return HttpResponse(error, status=502, content_type="text/plain; charset=utf-8")
 

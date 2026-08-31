@@ -20,7 +20,11 @@ from application.asset_inventory.domain.value_objects.table_display import (
     sort_rows,
 )
 from application.asset_inventory.domain.value_objects.desknet_data import list_management_rows
-from application.asset_inventory.domain.value_objects.errors import DesknetAccessKeyMissingError, DesknetApiError
+from application.asset_inventory.domain.value_objects.errors import (
+    DesknetAccessKeyExpiredError,
+    DesknetAccessKeyMissingError,
+    DesknetApiError,
+)
 
 __all__ = [
     "ListPage",
@@ -42,6 +46,9 @@ class ListPage:
 
         try:
             management_rows = tuple(list_management_rows(self._list_all, access_key))
+        except DesknetAccessKeyExpiredError:
+            # アクセスキーの失効は画面内メッセージでは復旧できないため、interfaces 層へ送出する
+            raise
         except DesknetAccessKeyMissingError as exc:
             return empty_list_page_result(error_message=str(exc))
         except DesknetApiError as exc:
@@ -73,6 +80,9 @@ class ListPage:
                 session=session,
                 use_snapshot=False,
             )
+        except DesknetAccessKeyExpiredError:
+            # アクセスキーの失効は画面内メッセージでは復旧できないため、interfaces 層へ送出する
+            raise
         except DesknetAccessKeyMissingError as exc:
             return empty_list_page_result(management_rows=management_rows, error_message=str(exc))
         except DesknetApiError as exc:

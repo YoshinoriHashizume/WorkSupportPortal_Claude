@@ -19,6 +19,13 @@ from application.asset_inventory.domain.value_objects.reconcile_cache import (
     ReconcileCache,
     save_reconcile_cache,
 )
+from application.asset_inventory.domain.value_objects.errors import (
+    NO_APP_PERMISSION_MESSAGE,
+    SESSION_EXPIRED_MESSAGE,
+    DesknetAccessKeyExpiredError,
+    DesknetApiError,
+)
+from application.asset_inventory.domain.value_objects.list_query import empty_list_page_result
 from application.asset_inventory.domain.value_objects.row_detail import FieldComparisonItem
 from application.portal.models import PortalMenuGroupAccess, UserAccessRequest
 
@@ -150,6 +157,94 @@ def test_TC_AIV_API_007_unselected_shows_results_panel(client, general_affairs_u
     assert "棚卸を選択してください。" in html
     assert "aiv-results-card" in html
     assert "receipt-results-card" in html
+
+
+def _raise_access_key_expired(monkeypatch, target: str) -> None:
+    def _boom(*args, **kwargs):
+        raise DesknetAccessKeyExpiredError("desknet's がアクセスキーを受け付けませんでした(HTTP 403)。")
+
+    monkeypatch.setattr(
+        target,
+        lambda: type("U", (), {"execute": _boom, "execute_safe": _boom})(),
+    )
+
+
+@pytest.mark.django_db
+def test_list_page_logs_out_and_redirects_when_access_key_expired(
+    client, general_affairs_user, monkeypatch
+):
+    """セッションのアクセスキーが失効したらログアウトして再ログインを促す。"""
+    client.force_login(general_affairs_user)
+    session = client.session
+    session["desknet_access_key"] = "expired-key"
+    session.save()
+    _raise_access_key_expired(monkeypatch, "application.asset_inventory.interfaces.views.list_page_usecase")
+
+    response = client.get("/app/general-affairs/asset-inventory", follow=True)
+
+    assert response.redirect_chain[0][0] == "/login"
+    assert response.wsgi_request.user.is_authenticated is False
+    # テンプレートはアポストロフィをエスケープするため、描画済み HTML ではなくコンテキストで検証する
+    assert [str(message) for message in response.context["messages"]] == [SESSION_EXPIRED_MESSAGE]
+
+
+@pytest.mark.django_db
+@pytest.mark.parametrize(
+    ("path", "target"),
+    [
+        ("/api/asset-inventory/export.csv", "export_csv_usecase"),
+        ("/api/asset-inventory/attachment?src=x", "fetch_attachment_usecase"),
+    ],
+)
+def test_downloads_log_out_when_access_key_expired(
+    client, general_affairs_user, monkeypatch, path, target
+):
+    """CSV 出力・添付取得も一覧と同じくログアウトしてログイン画面へ誘導する。"""
+    client.force_login(general_affairs_user)
+    session = client.session
+    session["desknet_access_key"] = "expired-key"
+    session.save()
+    _raise_access_key_expired(monkeypatch, f"application.asset_inventory.interfaces.views.{target}")
+
+    response = client.get(path)
+
+    assert response.status_code == 302
+    assert response.url == "/login"
+    assert response.wsgi_request.user.is_authenticated is False
+
+
+@pytest.mark.django_db
+def test_list_page_shows_permission_message_without_desknet_app_access(
+    client, general_affairs_user, monkeypatch
+):
+    """desknet's 側の参照権限がない場合は、ログアウトせず依頼先の分かる文言を出す。"""
+    client.force_login(general_affairs_user)
+    session = client.session
+    session["desknet_access_key"] = "valid-key"
+    session.save()
+
+    def _no_permission(*args, **kwargs):
+        raise DesknetApiError(NO_APP_PERMISSION_MESSAGE)
+
+    monkeypatch.setattr(
+        "application.asset_inventory.interfaces.views.list_page_usecase",
+        lambda: type(
+            "U",
+            (),
+            {
+                "execute": lambda self, access_key, query, session=None: empty_list_page_result(
+                    error_message=NO_APP_PERMISSION_MESSAGE
+                )
+            },
+        )(),
+    )
+
+    response = client.get("/app/general-affairs/asset-inventory")
+
+    assert response.status_code == 200
+    assert response.wsgi_request.user.is_authenticated is True
+    assert response.context["error_message"] == NO_APP_PERMISSION_MESSAGE
+    assert "システムグループへ desknet&#x27;s のアクセス権付与をご依頼ください" in response.content.decode("utf-8")
 
 
 @pytest.mark.django_db

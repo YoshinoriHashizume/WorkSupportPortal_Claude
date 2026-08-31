@@ -6,7 +6,11 @@ from application.asset_inventory.domain.repositories.ports import ListAllRecords
 from application.asset_inventory.domain.value_objects.reconcile_data import load_reconciled_data
 from application.asset_inventory.domain.value_objects.table_display import sort_rows
 from application.asset_inventory.domain.value_objects.desknet_data import list_management_rows
-from application.asset_inventory.domain.value_objects.errors import DesknetAccessKeyMissingError, DesknetApiError
+from application.asset_inventory.domain.value_objects.errors import (
+    DesknetAccessKeyExpiredError,
+    DesknetAccessKeyMissingError,
+    DesknetApiError,
+)
 from application.asset_inventory.use_cases.list_page import ListPageQuery, _select_management_row
 
 
@@ -39,5 +43,8 @@ class ExportCsv:
     def execute_safe(self, access_key: str, query: ListPageQuery, session: dict | None = None) -> tuple[bytes | None, str | None]:
         try:
             return self.execute(access_key, query, session=session), None
+        except DesknetAccessKeyExpiredError:
+            # アクセスキーの失効はメッセージ返却では復旧できないため、interfaces 層へ送出する
+            raise
         except (DesknetAccessKeyMissingError, DesknetApiError, ValueError) as exc:
             return None, str(exc)

@@ -6,10 +6,16 @@ import urllib.parse
 import urllib.request
 from typing import Any
 
-from django.conf import settings
-
 from application.asset_inventory.domain.repositories.ports import Record
-from application.asset_inventory.domain.value_objects.errors import DesknetAccessKeyMissingError, DesknetApiError, format_desknet_user_error_message
+from application.asset_inventory.domain.value_objects.errors import (
+    DesknetAccessKeyExpiredError,
+    DesknetAccessKeyMissingError,
+    DesknetApiError,
+    format_desknet_user_error_message,
+)
+
+#: desknet's がアクセスキーを拒否したときに返す HTTP ステータス。
+ACCESS_KEY_REJECTED_STATUS_CODES = frozenset({401, 403})
 
 
 def appsr_api_url(login_url: str) -> str:
@@ -90,14 +96,7 @@ def normalize_list_response(payload: dict[str, Any]) -> list[Record]:
     if str(payload.get("status") or "").lower() != "ok":
         if is_no_data_response(payload):
             return []
-        raise DesknetApiError(
-            format_desknet_user_error_message(
-                extract_api_error_message(payload),
-                has_service_account=bool(
-                    str(getattr(settings, "DESKNETS_ASSET_INVENTORY_LOGIN_ID", "") or "").strip()
-                ),
-            )
-        )
+        raise DesknetApiError(format_desknet_user_error_message(extract_api_error_message(payload)))
 
     list_block = payload.get("list") or {}
     items = list_block.get("item") or []
@@ -153,6 +152,10 @@ def fetch_list_data_page(
         with urllib.request.urlopen(request, timeout=timeout) as response:
             body = response.read().decode("utf-8")
     except urllib.error.HTTPError as exc:
+        if exc.code in ACCESS_KEY_REJECTED_STATUS_CODES:
+            raise DesknetAccessKeyExpiredError(
+                f"desknet's がアクセスキーを受け付けませんでした(HTTP {exc.code})。"
+            ) from exc
         raise DesknetApiError(f"desknet's API HTTP エラー: {exc.code}") from exc
     except urllib.error.URLError as exc:
         raise DesknetApiError(f"desknet's API 接続エラー: {exc.reason}") from exc

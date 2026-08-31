@@ -13,7 +13,7 @@ from application.asset_inventory.infrastructure.desknet.client import (
     normalize_list_response,
     record_field_value,
 )
-from application.asset_inventory.domain.value_objects.errors import DesknetApiError
+from application.asset_inventory.domain.value_objects.errors import NO_APP_PERMISSION_MESSAGE, DesknetApiError
 
 
 def test_TC_AIV_INF_004_appsr_url():
@@ -58,7 +58,9 @@ def test_TC_AIV_INF_006_extract_api_error_message():
 
     with pytest.raises(DesknetApiError) as exc_info:
         normalize_list_response({"status": "ng", "errormessage": "W:アクセス権がありません。[W10008]"})
-    assert "ポータルの総務権限とは別" in str(exc_info.value)
+    # W10008 は desknet's の生メッセージではなく、依頼先の分かる文言へ差し替える
+    assert str(exc_info.value) == NO_APP_PERMISSION_MESSAGE
+    assert "システムグループ" in str(exc_info.value)
     assert extract_api_error_message({"status": "ng"}) == "desknet's API エラー"
 
 
