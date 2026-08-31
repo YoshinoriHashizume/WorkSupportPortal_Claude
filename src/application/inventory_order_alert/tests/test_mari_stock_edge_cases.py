@@ -86,7 +86,7 @@ def test_TC_MSV_E_002_builds_payload_for_five_thousand_rows() -> None:
     )
 
     assert len(payload["rows"]) == 5000
-    assert payload["rows"][-1]["mariStockQty"] == 4999
+    assert payload["rows"][-1]["mari_stock_qty"] == 4999
 
 
 def test_TC_MSV_E_004_common_parts_share_the_same_mari_stock_quantity() -> None:
@@ -102,9 +102,9 @@ def test_TC_MSV_E_004_common_parts_share_the_same_mari_stock_quantity() -> None:
         confirmation_status_choices=list(STATUS_CHOICES),
     )
 
-    assert [row["mariStockQty"] for row in payload["rows"]] == [42, 42]
+    assert [row["mari_stock_qty"] for row in payload["rows"]] == [42, 42]
     # 一覧の在庫数を単純合計しても総在庫にはならない（重複計上を許容する）。
-    assert sum(row["mariStockQty"] for row in payload["rows"]) != 42
+    assert sum(row["mari_stock_qty"] for row in payload["rows"]) != 42
 
 
 @pytest.mark.parametrize(

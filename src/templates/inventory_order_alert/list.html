@@ -169,7 +169,16 @@
             data-cust-code="{{ row.cust_code }}"
             data-cust-name="{{ row.cust_name|default:'' }}"
             data-item-cd="{{ row.item_cd }}"
-            data-stock-qty="{{ row.stock_qty|default:'' }}"
+            {# 詳細ダイアログはこれらの属性から組み立てる。JS 側の行描画と対で維持する（design.md §6.3.1）。 #}
+            data-level1-vend-cd="{{ row.level1_vend_cd|default:'' }}"
+            data-level1-vend-name="{{ row.level1_vend_name|default:'' }}"
+            data-level1-item-cd="{{ row.level1_item_cd|default:'' }}"
+            data-last-incoming-date="{{ row|ioa_display:'last_incoming_date' }}"
+            data-last-ship-date="{{ row|ioa_display:'last_ship_date' }}"
+            data-flow-quadrant="{{ row.flow_quadrant_key|default:'' }}"
+            data-no-incoming-record="{% if row.no_incoming_record %}1{% endif %}"
+            data-stock-qty="{{ row|ioa_display:'stock_qty' }}"
+            data-mari-stock-qty="{{ row|ioa_display:'mari_stock_qty' }}"
             data-stock-location-detail="{{ row.stock_location_detail|default:'' }}"
             data-stock-as-of-label="{{ row.stock_as_of_label|default:'' }}"
             data-confirmation-status="{{ row.confirmation_status_key }}">

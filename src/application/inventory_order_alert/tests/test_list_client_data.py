@@ -106,7 +106,9 @@ def test_build_list_client_payload_row_includes_responsible_department():
 def test_payload_row_includes_mari_stock_quantity():
     payload = _payload([_row(mari_stock_qty=95)])
 
-    assert payload["rows"][0]["mariStockQty"] == 95
+    # ソートは行の生値を引く。camelCase の別名は配信しない（同じ値の二重配信になるため）。
+    assert payload["rows"][0]["mari_stock_qty"] == 95
+    assert "mariStockQty" not in payload["rows"][0]
 
 
 def test_payload_display_includes_both_stock_columns():

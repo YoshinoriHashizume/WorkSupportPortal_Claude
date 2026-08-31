@@ -473,3 +473,65 @@
 ## レビュー履歴
 
 <!-- 実装レビュー（implement-review-l1）がこのセクションに追記する。作成時点では見出しのみ残す。 -->
+
+### 実装レビュー Implement-L1 (2026/08/31 19:20)
+
+**対象**: コミット `3d685b9` / ブランチ `feature/ioa-mari-stock-visibility`
+**アーキテクチャreference**: django-clean-architecture version 1.0（make-design / design-review-l1 と一致 ✅）
+**コーディング規約reference**: django-coding-rules version 1.1
+
+**観点別サマリー**:
+
+| 観点 | OK | 警告 | NG |
+|------|-----|------|-----|
+| 1. 設計書との整合性 | 6件 | 2件 | 0件 |
+| 2. Clean Architecture のレイヤー違反 | 4件 | 0件 | 0件 |
+| 3. ドメインモデルの実装 | 3件 | 0件 | 0件 |
+| 4. 設計パターンの一貫性 | 3件 | 2件 | 0件 |
+| 5. 命名の準拠 | 3件 | 0件 | 0件 |
+| **合計** | **19件** | **4件** | **0件** |
+
+**総合判定**: PASS
+
+**指摘事項**:
+
+| # | 観点 | 重要度 | 該当ファイル | 指摘内容 | 対応 |
+|---|------|--------|-----------|---------|------|
+| IL1-1 | 観点1 | 警告 | `design.md` §7.2 | 実在しない `domain/value_objects/row_detail.py` を変更対象に挙げていた。設計時に既存構造の確認が不足 | **是正済み**（commit 3d685b9。§6.3.1 を追加し §7.2 から削除） |
+| IL1-2 | 観点1 | 警告 | `list_client_data.py:88-89` | ペイロードの `mariStockQty` を**どの利用側も読んでいない**。行の生コピーで `mari_stock_qty` が既に配信されており（ソートはこちらを使う）、表示は `display.mari_stock_qty` を使う。REQ-MSV-NF-001（配信量）に対して無駄 | **是正済み**（`mariStockQty` を削除し design.md §6.4 を利用側の表つきで改訂） |
+| IL1-3 | 観点4 | 警告 | `templates/inventory_order_alert/list.html:167-175` | サーバレンダリングの `<tr>` に新規 `data-*` 属性が無く、`inventory-order-alert-list-client.js` 側と非対称。既存属性は両方にあるため、パターンから逸脱している | **是正済み**（8属性を追加。あわせて `ioa_display` に在庫数の 3 状態を適用し、サーバ描画でも未取得が `－` になるよう JS と揃えた。回帰テスト2件を追加） |
+| IL1-4 | 観点4 | 警告 | `table_display.py:_sort_value` / `inventory-order-alert-list-client.js:sortValue` | 空・未取得のセンチネルが `-1` のため、**実在しうる負の在庫数と衝突**する。design.md §6.1「空は最小として扱う」と §8「負値はそのまま表示する」が両立しない | **Issue 起票**（[ISSUE-0007](../../issues/ISSUE-0007-empty-stock-sort-sentinel-collides-with-negative.md)。MARI に負の在庫数が実在するかの調査待ち） |
+
+**言語固有チェック（django-coding-rules v1.1）**:
+
+| # | ルール | 該当ファイル | 指摘内容 |
+|---|--------|-----------|---------|
+| IL1-C1 | コメント・docstring に全角括弧を使わない | `stock_quantity.py`（4箇所）ほか | 規約違反。ただし `application/` 配下 524 ファイル中 138 ファイルが同様であり、**リポジトリ全体の既存傾向**。同一コミット内でも `summary_queries.py` は半角で書いており不統一 |
+| IL1-C2 | infrastructure の public メソッドにログ出力 | `summary_queries.fetch_mari_stock_totals()` | ログ出力なし。ただし `summary_queries.py` は既存の全関数がログを持たず、**モジュール全体の既存傾向**に沿っている |
+
+**評価できる点**:
+
+- **Domain 層に `import django` が無い**（`test_clean_architecture.py` Green）。`stock_quantity.py` は
+  `format_display.py` にのみ依存し、Django 非依存を保っている。
+- **`gonenkukumi` の `fetch_item_stock_total` を import せず**自前で実装した（design.md §2.1）。
+  コンテキスト境界を越えていない。
+- **在庫数の 3 状態を「キーの有無」で表現**した設計が、`summary_row_codec` の
+  「キーが無い行にはキーを作らない」という一点の規律に集約できている。値で表していたら
+  `0`・空・未取得が混線していた。
+- **独自の例外型を新設せず**既存の `run_summary_aggregation` の例外捕捉に合流させた（design.md §8）。
+  REQ-MSV-F-009 を実装変更なしで満たしている。
+- `fetch_mari_stock_totals()` には docstring があり、同モジュールの既存関数より**規約準拠度が高い**。
+
+**未解決の指摘**: 1件（NG: 0件 / 警告: 1件 = IL1-4。Issue へ委譲済み）
+
+**是正の記録（2026/08/31 18:55）**:
+
+IL1-3 の是正中に、**サーバ描画のセルが `ioa_display` を通っており在庫数の 3 状態を
+適用していない**ことが分かった。JS 描画は `－` を出すのにサーバ描画は空を出す、という
+未検出の不整合であった。`templatetags/inventory_order_alert_format.py` に
+`STOCK_COLUMNS` の分岐を追加して揃え、回帰テストで固定した。
+`data-*` 属性を両描画で対称にする過程で見つかったものであり、
+**属性の非対称さ自体より重い問題だった**。
+
+**次のアクション**: IL1-4 は ISSUE-0007 で管理する（実データ調査が前提）。
+本ブランチは develop へマージ可能。

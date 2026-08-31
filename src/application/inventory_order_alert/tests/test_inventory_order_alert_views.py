@@ -635,6 +635,37 @@ def test_list_page_keeps_zero_mari_stock_distinct_from_blank(client, production_
 
 
 @pytest.mark.django_db
+def test_list_page_server_rendered_row_carries_detail_data_attributes(client, production_user):
+    import_record = SlimsStockImport.objects.create(file_name="sample.csv", row_count=1)
+    store_summary_snapshot(
+        import_record, [_sample_export_row() | {"mari_stock_qty": 95}], as_of_date=date(2026, 6, 17)
+    )
+
+    client.force_login(production_user)
+    html = client.get("/app/production/inventory-order-alert").content.decode("utf-8")
+
+    # JS の行描画と対で維持する（JS 初期化前・失敗時も詳細ダイアログを埋められるように）。
+    assert 'data-mari-stock-qty="95"' in html
+    assert 'data-level1-vend-cd="9209"' in html
+    assert 'data-level1-item-cd="90249-10112-9209"' in html
+    assert "data-flow-quadrant=" in html
+    assert "data-no-incoming-record=" in html
+    assert "data-last-ship-date=" in html
+
+
+@pytest.mark.django_db
+def test_list_page_server_rendered_row_marks_not_fetched_mari_stock(client, production_user):
+    import_record = SlimsStockImport.objects.create(file_name="sample.csv", row_count=1)
+    store_summary_snapshot(import_record, [_sample_export_row()], as_of_date=date(2026, 6, 17))
+
+    client.force_login(production_user)
+    html = client.get("/app/production/inventory-order-alert").content.decode("utf-8")
+
+    # 既存スナップショットは未取得。サーバ描画でも JS 描画と同じ「－」を出す。
+    assert 'data-mari-stock-qty="－"' in html
+
+
+@pytest.mark.django_db
 def test_list_page_detail_dialog_has_four_sections(client, production_user):
     import_record = SlimsStockImport.objects.create(file_name="sample.csv", row_count=1)
     store_summary_snapshot(import_record, [_sample_export_row()], as_of_date=date(2026, 6, 17))

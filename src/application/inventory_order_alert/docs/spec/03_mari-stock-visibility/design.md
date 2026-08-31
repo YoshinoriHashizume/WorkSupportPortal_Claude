@@ -227,13 +227,25 @@ SELECT TRIM(ITEM_CD) AS ITEM_CD,
 
 ### 6.4 クライアント配信ペイロード
 
-行に `mariStockQty` を追加する。
+行の生値 `mari_stock_qty` と `display` マップの `mari_stock_qty` を配信する。
+
+**camelCase の別名（`mariStockQty`）は配信しない。** 利用側は 2 つしかなく、
+どちらも既存のキーで足りるためである。
+
+| 利用側 | 参照するキー |
+|---|---|
+| クライアント側のソート（`sortValue()`） | 行の生値 `mari_stock_qty` |
+| セルの描画・詳細ダイアログの `data-*` 属性 | `display.mari_stock_qty` |
 
 | 項目 | 増分の見積り |
 |---|---|
-| `"mariStockQty":123` | 約 20 バイト |
+| `"mari_stock_qty":123` | 約 22 バイト |
 | `display` マップの `mari_stock_qty` エントリ | 約 25 バイト |
-| **合計** | **約 45 バイト**（REQ-MSV-NF-001 の 50 バイト以内） |
+| **合計** | **約 47 バイト**（REQ-MSV-NF-001 の 50 バイト以内） |
+
+> **実測値（2026/08/31）**: 1 行あたり **+41 バイト**（未取得行 3,974 → MARI 付き行 4,015）。
+> 見積りとの乖離はなかった。計測手順は `tests/test_mari_stock_edge_cases.py` の
+> `test_TC_MSV_E_001_payload_increase_per_row_is_within_budget` を参照。
 
 > 02_low-flow-visibility では見積りが実測と 2.5 倍ずれた（[ISSUE-0005](../../issues/ISSUE-0005-no-payload-size-requirement.md)）。
 > 今回はキー名と引用符を含めて数えている。**実測はテスト設計の E 系で必ず行う**。
@@ -257,7 +269,8 @@ SELECT TRIM(ITEM_CD) AS ITEM_CD,
 | `domain/value_objects/table_display.py` | `SORTABLE_COLUMNS` の見出し変更・`mari_stock_qty` 追加・`responsible_department` 削除。`_sort_value()` に `mari_stock_qty` の分岐を追加 |
 | `domain/value_objects/export_csv.py` | `EXPORT_COLUMNS` の見出し変更・`mari_stock_qty` 追加（責任部署は維持） |
 | `domain/value_objects/list_client_data.py` | ペイロードに `mariStockQty` を追加。`display` マップに `mari_stock_qty` |
-| `templates/inventory_order_alert/list.html` | 詳細ダイアログを 4 区分へ（§6.3）。一覧の責任部署列は `SORTABLE_COLUMNS` 由来のため自動的に消える |
+| `templates/inventory_order_alert/list.html` | 詳細ダイアログを 4 区分へ（§6.3）。一覧行に詳細用の `data-*` 属性を追加（§6.3.1。JS 側の行描画と対で維持する）。一覧の責任部署列は `SORTABLE_COLUMNS` 由来のため自動的に消える |
+| `templatetags/inventory_order_alert_format.py` | `ioa_display` に在庫数の 3 状態を適用し、サーバ描画と JS 描画で未取得の表示を揃える（§4.2） |
 | `static/js/inventory-order-alert-list-client.js` | `mari_stock_qty` のソート・描画。責任部署の列描画を削除。詳細ダイアログ用の `data-*` 属性を追加（§6.3.1） |
 | `static/js/inventory-order-alert-list.js` | 詳細ダイアログへの値の流し込みを 4 区分に追随（§6.3.1） |
 | `static/css/app.css` | 詳細ダイアログの区分見出しのスタイル |

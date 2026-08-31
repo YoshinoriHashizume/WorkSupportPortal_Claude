@@ -84,9 +84,8 @@ def row_to_client_dict(row: dict[str, object]) -> dict[str, object]:
     client_row["flowQuadrantKey"] = str(row.get("flow_quadrant_key") or FLOW_QUADRANT_KEYS[quadrant])
     client_row["noIncomingRecord"] = bool(row.get("no_incoming_record"))
     client_row["responsibleDepartment"] = str(row.get("responsible_department") or "")
-    # 未取得（キーなし）を保つため、キーがある場合のみ配信する
-    if "mari_stock_qty" in row:
-        client_row["mariStockQty"] = _json_value(row.get("mari_stock_qty"))
+    # MARI 在庫は行の生値（mari_stock_qty）がソートに、display が表示に使われる。
+    # camelCase の別名は増やさない（同じ値を二重に配信することになるため。design.md §6.4）。
     client_row["display"] = {
         column: _display_cell(row, column, quadrant)
         for column, _label in SORTABLE_COLUMNS
