@@ -33,6 +33,7 @@ def _sample_row() -> dict[str, object]:
         "post_shipment_count": 1,
         "post_shipment_total_qty": 250,
         "stock_qty": 100,
+        "mari_stock_qty": 95,
         "stock_location_summary": "2D0-03-5 他1",
         "stock_location_detail": "2D0-03-5=90@20161228;2E1-03-4=10@20161228",
         "stock_as_of_label": "2026年6月17日時点の在庫",
@@ -71,6 +72,30 @@ def test_export_columns_keep_order_after_confirmation_status():
     start = columns.index("confirmation_status")
 
     assert columns[start:] == TRAILING_COLUMNS
+
+
+def test_export_columns_label_slims_and_mari_stock():
+    assert ("stock_qty", "在庫数(SLIMS)") in EXPORT_COLUMNS
+    assert ("mari_stock_qty", "在庫数(MARI)") in EXPORT_COLUMNS
+
+
+def test_export_columns_keep_responsible_department():
+    columns = [column for column, _label in EXPORT_COLUMNS]
+
+    # 一覧からは外すが CSV には残す（持ち出し用途のため。design.md §6.2）
+    assert "responsible_department" in columns
+
+
+def test_export_csv_writes_empty_for_not_fetched_mari_stock():
+    row = _sample_row()
+    del row["mari_stock_qty"]
+
+    payload = render_export_csv([row]).decode("utf-8-sig")
+    header, data = payload.strip().splitlines()[:2]
+
+    # CSV では「－」を出さず空にする（Excel で文字列として扱われるため）
+    mari_index = header.split(",").index("在庫数(MARI)")
+    assert data.split(",")[mari_index] == ""
 
 
 def test_export_headers_are_japanese():

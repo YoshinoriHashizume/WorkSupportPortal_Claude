@@ -77,11 +77,60 @@ def test_sortable_columns_first_entry_is_flow_quadrant():
     assert SORTABLE_COLUMNS[0] == ("flow_quadrant", "流動区分")
 
 
-def test_sortable_columns_include_responsible_department_after_stock_qty():
+def test_sortable_columns_label_slims_stock_quantity():
+    assert ("stock_qty", "在庫数(SLIMS)") in SORTABLE_COLUMNS
+
+
+def test_sortable_columns_include_mari_stock_after_slims_stock():
     columns = [column for column, _label in SORTABLE_COLUMNS]
     stock_index = columns.index("stock_qty")
 
-    assert SORTABLE_COLUMNS[stock_index + 1] == ("responsible_department", "責任部署")
+    assert SORTABLE_COLUMNS[stock_index + 1] == ("mari_stock_qty", "在庫数(MARI)")
+
+
+def test_sortable_columns_do_not_include_responsible_department():
+    columns = [column for column, _label in SORTABLE_COLUMNS]
+
+    # 責任部署は詳細ダイアログへ移した（design.md §6.1）
+    assert "responsible_department" not in columns
+
+
+def test_sort_rows_by_mari_stock_quantity_descending():
+    rows = [
+        _row(item_cd="A", mari_stock_qty=10),
+        _row(item_cd="B", mari_stock_qty=30),
+        _row(item_cd="C", mari_stock_qty=20),
+    ]
+
+    sorted_rows = sort_rows_legacy(rows, sort="mari_stock_qty", direction="desc")
+
+    assert [row["item_cd"] for row in sorted_rows] == ["B", "C", "A"]
+
+
+def test_sort_rows_treats_missing_mari_stock_as_smallest():
+    rows = [
+        _row(item_cd="A", mari_stock_qty=10),
+        _row(item_cd="B", mari_stock_qty=""),
+        _row(item_cd="C"),
+    ]
+
+    sorted_rows = sort_rows_legacy(rows, sort="mari_stock_qty", direction="asc")
+
+    # 空（該当なし）と未取得はいずれも値ではないため先頭に来る
+    assert sorted_rows[-1]["item_cd"] == "A"
+
+
+def test_sort_rows_by_mari_stock_keeps_tiebreakers():
+    rows = [
+        _row(cust_code="200", item_cd="ITEM-B", mari_stock_qty=10),
+        _row(cust_code="100", item_cd="ITEM-B", mari_stock_qty=10),
+        _row(cust_code="100", item_cd="ITEM-A", mari_stock_qty=10),
+    ]
+
+    sorted_rows = sort_rows_legacy(rows, sort="mari_stock_qty", direction="asc")
+
+    assert [row["item_cd"] for row in sorted_rows] == ["ITEM-A", "ITEM-B", "ITEM-B"]
+    assert [row["cust_code"] for row in sorted_rows] == ["100", "100", "200"]
 
 
 def test_sortable_columns_do_not_include_alert_level():
@@ -152,14 +201,6 @@ def test_sort_summary_rows_supports_flow_quadrant_in_five_key_multi_sort():
         (QUADRANT_SUPPLY_RISK, "200", "A", 1, "1"),
         (QUADRANT_NORMAL_FLOW, "100", "A", 1, "1"),
     ]
-
-
-def test_sort_summary_rows_orders_responsible_department_by_flow_quadrant_rank():
-    rows = [_quadrant_row(quadrant) for quadrant in QUADRANTS_IN_REVERSE_RANK]
-
-    sorted_rows = sort_rows_legacy(rows, sort="responsible_department", direction="asc")
-
-    assert [row["flow_quadrant"] for row in sorted_rows] == list(QUADRANTS_IN_RANK_ORDER)
 
 
 def test_parse_table_display_params_defaults():

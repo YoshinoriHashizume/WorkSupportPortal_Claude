@@ -85,6 +85,18 @@ def test_wiring_has_no_save_alert_settings_usecase():
     assert "save_alert_settings_usecase" not in wiring.__all__
 
 
+def test_stock_column_labels_always_state_their_source():
+    """出所を示さない「在庫数」単独の見出しを残さない（TC-MSV-X-012 / REQ-MSV-NF-005）。
+
+    SLIMS と MARI のどちらの値か分からない見出しは、発注判断を誤らせる。
+    """
+    from application.inventory_order_alert.domain.value_objects.export_csv import EXPORT_COLUMNS
+    from application.inventory_order_alert.domain.value_objects.table_display import SORTABLE_COLUMNS
+
+    for label in [label for _key, label in SORTABLE_COLUMNS] + [label for _key, label in EXPORT_COLUMNS]:
+        assert label != "在庫数"
+
+
 def test_app_css_has_no_japanese_flow_quadrant_selectors():
     css = (SRC_ROOT / "static" / "css" / "app.css").read_text(encoding="utf-8")
 

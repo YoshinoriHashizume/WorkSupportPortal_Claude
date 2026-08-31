@@ -150,6 +150,36 @@ def fetch_bom_level1_by_root(connection: object, roots: set[str], as_of_date: da
     return level1_by_root
 
 
+def fetch_mari_stock_totals(connection: object, internal_item_cds: list[str]) -> dict[str, object]:
+    """基幹 Oracle(MARI)の在庫数を内作品番単位で合算して返す(design.md §5.3)。
+
+    SLIMS 取込時の集計から 1 回だけ呼ぶ。一覧表示のたびには呼ばない。
+    Oracle の IN 句上限を超える場合は既存の chunked() で分割するが、論理的には 1 回の取得として扱う。
+    該当在庫が無い品番は戻り値に含めない(呼び出し側で空にする)。
+    """
+    if not internal_item_cds:
+        return {}
+
+    totals: dict[str, object] = {}
+    for batch in chunked(sorted({item for item in internal_item_cds if item})):
+        placeholders = ", ".join(f":item_{index}" for index, _ in enumerate(batch))
+        params = {f"item_{index}": item_cd for index, item_cd in enumerate(batch)}
+        sql = f"""
+            SELECT TRIM(ITEM_CD) AS ITEM_CD,
+                   SUM(NVL(STOCK_ON_HAND_QTY, 0)) AS STOCK_QTY
+              FROM T_ITEM_STOCK
+             WHERE TRIM(ITEM_CD) IN ({placeholders})
+             GROUP BY TRIM(ITEM_CD)
+        """
+        cursor = connection.cursor()
+        cursor.execute(sql, params)
+        for row in rows_as_dicts(cursor):
+            item_cd = str(row["item_cd"]).strip()
+            if item_cd:
+                totals[item_cd] = row.get("stock_qty")
+    return totals
+
+
 def fetch_vendor_by_component(connection: object) -> dict[str, tuple[str, str]]:
     sql = """
         SELECT TRIM(cost.ITEM_CD) AS ITEM_CD,
@@ -317,6 +347,8 @@ def build_summary_rows(
     level1_by_root = fetch_bom_level1_by_root(connection, all_roots, as_of_date)
     vendor_by_component = fetch_vendor_by_component(connection)
     incoming_by_item_vend = fetch_last_incoming_by_item_vend(connection)
+    # MARI 在庫は取込時に 1 回だけ取得する(design.md §3.1)。一覧表示のたびには問い合わせない。
+    mari_stock_by_item = fetch_mari_stock_totals(connection, sorted(internal_items))
 
     incoming_cache: dict[str, tuple[date | None, str, str, str]] = {}
     rows: list[dict[str, object]] = []
@@ -366,6 +398,8 @@ def build_summary_rows(
                 "last_ship_date": last_ship.strftime("%Y/%m/%d") if last_ship else "",
                 "post_shipment_count": post_count,
                 "post_shipment_total_qty": post_total_qty,
+                # 該当在庫が無い場合は空。0(在庫なし)とは区別する(design.md §4.2)
+                "mari_stock_qty": mari_stock_by_item.get(internal, ""),
             }
         )
 

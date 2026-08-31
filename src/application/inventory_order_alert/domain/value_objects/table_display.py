@@ -21,8 +21,8 @@ SORTABLE_COLUMNS: tuple[tuple[str, str], ...] = (
     ("last_ship_date", "最終出荷日"),
     ("post_shipment_count", "出荷回数"),
     ("post_shipment_total_qty", "出荷数合計"),
-    ("stock_qty", "在庫数"),
-    ("responsible_department", "責任部署"),
+    ("stock_qty", "在庫数(SLIMS)"),
+    ("mari_stock_qty", "在庫数(MARI)"),
     ("confirmation_status", "確認状態"),
 )
 
@@ -111,7 +111,7 @@ def build_table_query_string(*, sort_specs: tuple[SortSpec, ...], page: int, pag
 def default_direction_for_column(column: str) -> str:
     if column == "flow_quadrant":
         return "asc"
-    if column in {"post_shipment_count", "post_shipment_total_qty", "stock_qty"}:
+    if column in {"post_shipment_count", "post_shipment_total_qty", "stock_qty", "mari_stock_qty"}:
         return "desc"
     return "asc"
 
@@ -199,15 +199,13 @@ def _sort_value(row: dict[str, object], column: str) -> object:
     value = row.get(column, "")
     if column == "flow_quadrant":
         return flow_quadrant_sort_rank(str(value or QUADRANT_NORMAL_FLOW))
-    if column == "responsible_department":
-        # 責任部署は流動区分からの導出値なので、独自ランクを持たず流動区分ランクで並べる（design.md §6.6.2）。
-        return flow_quadrant_sort_rank(str(row.get("flow_quadrant") or QUADRANT_NORMAL_FLOW))
     if column in {"post_shipment_count", "post_shipment_total_qty"}:
         try:
             return int(value or 0)
         except (TypeError, ValueError):
             return 0
-    if column == "stock_qty":
+    if column in {"stock_qty", "mari_stock_qty"}:
+        # 空（該当なし）と未取得（キーなし）はいずれも値ではないため最小として扱う
         text = str(value or "").replace(",", "").strip()
         if not text:
             return Decimal("-1")
