@@ -1425,16 +1425,21 @@ body.shipment-trend-page.st-refresh-loading {
   align-items: center;
   flex-shrink: 0;
 }
-/* フィルタパネルの枠を横いっぱいに広げる。並び替えボタンは枠内の右端に置く。 */
+/* フィルタパネルの枠を横いっぱいに広げる。並び替えは枠内の左端、確認状態リセットは右端に置く。 */
 .inventory-order-alert-page .ioa-table-toolbar .ioa-filter-panel {
   margin: 0;
   flex: 1 1 auto;
   min-width: 0;
 }
-.inventory-order-alert-page .ioa-filter-panel-sort {
+.inventory-order-alert-page .ioa-filter-panel-sort .ioa-sort-open {
+  height: var(--portal-control-height);
+  min-height: var(--portal-control-height);
+  white-space: nowrap;
+}
+.inventory-order-alert-page .ioa-filter-panel-reset {
   margin-left: auto;
 }
-.inventory-order-alert-page .ioa-filter-panel-sort .ioa-sort-open {
+.inventory-order-alert-page .ioa-filter-panel-reset .ioa-confirmation-reset {
   height: var(--portal-control-height);
   min-height: var(--portal-control-height);
   white-space: nowrap;
@@ -1518,14 +1523,6 @@ body.shipment-trend-page.st-refresh-loading {
 }
 .inventory-order-alert-page .ioa-table-counts-right {
   text-align: right;
-}
-.inventory-order-alert-page .ioa-table-counts-right-wrap {
-  display: flex;
-  align-items: center;
-  justify-content: flex-end;
-  gap: 12px;
-  min-width: 0;
-  margin-left: auto;
 }
 .inventory-order-alert-page .ioa-confirmation-reset[disabled] {
   opacity: 0.45;
@@ -2079,9 +2076,6 @@ body.inventory-order-alert-page .ioa-detail-memo {
   margin: 0;
   flex: 1 1 auto;
   min-width: 0;
-}
-.asset-inventory-page .aiv-filter-panel-sort {
-  margin-left: auto;
 }
 .asset-inventory-page .aiv-filter-panel-sort .aiv-sort-open {
   height: var(--portal-control-height);
@@ -2727,9 +2721,6 @@ body.asset-inventory-page .aiv-photo-zoom-image {
   margin: 0;
   flex: 1 1 auto;
   min-width: 0;
-}
-.shipment-trend-page .st-filter-panel-sort {
-  margin-left: auto;
 }
 .shipment-trend-page .st-filter-panel-sort .st-sort-open {
   height: var(--portal-control-height);

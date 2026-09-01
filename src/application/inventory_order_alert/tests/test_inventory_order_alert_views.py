@@ -445,7 +445,6 @@ def test_list_page_shows_paginated_summary_rows(client, production_user):
     assert 'class="muted ioa-table-range"' in html
     assert 'class="ioa-table-counts-left"' in html
     assert 'class="ioa-table-counts-right"' in html
-    assert 'class="ioa-table-counts-right-wrap"' in html
     assert "リセット" in html
     assert "確認状態リセット" not in html
     assert "ioa-confirmation-reset" in html
