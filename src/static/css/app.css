@@ -1423,12 +1423,21 @@ body.shipment-trend-page.st-refresh-loading {
   flex-wrap: wrap;
   gap: 12px;
   align-items: center;
-  justify-content: space-between;
   flex-shrink: 0;
 }
-/* フィルタは並び替えの右に置く。ツールバー枠自体は判定条件セレクタと共通（§1421付近）。 */
+/* フィルタパネルの枠を横いっぱいに広げる。並び替えボタンは枠内の右端に置く。 */
 .inventory-order-alert-page .ioa-table-toolbar .ioa-filter-panel {
   margin: 0;
+  flex: 1 1 auto;
+  min-width: 0;
+}
+.inventory-order-alert-page .ioa-filter-panel-sort {
+  margin-left: auto;
+}
+.inventory-order-alert-page .ioa-filter-panel-sort .ioa-sort-open {
+  height: var(--portal-control-height);
+  min-height: var(--portal-control-height);
+  white-space: nowrap;
 }
 .inventory-order-alert-page .ioa-table-footer-row {
   display: flex;
@@ -2070,12 +2079,21 @@ body.inventory-order-alert-page .ioa-detail-memo {
   flex-wrap: wrap;
   gap: 12px;
   align-items: center;
-  justify-content: space-between;
   flex-shrink: 0;
 }
-/* フィルタは並び替えの右に置く。枠は .aiv-filter-panel 側で定義済み。 */
+/* フィルタパネルの枠を横いっぱいに広げる。並び替えボタンは枠内の右端に置く。 */
 .asset-inventory-page .aiv-table-toolbar .aiv-filter-panel {
   margin: 0;
+  flex: 1 1 auto;
+  min-width: 0;
+}
+.asset-inventory-page .aiv-filter-panel-sort {
+  margin-left: auto;
+}
+.asset-inventory-page .aiv-filter-panel-sort .aiv-sort-open {
+  height: var(--portal-control-height);
+  min-height: var(--portal-control-height);
+  white-space: nowrap;
 }
 /* 件数サマリは表の下のフッタ行へ（表の表示領域を優先するため）。 */
 .asset-inventory-page .aiv-table-footer-row {
@@ -2707,14 +2725,23 @@ body.asset-inventory-page .aiv-photo-zoom-image {
   flex-wrap: wrap;
   gap: 12px;
   align-items: center;
-  justify-content: space-between;
   flex-shrink: 0;
   min-width: 0;
   max-width: 100%;
 }
-/* フィルタは並び替えの右に置く。枠は .st-filter-panel 側で定義済み。 */
+/* フィルタパネルの枠を横いっぱいに広げる。並び替えボタンは枠内の右端に置く。 */
 .shipment-trend-page .st-table-toolbar .st-filter-panel {
   margin: 0;
+  flex: 1 1 auto;
+  min-width: 0;
+}
+.shipment-trend-page .st-filter-panel-sort {
+  margin-left: auto;
+}
+.shipment-trend-page .st-filter-panel-sort .st-sort-open {
+  height: var(--portal-control-height);
+  min-height: var(--portal-control-height);
+  white-space: nowrap;
 }
 /* 件数サマリは表の下のフッタ行へ（表の表示領域を優先するため）。 */
 .shipment-trend-page .st-table-footer-row {

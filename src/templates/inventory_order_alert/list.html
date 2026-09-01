@@ -109,11 +109,8 @@
     </p>
   </div>
 
-  {# フィルタは並び替えと同じ行に置き、縦の表示領域を表へ回す。 #}
+  {# フィルタパネルの枠を横いっぱいに広げ、並び替えボタンを枠内の右端に置く。 #}
   <div class="ioa-table-toolbar">
-    <button type="button" class="button-link ioa-sort-open" aria-haspopup="dialog" aria-controls="ioa-sort-dialog">
-      並び替え
-    </button>
     <div class="ioa-filter-panel">
       <div class="ioa-filter-panel-fields">
         <label class="ioa-filter-field">
@@ -136,6 +133,12 @@
         </label>
         {% include "includes/portal_prefix_filter_field.html" with label="得意先品番" name="item_cd" value=list_filter.item_cd datalist_id="ioa-item-cd-options" placeholder="得意先品番" field_class="ioa-filter-field" label_class="ioa-filter-field-label" input_class="ioa-filter-control ioa-filter-item-cd" options=filter_options.item_cd_options %}
         {% include "includes/portal_prefix_filter_field.html" with label="仕入先品番" name="level1_item_cd" value=list_filter.level1_item_cd datalist_id="ioa-level1-item-cd-options" placeholder="仕入先品番" field_class="ioa-filter-field" label_class="ioa-filter-field-label" input_class="ioa-filter-control ioa-filter-level1-item-cd" options=filter_options.level1_item_cd_options %}
+        <div class="ioa-filter-field ioa-filter-panel-sort">
+          <span class="ioa-filter-field-label" aria-hidden="true">&nbsp;</span>
+          <button type="button" class="button-link ioa-sort-open" aria-haspopup="dialog" aria-controls="ioa-sort-dialog">
+            並び替え
+          </button>
+        </div>
       </div>
     </div>
   </div>
