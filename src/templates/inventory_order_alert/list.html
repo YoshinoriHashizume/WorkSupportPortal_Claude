@@ -71,7 +71,7 @@
         <span class="ioa-filter-field-label">判定軸</span>
         <select id="ioa-flow-axis" name="axis" class="ioa-filter-select ioa-filter-control">
           {% for option in flow_axis_options %}
-            <option value="{{ option.value }}" data-help-text="{{ option.help_text }}" {% if flow_selection.axis == option.value %}selected{% endif %}>{{ option.label }}</option>
+            <option value="{{ option.value }}" {% if flow_selection.axis == option.value %}selected{% endif %}>{{ option.label }}</option>
           {% endfor %}
         </select>
       </label>
@@ -104,9 +104,6 @@
         </button>
       </div>
     </div>
-    <p class="ioa-flow-selector-help muted" id="ioa-flow-axis-help">
-      {% for option in flow_axis_options %}{% if flow_selection.axis == option.value %}{{ option.help_text }}{% endif %}{% endfor %}
-    </p>
   </div>
 
   {# フィルタパネルの枠を横いっぱいに広げ、並び替えボタンを枠内の右端に置く。 #}
@@ -221,9 +218,8 @@
         {% endif %}
       </div>
     </form>
-    {# 判定条件・件数サマリは常時表示する（0件時も絞り込み状況が分かるように）。 #}
+    {# 件数サマリは常時表示する（0件時も絞り込み状況が分かるように）。判定条件は判定軸・判定期間セレクトで分かるため表示しない。 #}
     <div class="ioa-table-footer-right">
-      <p class="ioa-flow-condition-label muted">{{ flow_selection.axis_label }}・{{ flow_selection.period_label }}で判定</p>
       <div class="ioa-table-counts">
         <p class="ioa-table-counts-left">供給リスク品 {{ counts.supply_risk }} 件 / 在庫死蔵品 {{ counts.dormant_stock }} 件 / 在庫過剰リスク品 {{ counts.excess_stock_risk }} 件 / 通常流動品 {{ counts.normal_flow }} 件</p>
         <div class="ioa-table-counts-right-wrap">
@@ -425,6 +421,6 @@
 <script src="/static/js/portal-list-prefix-filter.js?v=20260629-dependent-cust" defer></script>
 <script src="/static/js/portal-list-dependent-cust-filter.js?v=20260629-dependent-cust" defer></script>
 <script src="/static/js/portal-list-sort-dialog.js?v=20260629-dependent-cust" defer></script>
-<script src="/static/js/inventory-order-alert-list-client.js?v=20260831-mari-stock" defer></script>
+<script src="/static/js/inventory-order-alert-list-client.js?v=20260901-dormant-period-fix" defer></script>
 <script src="/static/js/inventory-order-alert-list.js?v=20260831-mari-stock" defer></script>
 {% endblock %}

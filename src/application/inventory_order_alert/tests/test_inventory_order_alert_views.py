@@ -179,8 +179,12 @@ def test_list_page_shows_flow_selection_controls(client, production_user):
     assert 'id="ioa-flow-quadrant"' in html
     assert "低流動判定軸" in html
     assert "死蔵判定軸" in html
-    assert "低流動判定軸・3か月で判定" in html
-    assert "判定期間内に入出荷のない品目（低流動品）を洗い出します" in html
+    # 判定条件・補助説明はセレクトボックス自体で分かるため、別途テキストでは表示しない。
+    assert "低流動判定軸・3か月で判定" not in html
+    assert "ioa-flow-condition-label" not in html
+    assert "判定期間内に入出荷のない品目（低流動品）を洗い出します" not in html
+    assert "ioa-flow-axis-help" not in html
+    assert "data-help-text" not in html
 
 
 @pytest.mark.django_db

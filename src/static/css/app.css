@@ -1928,13 +1928,6 @@ body.inventory-order-alert-page .ioa-detail-memo {
   min-height: var(--portal-control-height);
   white-space: nowrap;
 }
-.inventory-order-alert-page .ioa-flow-selector-help {
-  margin: 6px 0 0;
-}
-.inventory-order-alert-page .ioa-flow-condition-label {
-  margin: 0;
-  font-size: 0.85rem;
-}
 .inventory-order-alert-page .ioa-alert-rules-condition {
   margin: 0 0 4px;
   font-weight: 600;

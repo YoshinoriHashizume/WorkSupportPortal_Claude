@@ -16,6 +16,21 @@ def test_inventory_order_alert_list_client_js_renders_sort_headers_as_links():
     assert "function renderTableHeaders()" not in source
 
 
+def test_inventory_order_alert_list_client_js_selects_flow_period_option_by_axis_and_value():
+    """判定期間の value は軸をまたいで重複する（低流動1か月＝死蔵1年＝どちらも "1"）。
+
+    select.value への代入は DOM 順で最初に一致した option（隠れていても）を選んでしまうため、
+    軸と value の両方が一致する option を明示的に選択しなければならない
+    （死蔵判定軸を選ぶと「1年」ではなく「1か月」と表示される不具合の再発防止）。
+    """
+    source = CLIENT_JS_PATH.read_text(encoding="utf-8")
+    sync_block = source.split("function syncFlowSelector()", 1)[1].split("flowAxisSelect?.addEventListener", 1)[0]
+
+    assert "flowPeriodSelect.value = String(state.flowPeriod)" not in sync_block
+    assert "option.dataset.axis === state.flowAxis" in sync_block
+    assert "matchedOption.selected = true" in sync_block
+
+
 def test_inventory_order_alert_list_client_js_sorts_confirmation_status_by_key_rank():
     source = CLIENT_JS_PATH.read_text(encoding="utf-8")
     assert "CONFIRMATION_STATUS_RANK" in source
