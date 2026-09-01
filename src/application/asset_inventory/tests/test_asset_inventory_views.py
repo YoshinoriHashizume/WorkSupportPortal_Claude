@@ -309,7 +309,8 @@ def test_TC_AIV_API_003_general_affairs_user_ok(client, general_affairs_user, mo
     assert 'portal-list-prefix-filter.js' in html
     assert "aiv-filter-asset-number" in html
     assert 'id="aiv-list-data"' in html
-    assert 'onchange="this.form.submit()"' not in html.split("aiv-filter-panel")[1].split("aiv-table-toolbar")[0]
+    # フィルタは並び替えと同じツールバー行の中にある（表の表示領域を優先するため）。
+    assert 'onchange="this.form.submit()"' not in html.split("aiv-filter-panel")[1].split("aiv-table-wrap")[0]
 
 
 @pytest.mark.django_db

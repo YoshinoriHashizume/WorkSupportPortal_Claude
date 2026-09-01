@@ -1426,6 +1426,18 @@ body.shipment-trend-page.st-refresh-loading {
   justify-content: space-between;
   flex-shrink: 0;
 }
+/* フィルタは並び替えの右に置く。ツールバー枠自体は判定条件セレクタと共通（§1421付近）。 */
+.inventory-order-alert-page .ioa-table-toolbar .ioa-filter-panel {
+  margin: 0;
+}
+.inventory-order-alert-page .ioa-table-footer-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 16px;
+  align-items: flex-end;
+  justify-content: space-between;
+  flex-shrink: 0;
+}
 .inventory-order-alert-page .ioa-table-footer {
   display: flex;
   flex-wrap: wrap;
@@ -1438,6 +1450,15 @@ body.shipment-trend-page.st-refresh-loading {
   flex-wrap: wrap;
   gap: 8px 12px;
   align-items: center;
+}
+/* 判定条件・件数サマリはフッタの右側へ（表の表示領域を優先するため）。 */
+.inventory-order-alert-page .ioa-table-footer-right {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 4px;
+  flex-shrink: 0;
+  margin-left: auto;
 }
 .inventory-order-alert-page .ioa-table-controls {
   display: flex;
@@ -1884,10 +1905,10 @@ body.inventory-order-alert-page .ioa-detail-memo {
 .inventory-order-alert-page .ioa-table td {
   white-space: nowrap;
 }
-/* 判定条件セレクタ（design.md §6.6.1）。フィルタパネルの上に常時表示する。
+/* 判定条件セレクタ（design.md §6.6.1）。フィルタ（並び替えと同じ行）の上に常時表示する。
    枠とコントロールは .ioa-filter-panel と共有し、ここでは差分のみ定義する。
-   余白は下側に来るフィルタパネルへ付ける。 */
-.inventory-order-alert-page .ioa-flow-selector + .ioa-filter-panel {
+   余白は下側に来るツールバー行へ付ける。 */
+.inventory-order-alert-page .ioa-flow-selector + .ioa-table-toolbar {
   margin-top: 8px;
 }
 .inventory-order-alert-page .ioa-flow-selector-actions {
@@ -2001,7 +2022,7 @@ body.inventory-order-alert-page .ioa-detail-memo {
 }
 .asset-inventory-page .aiv-results-body {
   display: grid;
-  grid-template-rows: auto auto minmax(0, 1fr) auto;
+  grid-template-rows: auto minmax(0, 1fr) auto;
   gap: 12px;
   min-height: 0;
   overflow: hidden;
@@ -2049,11 +2070,25 @@ body.inventory-order-alert-page .ioa-detail-memo {
   flex-wrap: wrap;
   gap: 12px;
   align-items: center;
-  justify-content: flex-start;
+  justify-content: space-between;
+  flex-shrink: 0;
+}
+/* フィルタは並び替えの右に置く。枠は .aiv-filter-panel 側で定義済み。 */
+.asset-inventory-page .aiv-table-toolbar .aiv-filter-panel {
+  margin: 0;
+}
+/* 件数サマリは表の下のフッタ行へ（表の表示領域を優先するため）。 */
+.asset-inventory-page .aiv-table-footer-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 16px;
+  align-items: flex-end;
+  justify-content: space-between;
   flex-shrink: 0;
 }
 .asset-inventory-page .aiv-table-counts {
   margin: 0;
+  margin-left: auto;
   color: #334155;
   font-size: 14px;
   white-space: nowrap;
@@ -2677,14 +2712,27 @@ body.asset-inventory-page .aiv-photo-zoom-image {
   min-width: 0;
   max-width: 100%;
 }
+/* フィルタは並び替えの右に置く。枠は .st-filter-panel 側で定義済み。 */
+.shipment-trend-page .st-table-toolbar .st-filter-panel {
+  margin: 0;
+}
+/* 件数サマリは表の下のフッタ行へ（表の表示領域を優先するため）。 */
+.shipment-trend-page .st-table-footer-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 16px;
+  align-items: flex-end;
+  justify-content: space-between;
+  flex-shrink: 0;
+}
 .shipment-trend-page .st-table-counts {
   display: flex;
-  flex: 1 1 auto;
   align-items: center;
   justify-content: flex-end;
   gap: 16px;
   min-width: 0;
   margin: 0;
+  margin-left: auto;
   color: #334155;
   font-size: var(--portal-font-size-caption);
 }

@@ -40,16 +40,20 @@ def test_inventory_order_alert_filter_select_width_is_narrower():
 
 
 def test_inventory_order_alert_filter_template_uses_stacked_labels():
+    # フィルタパネルは並び替えと同じツールバー行の中にある（表の表示領域を優先するため）。
     html = IOA_TEMPLATE_PATH.read_text(encoding="utf-8")
-    filter_block = html.split('class="ioa-filter-panel"', 1)[1].split("ioa-table-toolbar", 1)[0]
+    toolbar_block = html.split('class="ioa-table-toolbar"', 1)[1].split("ioa-table-wrap", 1)[0]
+    filter_block = toolbar_block.split('class="ioa-filter-panel"', 1)[1]
     assert 'class="ioa-filter-field"' in filter_block
     assert 'class="ioa-filter-field-label">担当者コード</span>' in filter_block
     assert 'class="ioa-filter-field-label">得意先コード</span>' in filter_block
 
 
 def test_asset_inventory_filter_template_uses_stacked_labels():
+    # フィルタパネルは並び替えと同じツールバー行の中にある（表の表示領域を優先するため）。
     html = AIV_TEMPLATE_PATH.read_text(encoding="utf-8")
-    filter_block = html.split('class="aiv-filter-panel"', 1)[1].split("aiv-table-toolbar", 1)[0]
+    toolbar_block = html.split('class="aiv-table-toolbar"', 1)[1].split("aiv-table-wrap", 1)[0]
+    filter_block = toolbar_block.split('class="aiv-filter-panel"', 1)[1]
     assert 'class="aiv-filter-field-label">棚卸結果</span>' in filter_block
     assert 'label="資産番号"' in filter_block
     assert "portal_prefix_filter_field.html" in filter_block
