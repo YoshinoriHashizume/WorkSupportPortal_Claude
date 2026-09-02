@@ -6,6 +6,7 @@ from application.sales.infrastructure.oracle.client import rows_as_dicts
 
 from application.inventory_order_alert.domain.value_objects.dates import to_date
 from application.inventory_order_alert.domain.value_objects.internal_item import resolve_cust_code, resolve_internal_item_cd
+from application.inventory_order_alert.domain.value_objects.shipment_trend import build_monthly_shipment_trend
 
 
 def chunked(items: list[str], size: int = 900) -> list[list[str]]:
@@ -309,6 +310,20 @@ def fetch_all_shipments(connection: object) -> list[tuple[str, str, date, int]]:
     return shipments
 
 
+def group_shipments_by_pair(
+    shipments: list[tuple[str, str, date, int]],
+) -> dict[tuple[str, str], list[tuple[date, int]]]:
+    """all_shipments を (cust_code, cust_item_cd) でグループ化する(design.md §6.1)。
+
+    月次出荷推移(V-216)の集計を行あたり O(1) の辞書引きにするための前処理。
+    fetch_all_shipments() の戻り値をそのまま渡す想定で、Oracle への追加問い合わせは発生しない。
+    """
+    grouped: dict[tuple[str, str], list[tuple[date, int]]] = {}
+    for cust_code, cust_item_cd, ship_date, ship_qty in shipments:
+        grouped.setdefault((cust_code, cust_item_cd), []).append((ship_date, ship_qty))
+    return grouped
+
+
 def build_summary_rows(
     connection: object,
     as_of_date: date,
@@ -349,6 +364,8 @@ def build_summary_rows(
     incoming_by_item_vend = fetch_last_incoming_by_item_vend(connection)
     # MARI 在庫は取込時に 1 回だけ取得する(design.md §3.1)。一覧表示のたびには問い合わせない。
     mari_stock_by_item = fetch_mari_stock_totals(connection, sorted(internal_items))
+    # 出荷推移(V-216)は all_shipments を束ね直すだけで、追加の Oracle 問い合わせは発生しない(design.md §3.1)。
+    shipments_by_pair = group_shipments_by_pair(all_shipments)
 
     incoming_cache: dict[str, tuple[date | None, str, str, str]] = {}
     rows: list[dict[str, object]] = []
@@ -385,6 +402,10 @@ def build_summary_rows(
             cust_item_cd,
             last_incoming,
         )
+        shipment_trend = build_monthly_shipment_trend(
+            shipments_by_pair.get((cust_code, cust_item_cd), []),
+            as_of_date=as_of_date,
+        )
         rows.append(
             {
                 "cust_code": resolved_cust_code,
@@ -398,6 +419,7 @@ def build_summary_rows(
                 "last_ship_date": last_ship.strftime("%Y/%m/%d") if last_ship else "",
                 "post_shipment_count": post_count,
                 "post_shipment_total_qty": post_total_qty,
+                "shipment_trend": shipment_trend,
                 # 該当在庫が無い場合は空。0(在庫なし)とは区別する(design.md §4.2)
                 "mari_stock_qty": mari_stock_by_item.get(internal, ""),
             }

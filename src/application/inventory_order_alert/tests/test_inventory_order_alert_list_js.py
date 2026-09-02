@@ -7,6 +7,34 @@ JS_PATH = Path(__file__).resolve().parents[3] / "static" / "js" / "inventory-ord
 CLIENT_JS_PATH = Path(__file__).resolve().parents[3] / "static" / "js" / "inventory-order-alert-list-client.js"
 
 
+def test_TC_SHC_X_002_client_js_has_get_shipment_trend_getter():
+    source = CLIENT_JS_PATH.read_text(encoding="utf-8")
+    getter_block = source.split("getShipmentTrend(custCode, itemCd)", 1)[1].split("},", 1)[0]
+
+    # findRow() を再利用して行を引く（design.md §6.3）。
+    assert "findRow(custCode, itemCd)" in getter_block
+    assert "shipment_trend" in getter_block
+
+
+def test_TC_SHC_X_003_list_js_renders_shipment_trend_chart_as_svg():
+    source = JS_PATH.read_text(encoding="utf-8")
+
+    assert "function renderShipmentTrendChart" in source
+    assert "http://www.w3.org/2000/svg" in source
+    assert "ioa-detail-shipment-trend-chart" in source
+    assert "fillDetailSections" in source
+    assert "renderShipmentTrendChart(" in source.split("function fillDetailSections", 1)[1].split("async function openLocationDialog", 1)[0]
+
+
+def test_TC_SHC_X_004_list_js_shows_empty_state_when_no_shipment_activity():
+    source = JS_PATH.read_text(encoding="utf-8")
+    chart_block = source.split("function renderShipmentTrendChart", 1)[1].split("\n  function ", 1)[0]
+
+    assert "ioa-detail-shipment-trend-empty" in chart_block
+    # 全月0（実績なし）と空配列（既存スナップショット互換）の両方を「実績なし」表示に振り替える。
+    assert "every" in chart_block or "some" in chart_block
+
+
 def test_inventory_order_alert_list_client_js_renders_sort_headers_as_links():
     source = CLIENT_JS_PATH.read_text(encoding="utf-8")
     assert "window.PortalListCore" in source

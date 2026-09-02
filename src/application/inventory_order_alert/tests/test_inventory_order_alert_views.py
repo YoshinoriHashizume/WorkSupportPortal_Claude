@@ -709,6 +709,33 @@ def test_list_page_detail_dialog_has_four_sections(client, production_user):
 
 
 @pytest.mark.django_db
+def test_TC_SHC_X_001_detail_dialog_has_shipment_trend_section(client, production_user):
+    """詳細ダイアログに「出荷推移」区分がある（design.md §6.5）。"""
+    import_record = SlimsStockImport.objects.create(file_name="sample.csv", row_count=1)
+    store_summary_snapshot(import_record, [_sample_export_row()], as_of_date=date(2026, 6, 17))
+
+    client.force_login(production_user)
+    html = client.get("/app/production/inventory-order-alert").content.decode("utf-8")
+
+    assert "ioa-detail-shipment-trend-section" in html
+    assert "出荷推移" in html
+
+
+@pytest.mark.django_db
+def test_TC_SHC_X_005_shipment_trend_section_is_between_stock_and_memo(client, production_user):
+    import_record = SlimsStockImport.objects.create(file_name="sample.csv", row_count=1)
+    store_summary_snapshot(import_record, [_sample_export_row()], as_of_date=date(2026, 6, 17))
+
+    client.force_login(production_user)
+    html = client.get("/app/production/inventory-order-alert").content.decode("utf-8")
+
+    stock_pos = html.index("ioa-detail-stock-section")
+    trend_pos = html.index("ioa-detail-shipment-trend-section")
+    memo_pos = html.index("ioa-detail-memo-section")
+    assert stock_pos < trend_pos < memo_pos
+
+
+@pytest.mark.django_db
 def test_list_page_without_data_still_loads_page_script_for_file_picker(client, production_user):
     client.force_login(production_user)
     html = client.get("/app/production/inventory-order-alert").content.decode("utf-8")

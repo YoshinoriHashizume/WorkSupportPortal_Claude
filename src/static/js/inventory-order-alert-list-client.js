@@ -709,6 +709,11 @@
         );
         return axis && period ? `${axis.label}・${period.label}で判定` : "";
       },
+      // 出荷推移(V-216)は24件の配列のため data-* 属性にせず、findRow() 経由で行データから直接返す(design.md §6.3)。
+      getShipmentTrend(custCode, itemCd) {
+        const row = findRow(custCode, itemCd);
+        return Array.isArray(row?.shipment_trend) ? row.shipment_trend : [];
+      },
       getListFilterParams() {
         return {
           custCodeFilter: state.custCode,

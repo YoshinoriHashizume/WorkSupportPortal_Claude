@@ -135,7 +135,11 @@ for cust_code, cust_item_cd, cust_chrg_psn_cd, internal_from_ship in ship_pairs:
 `list_client_data.py:row_to_client_dict()` は行の全キーを `_json_value()` 経由でそのまま `client_row` へコピーする実装のため、**コード変更なしで** `row["shipment_trend"]` が `client_row["shipment_trend"]`（snake_case のまま）として配信される。
 camelCase の別名は追加しない（03_mari-stock-visibility での「同じ値の二重配信をしない」方針を踏襲）。
 
-配信データ量: 1 行あたり `shipment_trend` は 24 件 × 約 20 バイト（`{"month":"2025-09","qty":120},`）で **約 500 バイト**の見積り。既存の 1 行あたりデータ量（実測約 4,000 バイト、03_mari-stock-visibility 実測値）と比べ増分は大きい。**test-design.md の E 系で必ず実測し、要件の許容値を確認する**（本要件は 03_mari-stock-visibility のような明示的な上限値を requirements.md に定めていないため、design レビューで上限を追加するかを判断する。DECISIONS.md 参照）。
+配信データ量: 1 行あたり `shipment_trend` は 24 件 × 約 20 バイト（`{"month":"2025-09","qty":120},`）で当初 **約 500 バイト**と見積もっていた。
+
+> **実測値（2026/09/01、タスク17）**: **+794 バイト/行**（`test_shipment_trend_edge_cases.py::test_TC_SHC_E_001_payload_increase_per_row_is_measured`）。
+> 見積りと実測が乖離した（[ISSUE-0005](../../issues/ISSUE-0005-no-payload-size-requirement.md) と同種の見積り誤り）。原因はキー名 `"month"` `"qty"` と JSON の区切り文字を過小評価していたため。
+> 既存の 1 行あたりデータ量（実測約 4,000 バイト、03_mari-stock-visibility 実測値）に対し **約 2 割の増分**であり、致命的な水準ではないと判断するが、**DECISIONS.md の R-3（対象期間を60か月へ拡張するか）の判断に直接影響する**（60か月にすると単純比例で約2,000バイト/行になる見込み）。
 
 ### 6.3 詳細ダイアログのデータ供給経路（既存パターンの踏襲）
 

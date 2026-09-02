@@ -170,6 +170,37 @@ def test_build_summary_rows_leaves_mari_stock_empty_when_internal_item_unresolve
     assert rows[0]["item_cd"] == "10523-X0A02"
 
 
+def test_TC_SHC_I_004_build_summary_rows_attaches_shipment_trend() -> None:
+    rows = _build_rows_with({})
+
+    trend = rows[0]["shipment_trend"]
+    assert len(trend) == 24
+    june = next(point for point in trend if point["month"] == "2026-06")
+    assert june["qty"] == 10
+
+
+def test_TC_SHC_I_005_build_summary_rows_does_not_add_oracle_calls() -> None:
+    """出荷推移の追加で fetch_all_shipments の呼び出し回数が増えないこと（REQ-SHC-NF-001）。"""
+    patches = _shipped_pair_patches({})
+    started = {p.attribute: p.start() for p in patches}
+    try:
+        build_summary_rows(MagicMock(), date(2026, 6, 29))
+    finally:
+        for p in patches:
+            p.stop()
+
+    assert started["fetch_all_shipments"].call_count == 1
+
+
+def test_TC_SHC_I_006_existing_shipment_stats_are_unchanged() -> None:
+    """出荷推移の追加で既存の post_shipment_count 等が変わらないこと（非回帰）。"""
+    rows = _build_rows_with({})
+
+    assert rows[0]["post_shipment_count"] == 1
+    assert rows[0]["post_shipment_total_qty"] == 10
+    assert rows[0]["last_ship_date"] == "2026/06/01"
+
+
 def _failing_aggregation(import_record, message: str):
     with (
         patch(

@@ -229,6 +229,7 @@
         stockSlims: dialog.querySelector(".ioa-detail-stock-slims"),
         stockMari: dialog.querySelector(".ioa-detail-stock-mari"),
     };
+    const shipmentTrendSection = dialog.querySelector(".ioa-detail-shipment-trend-section");
     const locationTableBody = dialog.querySelector(".ioa-location-table-body");
     const tableWrap = dialog.querySelector(".ioa-location-table-wrap");
     const emptyMessage = dialog.querySelector(".ioa-location-empty");
@@ -352,6 +353,86 @@
       }
     }
 
+    function renderShipmentTrendChart(sectionEl, points) {
+      if (!sectionEl) {
+        return;
+      }
+      const container = sectionEl.querySelector(".ioa-detail-shipment-trend-chart");
+      const emptyMessage = sectionEl.querySelector(".ioa-detail-shipment-trend-empty");
+      if (!container) {
+        return;
+      }
+
+      // 実績なし（空配列 = 既存スナップショット互換、または全月0 = 期間内出荷ゼロ）は同じ表示にする（design.md §6.4）。
+      const hasActivity = Array.isArray(points) && points.some((point) => Number(point.qty) !== 0);
+      container.innerHTML = "";
+      if (!hasActivity) {
+        container.hidden = true;
+        if (emptyMessage) {
+          emptyMessage.hidden = false;
+        }
+        return;
+      }
+      container.hidden = false;
+      if (emptyMessage) {
+        emptyMessage.hidden = true;
+      }
+
+      const width = 560;
+      const height = 140;
+      const paddingLeft = 32;
+      const paddingTop = 8;
+      const paddingBottom = 20;
+      const plotWidth = width - paddingLeft - 8;
+      const plotHeight = height - paddingTop - paddingBottom;
+      const maxQty = Math.max(1, ...points.map((point) => Number(point.qty) || 0));
+      const stepX = points.length > 1 ? plotWidth / (points.length - 1) : 0;
+
+      function coordsOf(index, qty) {
+        const x = paddingLeft + stepX * index;
+        const y = paddingTop + plotHeight - (Number(qty) / maxQty) * plotHeight;
+        return [x, y];
+      }
+
+      const svgNs = "http://www.w3.org/2000/svg";
+      const svg = document.createElementNS(svgNs, "svg");
+      svg.setAttribute("viewBox", `0 0 ${width} ${height}`);
+      svg.setAttribute("class", "ioa-shipment-trend-svg");
+      svg.setAttribute("role", "img");
+      svg.setAttribute("aria-label", "月次出荷数量の推移");
+
+      const linePoints = points.map((point, index) => coordsOf(index, point.qty).join(",")).join(" ");
+      const polyline = document.createElementNS(svgNs, "polyline");
+      polyline.setAttribute("points", linePoints);
+      polyline.setAttribute("class", "ioa-shipment-trend-line");
+      svg.append(polyline);
+
+      points.forEach((point, index) => {
+        const [x, y] = coordsOf(index, point.qty);
+        const circle = document.createElementNS(svgNs, "circle");
+        circle.setAttribute("cx", String(x));
+        circle.setAttribute("cy", String(y));
+        circle.setAttribute("r", "2");
+        circle.setAttribute("class", "ioa-shipment-trend-point");
+        const title = document.createElementNS(svgNs, "title");
+        title.textContent = `${point.month}: ${point.qty}`;
+        circle.append(title);
+        svg.append(circle);
+
+        // 横軸ラベルは間引く（24点すべては幅に収まらない。design.md §6.4）。
+        if (index % 4 === 0 || index === points.length - 1) {
+          const label = document.createElementNS(svgNs, "text");
+          label.setAttribute("x", String(x));
+          label.setAttribute("y", String(height - 4));
+          label.setAttribute("class", "ioa-shipment-trend-axis-label");
+          label.textContent = String(point.month || "").slice(2).replace("-", "/");
+          svg.append(label);
+        }
+      });
+
+      container.append(svg);
+    }
+
     function fillDetailSections(row) {
       const custCode = row.dataset.custCode || "";
       const custName = row.dataset.custName || "";
@@ -375,6 +456,8 @@
       // 在庫数は一覧と同じ表示文字列をそのまま出す（未取得の「－」と 0 を取り違えないため）。
       setDetailText(detailFields.stockSlims, row.dataset.stockQty || "-");
       setDetailText(detailFields.stockMari, row.dataset.mariStockQty || "-");
+      const shipmentTrend = listClient?.getShipmentTrend?.(custCode, row.dataset.itemCd || "") || [];
+      renderShipmentTrendChart(shipmentTrendSection, shipmentTrend);
     }
 
     async function openLocationDialog(row) {

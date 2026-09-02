@@ -1746,13 +1746,35 @@ body.inventory-order-alert-page .ioa-detail-section-title {
   font-weight: 700;
   color: #334155;
 }
-/* 詳細ダイアログの 4 区分（品目 / 流動区分 / 在庫 / メモ）。design.md §6.3 */
+/* 詳細ダイアログの区分（品目 / 流動区分 / 在庫 / 出荷推移 / メモ）。design.md §6.3・§6.5 */
 body.inventory-order-alert-page .ioa-detail-item-section,
 body.inventory-order-alert-page .ioa-detail-flow-section,
 body.inventory-order-alert-page .ioa-detail-stock-section,
+body.inventory-order-alert-page .ioa-detail-shipment-trend-section,
 body.inventory-order-alert-page .ioa-detail-memo-section {
   display: grid;
   gap: 8px;
+}
+body.inventory-order-alert-page .ioa-detail-shipment-trend-chart {
+  width: 100%;
+}
+body.inventory-order-alert-page .ioa-shipment-trend-svg {
+  width: 100%;
+  height: auto;
+  display: block;
+}
+body.inventory-order-alert-page .ioa-shipment-trend-line {
+  fill: none;
+  stroke: #0284c7;
+  stroke-width: 1.5;
+}
+body.inventory-order-alert-page .ioa-shipment-trend-point {
+  fill: #0284c7;
+}
+body.inventory-order-alert-page .ioa-shipment-trend-axis-label {
+  font-size: 8px;
+  fill: #64748b;
+  text-anchor: middle;
 }
 body.inventory-order-alert-page .ioa-detail-section-subtitle {
   margin: 4px 0 0;
