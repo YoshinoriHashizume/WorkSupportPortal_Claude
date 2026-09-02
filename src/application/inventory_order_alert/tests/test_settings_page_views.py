@@ -51,6 +51,45 @@ def test_settings_page_shows_current_values_for_admin(client, admin_user):
 
 
 @pytest.mark.django_db
+def test_settings_page_shows_confirmation_reset_button(client, admin_user):
+    """確認状態リセットは一覧画面から設定画面（SCR-02）へ移した。"""
+    client.force_login(admin_user)
+
+    html = client.get(SETTINGS_PAGE_URL).content.decode("utf-8")
+
+    assert 'id="ioa-settings-reset-confirmations"' in html
+    assert "確認状態のリセット" in html
+    assert "/api/inventory-order-alert/confirmation/reset" in html
+
+
+@pytest.mark.django_db
+def test_settings_page_disables_reset_button_when_nothing_to_reset(client, admin_user):
+    client.force_login(admin_user)
+
+    html = client.get(SETTINGS_PAGE_URL).content.decode("utf-8")
+
+    reset_pos = html.index('id="ioa-settings-reset-confirmations"')
+    tag_end = html.index(">", reset_pos)
+    assert "disabled" in html[reset_pos:tag_end]
+
+
+@pytest.mark.django_db
+def test_settings_page_enables_reset_button_when_resettable_confirmations_exist(client, admin_user):
+    from application.inventory_order_alert.models import ConfirmationStatus, InventoryOrderAlertConfirmation
+
+    InventoryOrderAlertConfirmation.objects.create(
+        cust_code="112", item_cd="ITEM-A", status=ConfirmationStatus.IN_PROGRESS,
+    )
+    client.force_login(admin_user)
+
+    html = client.get(SETTINGS_PAGE_URL).content.decode("utf-8")
+
+    reset_pos = html.index('id="ioa-settings-reset-confirmations"')
+    tag_end = html.index(">", reset_pos)
+    assert "disabled" not in html[reset_pos:tag_end]
+
+
+@pytest.mark.django_db
 def test_settings_page_has_no_warning_month_inputs(client, admin_user):
     client.force_login(admin_user)
 

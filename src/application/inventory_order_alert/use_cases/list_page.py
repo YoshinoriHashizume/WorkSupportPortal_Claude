@@ -14,7 +14,6 @@ from application.inventory_order_alert.domain.value_objects.list_filter import (
     parse_list_filter_params,
 )
 from application.inventory_order_alert.domain.repositories.ports import (
-    HasResettableConfirmations,
     LoadAppSettings,
     LoadSummary,
 )
@@ -100,7 +99,6 @@ class ListPageContext:
     flow_period_options: dict[str, list[FlowPeriodOption]]
     flow_quadrant_filter: str
     flow_quadrant_rule_rows: list[FlowQuadrantRuleRow]
-    can_reset_confirmations: bool
     test_data_warning: bool
 
 
@@ -141,12 +139,10 @@ class ListPage:
         import_stock_usecase: ImportStock,
         load_summary: LoadSummary,
         load_app_settings: LoadAppSettings,
-        has_resettable_confirmations: HasResettableConfirmations,
     ) -> None:
         self._import_stock = import_stock_usecase
         self._load_summary = load_summary
         self._load_app_settings = load_app_settings
-        self._has_resettable_confirmations = has_resettable_confirmations
 
     def execute(
         self,
@@ -281,7 +277,6 @@ class ListPage:
             flow_period_options=_flow_period_options(),
             flow_quadrant_filter=list_query.flow_quadrant,
             flow_quadrant_rule_rows=build_flow_quadrant_rule_rows(),
-            can_reset_confirmations=self._has_resettable_confirmations(),
             test_data_warning=looks_like_test_import(
                 stock_info.file_name if stock_info else "",
                 all_rows,

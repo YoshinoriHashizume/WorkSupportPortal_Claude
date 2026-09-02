@@ -167,6 +167,22 @@ def test_list_page_has_exactly_one_alert_rules_open_button(client, production_us
 
 
 @pytest.mark.django_db
+def test_list_page_places_alert_rules_button_first_in_header_actions(client, production_user):
+    """ヘッダーのアクション行は 判定ルール → SLIMS在庫CSV → CSV出力 → 設定 の順に並べる。"""
+    import_record = SlimsStockImport.objects.create(file_name="sample.csv", row_count=1)
+    store_summary_snapshot(import_record, [_sample_export_row()], as_of_date=date(2026, 6, 17))
+
+    client.force_login(production_user)
+    html = client.get("/app/production/inventory-order-alert").content.decode("utf-8")
+
+    actions_pos = html.index('class="ioa-table-actions"')
+    alert_rules_pos = html.index("ioa-alert-rules-open", actions_pos)
+    slims_pos = html.index("SLIMS在庫CSV", actions_pos)
+    csv_pos = html.index(">CSV 出力<", actions_pos)
+    assert actions_pos < alert_rules_pos < slims_pos < csv_pos
+
+
+@pytest.mark.django_db
 def test_list_page_shows_flow_selection_controls(client, production_user):
     import_record = SlimsStockImport.objects.create(file_name="sample.csv", row_count=1)
     store_summary_snapshot(import_record, [_sample_export_row()], as_of_date=date(2026, 6, 17))
@@ -445,9 +461,8 @@ def test_list_page_shows_paginated_summary_rows(client, production_user):
     assert 'class="muted ioa-table-range"' in html
     assert 'class="ioa-table-counts-left"' in html
     assert 'class="ioa-table-counts-right"' in html
-    assert "リセット" in html
-    assert "確認状態リセット" not in html
-    assert "ioa-confirmation-reset" in html
+    # 確認状態リセットは設定画面（SCR-02）へ移した。一覧には出さない。
+    assert "ioa-confirmation-reset" not in html
     assert "供給リスク品 21 件 / 在庫死蔵品 0 件 / 在庫過剰リスク品 0 件 / 通常流動品 0 件" in html
     assert "全件数:" not in html
     assert "確認済み 0 件 / 確認中 0 件 / 未確認 21 件" in html

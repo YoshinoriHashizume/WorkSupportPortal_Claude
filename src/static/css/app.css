@@ -1436,14 +1436,6 @@ body.shipment-trend-page.st-refresh-loading {
   min-height: var(--portal-control-height);
   white-space: nowrap;
 }
-.inventory-order-alert-page .ioa-filter-panel-reset {
-  margin-left: auto;
-}
-.inventory-order-alert-page .ioa-filter-panel-reset .ioa-confirmation-reset {
-  height: var(--portal-control-height);
-  min-height: var(--portal-control-height);
-  white-space: nowrap;
-}
 .inventory-order-alert-page .ioa-table-footer-row {
   display: flex;
   flex-wrap: wrap;
@@ -1524,7 +1516,8 @@ body.shipment-trend-page.st-refresh-loading {
 .inventory-order-alert-page .ioa-table-counts-right {
   text-align: right;
 }
-.inventory-order-alert-page .ioa-confirmation-reset[disabled] {
+.inventory-order-alert-page .ioa-confirmation-reset[disabled],
+.inventory-order-alert-settings-page .ioa-confirmation-reset[disabled] {
   opacity: 0.45;
   cursor: not-allowed;
 }
@@ -1916,14 +1909,6 @@ body.inventory-order-alert-page .ioa-detail-memo {
    余白は下側に来るツールバー行へ付ける。 */
 .inventory-order-alert-page .ioa-flow-selector + .ioa-table-toolbar {
   margin-top: 8px;
-}
-.inventory-order-alert-page .ioa-flow-selector-actions {
-  justify-content: flex-end;
-}
-.inventory-order-alert-page .ioa-flow-selector-actions .ioa-alert-rules-open {
-  height: var(--portal-control-height);
-  min-height: var(--portal-control-height);
-  white-space: nowrap;
 }
 .inventory-order-alert-page .ioa-alert-rules-condition {
   margin: 0 0 4px;

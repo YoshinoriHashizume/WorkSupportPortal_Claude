@@ -34,6 +34,14 @@
       <button type="submit" id="ioa-settings-save">保存</button>
     </div>
   </form>
+
+  <div class="card ioa-settings-form">
+    <h2>確認状態のリセット</h2>
+    <p class="portal-page-description">確認中・確認済みの状態をすべて未確認に戻します。メモ履歴は維持されます。対象は全行（フィルタ適用前の全件）です。</p>
+    <div class="ioa-settings-actions">
+      <button type="button" class="button-link ioa-confirmation-reset" id="ioa-settings-reset-confirmations" {% if not can_reset_confirmations %}disabled{% endif %}>リセット</button>
+    </div>
+  </div>
 </section>
 
 <script>
@@ -80,6 +88,43 @@
         showError(error.message || "設定の保存に失敗しました。");
       } finally {
         saveButton.disabled = false;
+      }
+    });
+
+    const resetButton = document.getElementById("ioa-settings-reset-confirmations");
+    resetButton?.addEventListener("click", async () => {
+      if (
+        !window.confirm(
+          "確認中・確認済みの状態をすべて未確認に戻します。メモ履歴は維持されます。よろしいですか？",
+        )
+      ) {
+        return;
+      }
+      resetButton.disabled = true;
+      try {
+        const response = await fetch("/api/inventory-order-alert/confirmation/reset", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "X-CSRFToken": window.portalCsrfToken || "",
+          },
+          body: JSON.stringify({}),
+        });
+        const payload = await response.json().catch(() => ({}));
+        if (!response.ok || !payload.ok) {
+          window.alert(payload.message || "確認状態のリセットに失敗しました。");
+          return;
+        }
+        if (payload.resetCount === 0) {
+          window.alert("リセット対象の確認状態はありません。");
+          return;
+        }
+        window.alert(`${payload.resetCount} 件の確認状態を未確認に戻しました。`);
+        window.location.reload();
+      } catch (_error) {
+        window.alert("確認状態のリセットに失敗しました。");
+      } finally {
+        resetButton.disabled = false;
       }
     });
   })();

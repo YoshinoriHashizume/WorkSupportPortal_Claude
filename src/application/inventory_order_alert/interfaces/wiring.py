@@ -49,8 +49,12 @@ def list_page_usecase() -> ListPage:
         import_stock_usecase(),
         load_latest_summary,
         load_app_settings,
-        has_resettable_confirmations,
     )
+
+
+def can_reset_confirmations() -> bool:
+    """設定画面（SCR-02）の確認状態リセットボタンを活性にするか。"""
+    return has_resettable_confirmations()
 
 
 def save_confirmation_usecase() -> SaveConfirmationUseCase:
@@ -109,6 +113,7 @@ __all__ = [
     "ListQuery",
     "app_settings_usecase",
     "build_list_rows",
+    "can_reset_confirmations",
     "confirmation_memos_usecase",
     "dashboard_summary_usecase",
     "export_csv_usecase",

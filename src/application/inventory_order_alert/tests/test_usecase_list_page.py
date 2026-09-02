@@ -65,7 +65,6 @@ def _execute(rows: list[dict[str, object]]):
         import_stock_usecase=_Importer(),
         load_summary=lambda: summary,
         load_app_settings=AppSettings,
-        has_resettable_confirmations=lambda: False,
     )
     return usecase.execute(query_params={})
 

@@ -2,74 +2,7 @@
   const ROW_SELECTOR = ".inventory-order-alert-page .ioa-table tbody tr.ioa-data-row";
   const CONFIRMATION_API = "/api/inventory-order-alert/confirmation";
   const CONFIRMATION_MEMO_API = "/api/inventory-order-alert/confirmation/memos";
-  const CONFIRMATION_RESET_API = "/api/inventory-order-alert/confirmation/reset";
   const MAX_MEMO_LENGTH = 500;
-  const TABLE_WRAP_SELECTOR = ".inventory-order-alert-page .ioa-table-wrap";
-  const SCROLL_TOP_STORAGE_KEY = "ioa-table-scroll-top";
-  const SCROLL_ROW_STORAGE_KEY = "ioa-table-scroll-row";
-
-  function getTableWrap() {
-    return document.querySelector(TABLE_WRAP_SELECTOR);
-  }
-
-  function saveTableScrollPosition(row) {
-    const tableWrap = getTableWrap();
-    if (tableWrap) {
-      sessionStorage.setItem(SCROLL_TOP_STORAGE_KEY, String(tableWrap.scrollTop));
-    }
-    if (row) {
-      sessionStorage.setItem(
-        SCROLL_ROW_STORAGE_KEY,
-        `${row.dataset.custCode || ""}|${row.dataset.itemCd || ""}`,
-      );
-    }
-  }
-
-  function findDataRow(custCode, itemCd) {
-    return [...document.querySelectorAll(ROW_SELECTOR)].find(
-      (candidate) => candidate.dataset.custCode === custCode && candidate.dataset.itemCd === itemCd,
-    );
-  }
-
-  function restoreTableScrollPosition() {
-    const tableWrap = getTableWrap();
-    if (!tableWrap) {
-      return;
-    }
-
-    const savedTop = sessionStorage.getItem(SCROLL_TOP_STORAGE_KEY);
-    const savedRow = sessionStorage.getItem(SCROLL_ROW_STORAGE_KEY);
-    sessionStorage.removeItem(SCROLL_TOP_STORAGE_KEY);
-    sessionStorage.removeItem(SCROLL_ROW_STORAGE_KEY);
-    if (savedTop === null && !savedRow) {
-      return;
-    }
-
-    function applyScroll() {
-      if (savedTop !== null) {
-        tableWrap.scrollTop = Number(savedTop) || 0;
-        return;
-      }
-      if (savedRow) {
-        const separatorIndex = savedRow.indexOf("|");
-        const custCode = savedRow.slice(0, separatorIndex);
-        const itemCd = savedRow.slice(separatorIndex + 1);
-        const row = findDataRow(custCode, itemCd);
-        if (row) {
-          row.scrollIntoView({ block: "nearest" });
-        }
-      }
-    }
-
-    requestAnimationFrame(() => {
-      requestAnimationFrame(applyScroll);
-    });
-  }
-
-  function reloadInventoryOrderAlertPage(row) {
-    saveTableScrollPosition(row);
-    window.location.reload();
-  }
 
   function getCsrfToken() {
     return window.portalCsrfToken || "";
@@ -562,49 +495,6 @@
     });
   }
 
-  function initConfirmationReset(listClient) {
-    const resetButton = document.querySelector(".inventory-order-alert-page .ioa-confirmation-reset");
-    if (!resetButton) {
-      return;
-    }
-
-    resetButton.addEventListener("click", async () => {
-      if (
-        !window.confirm(
-          "確認中・確認済みの状態をすべて未確認に戻します。メモ履歴は維持されます。よろしいですか？",
-        )
-      ) {
-        return;
-      }
-
-      resetButton.disabled = true;
-      try {
-        const response = await fetch(CONFIRMATION_RESET_API, {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            "X-CSRFToken": getCsrfToken(),
-          },
-          body: JSON.stringify(getListFilterParams(listClient)),
-        });
-        const payload = await response.json();
-        if (!response.ok || !payload.ok) {
-          window.alert(payload.message || "確認状態のリセットに失敗しました。");
-          return;
-        }
-        if (payload.resetCount === 0) {
-          window.alert("リセット対象の確認状態はありません。");
-          return;
-        }
-        reloadInventoryOrderAlertPage();
-      } catch (_error) {
-        window.alert("確認状態のリセットに失敗しました。");
-      } finally {
-        resetButton.disabled = false;
-      }
-    });
-  }
-
   function initAlertRulesDialog() {
     // 判定ルールダイアログは読み取り専用の凡例。開閉のみを担う（design.md §6.6.5）。
     const dialog = document.getElementById("ioa-alert-rules-dialog");
@@ -637,13 +527,11 @@
 
   function initInventoryOrderAlertPage() {
     const listClient = window.IoaListClient?.init?.() || null;
-    restoreTableScrollPosition();
     initSlimsImport();
     initSortDialog(listClient);
     initAlertRulesDialog();
     initLocationDialog(listClient);
     initConfirmationStatusSelects(listClient);
-    initConfirmationReset(listClient);
   }
 
   document.addEventListener("DOMContentLoaded", initInventoryOrderAlertPage);

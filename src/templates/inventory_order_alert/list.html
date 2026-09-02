@@ -39,7 +39,11 @@
       {% endif %}
     </div>
     <div class="ioa-table-actions">
-      {# 判定ルールを開くボタンは判定条件セレクタ側に置く（design.md §6.6.1）。 #}
+      {% if has_list_data %}
+        <button type="button" class="button-link ioa-alert-rules-open" aria-haspopup="dialog" aria-controls="ioa-alert-rules-dialog">
+          判定ルール
+        </button>
+      {% endif %}
       <form method="post" enctype="multipart/form-data" class="ioa-import-form">
         {% csrf_token %}
         <input type="file" id="ioa-slims-csv" name="slims_csv" accept=".csv" class="ioa-file-picker-input">
@@ -97,16 +101,10 @@
           {% endfor %}
         </select>
       </label>
-      <div class="ioa-filter-field ioa-flow-selector-actions">
-        <span class="ioa-filter-field-label" aria-hidden="true">&nbsp;</span>
-        <button type="button" class="button-link ioa-alert-rules-open" aria-haspopup="dialog" aria-controls="ioa-alert-rules-dialog">
-          判定ルール
-        </button>
-      </div>
     </div>
   </div>
 
-  {# フィルタパネルの枠を横いっぱいに広げる。並び替えはフィルタ項目の直後、確認状態リセットは枠内右端に置く。 #}
+  {# フィルタパネルの枠を横いっぱいに広げる。並び替えはフィルタ項目の直後に置く。 #}
   <div class="ioa-table-toolbar">
     <div class="ioa-filter-panel">
       <div class="ioa-filter-panel-fields">
@@ -135,10 +133,6 @@
           <button type="button" class="button-link ioa-sort-open" aria-haspopup="dialog" aria-controls="ioa-sort-dialog">
             並び替え
           </button>
-        </div>
-        <div class="ioa-filter-field ioa-filter-panel-reset">
-          <span class="ioa-filter-field-label" aria-hidden="true">&nbsp;</span>
-          <button type="button" class="button-link ioa-confirmation-reset" {% if not can_reset_confirmations %}disabled{% endif %}>リセット</button>
         </div>
       </div>
     </div>
@@ -423,5 +417,5 @@
 <script src="/static/js/portal-list-dependent-cust-filter.js?v=20260629-dependent-cust" defer></script>
 <script src="/static/js/portal-list-sort-dialog.js?v=20260629-dependent-cust" defer></script>
 <script src="/static/js/inventory-order-alert-list-client.js?v=20260901-dormant-period-fix" defer></script>
-<script src="/static/js/inventory-order-alert-list.js?v=20260831-mari-stock" defer></script>
+<script src="/static/js/inventory-order-alert-list.js?v=20260901-reset-to-settings" defer></script>
 {% endblock %}

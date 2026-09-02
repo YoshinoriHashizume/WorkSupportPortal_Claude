@@ -46,7 +46,7 @@ def test_inventory_order_alert_list_client_js_sorts_confirmation_status_by_key_r
 
 def test_inventory_order_alert_list_js_init_location_dialog_has_no_duplicate_table_body():
     source = JS_PATH.read_text(encoding="utf-8")
-    block = source.split("function initLocationDialog(", 1)[1].split("function initConfirmationReset", 1)[0]
+    block = source.split("function initLocationDialog(", 1)[1].split("function initAlertRulesDialog", 1)[0]
     assert "const tableBody" not in block
     assert "const listTableBody" in block
     assert "const locationTableBody" in block
@@ -109,13 +109,6 @@ def test_inventory_order_alert_list_js_saves_confirmation_on_select_change():
     assert "saveConfirmationStatus" in source
 
 
-def test_inventory_order_alert_list_js_preserves_table_scroll_on_confirmation_reload():
-    source = JS_PATH.read_text(encoding="utf-8")
-    assert "saveTableScrollPosition" in source
-    assert "restoreTableScrollPosition" in source
-    assert "reloadInventoryOrderAlertPage" in source
-
-
 def test_inventory_order_alert_list_js_updates_table_counts_label():
     source = JS_PATH.read_text(encoding="utf-8")
     assert "ioa-table-counts-left" in source
@@ -126,8 +119,9 @@ def test_inventory_order_alert_list_js_updates_table_counts_label():
     assert "通常流動品" in source
     assert "全件数:" not in source
     assert "確認済み" in source
-    assert "ioa-confirmation-reset" in source
-    assert "confirmation/reset" in source
+    # 確認状態リセットは設定画面（SCR-02）へ移した。一覧の JS には持たない。
+    assert "ioa-confirmation-reset" not in source
+    assert "confirmation/reset" not in source
 
 
 def test_inventory_order_alert_list_js_initializes_location_dialog():
@@ -182,7 +176,7 @@ def test_inventory_order_alert_list_client_js_keeps_flow_quadrant_departments():
 
 def test_inventory_order_alert_list_js_fills_detail_dialog_sections():
     source = JS_PATH.read_text(encoding="utf-8")
-    block = source.split("function initLocationDialog(", 1)[1].split("function initConfirmationReset", 1)[0]
+    block = source.split("function initLocationDialog(", 1)[1].split("function initAlertRulesDialog", 1)[0]
 
     assert "ioa-detail-item" in block
     assert "ioa-detail-flow" in block
