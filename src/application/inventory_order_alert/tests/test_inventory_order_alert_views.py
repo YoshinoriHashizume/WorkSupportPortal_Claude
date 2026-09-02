@@ -167,6 +167,22 @@ def test_list_page_has_exactly_one_alert_rules_open_button(client, production_us
 
 
 @pytest.mark.django_db
+def test_list_page_places_alert_rules_button_first_in_header_actions(client, production_user):
+    """ヘッダーのアクション行は 判定ルール → SLIMS在庫CSV → CSV出力 → 設定 の順に並べる。"""
+    import_record = SlimsStockImport.objects.create(file_name="sample.csv", row_count=1)
+    store_summary_snapshot(import_record, [_sample_export_row()], as_of_date=date(2026, 6, 17))
+
+    client.force_login(production_user)
+    html = client.get("/app/production/inventory-order-alert").content.decode("utf-8")
+
+    actions_pos = html.index('class="ioa-table-actions"')
+    alert_rules_pos = html.index("ioa-alert-rules-open", actions_pos)
+    slims_pos = html.index("SLIMS在庫CSV", actions_pos)
+    csv_pos = html.index(">CSV 出力<", actions_pos)
+    assert actions_pos < alert_rules_pos < slims_pos < csv_pos
+
+
+@pytest.mark.django_db
 def test_list_page_shows_flow_selection_controls(client, production_user):
     import_record = SlimsStockImport.objects.create(file_name="sample.csv", row_count=1)
     store_summary_snapshot(import_record, [_sample_export_row()], as_of_date=date(2026, 6, 17))
@@ -179,8 +195,12 @@ def test_list_page_shows_flow_selection_controls(client, production_user):
     assert 'id="ioa-flow-quadrant"' in html
     assert "低流動判定軸" in html
     assert "死蔵判定軸" in html
-    assert "低流動判定軸・3か月で判定" in html
-    assert "判定期間内に入出荷のない品目（低流動品）を洗い出します" in html
+    # 判定条件・補助説明はセレクトボックス自体で分かるため、別途テキストでは表示しない。
+    assert "低流動判定軸・3か月で判定" not in html
+    assert "ioa-flow-condition-label" not in html
+    assert "判定期間内に入出荷のない品目（低流動品）を洗い出します" not in html
+    assert "ioa-flow-axis-help" not in html
+    assert "data-help-text" not in html
 
 
 @pytest.mark.django_db
@@ -225,8 +245,8 @@ def test_app_css_shares_control_and_panel_styles_with_flow_selector():
 
     # セレクトの幅指定と外枠のスタイルを ioa-filter-panel と共有していること。
     assert ".inventory-order-alert-page .ioa-flow-selector .ioa-filter-select," in css
-    # 余白は下側に来るフィルタパネルへ付ける。
-    assert ".inventory-order-alert-page .ioa-flow-selector + .ioa-filter-panel {\n  margin-top: 8px;\n}" in css
+    # 余白は下側に来るツールバー行（並び替え＋フィルタ）へ付ける。
+    assert ".inventory-order-alert-page .ioa-flow-selector + .ioa-table-toolbar {\n  margin-top: 8px;\n}" in css
     panel_block = css.split(".inventory-order-alert-page .ioa-filter-panel,", 1)[1].split("}", 1)[0]
     assert ".ioa-flow-selector" in panel_block
     # 独自に持っていた枠・フォント指定は撤去済み。
@@ -441,10 +461,8 @@ def test_list_page_shows_paginated_summary_rows(client, production_user):
     assert 'class="muted ioa-table-range"' in html
     assert 'class="ioa-table-counts-left"' in html
     assert 'class="ioa-table-counts-right"' in html
-    assert 'class="ioa-table-counts-right-wrap"' in html
-    assert "リセット" in html
-    assert "確認状態リセット" not in html
-    assert "ioa-confirmation-reset" in html
+    # 確認状態リセットは設定画面（SCR-02）へ移した。一覧には出さない。
+    assert "ioa-confirmation-reset" not in html
     assert "供給リスク品 21 件 / 在庫死蔵品 0 件 / 在庫過剰リスク品 0 件 / 通常流動品 0 件" in html
     assert "全件数:" not in html
     assert "確認済み 0 件 / 確認中 0 件 / 未確認 21 件" in html
@@ -459,7 +477,8 @@ def test_list_page_shows_paginated_summary_rows(client, production_user):
     table_wrap_pos = html.index('class="ioa-table-wrap"')
     footer_pos = html.index('class="ioa-table-footer"')
     assert table_wrap_pos < footer_pos
-    assert html.index("供給リスク品 21 件") < table_wrap_pos
+    # 件数サマリは表の表示領域を優先し、フッタ行（表の下）に置く。
+    assert html.index("供給リスク品 21 件") > footer_pos
     assert html.index("表示件数", footer_pos) < select_pos
     assert select_pos < html.index("前へ", footer_pos)
     assert html.index("前へ", footer_pos) < html.index("次へ", footer_pos)
@@ -469,7 +488,8 @@ def test_list_page_shows_paginated_summary_rows(client, production_user):
 
 
 @pytest.mark.django_db
-def test_list_page_layout_places_counts_in_controls_row(client, production_user):
+def test_list_page_layout_places_filters_in_toolbar_and_counts_in_footer(client, production_user):
+    """表の表示領域を優先し、フィルタは並び替えと同じ行、件数サマリは表の下へ置く。"""
     import_record = SlimsStockImport.objects.create(file_name="sample.csv", row_count=1)
     store_summary_snapshot(import_record, [_sample_export_row()], as_of_date=date(2026, 6, 17))
 
@@ -478,10 +498,11 @@ def test_list_page_layout_places_counts_in_controls_row(client, production_user)
 
     html = response.content.decode("utf-8")
     toolbar_start = html.index('class="ioa-table-toolbar"')
-    counts_pos = html.index("ioa-table-counts", toolbar_start)
+    filter_panel_pos = html.index('class="ioa-filter-panel"', toolbar_start)
     table_wrap_pos = html.index('class="ioa-table-wrap"', toolbar_start)
-    footer_pos = html.index('class="ioa-table-footer"', toolbar_start)
-    assert toolbar_start < counts_pos < table_wrap_pos < footer_pos
+    footer_row_pos = html.index('class="ioa-table-footer-row"', toolbar_start)
+    counts_pos = html.index('class="ioa-table-counts"', footer_row_pos)
+    assert toolbar_start < filter_panel_pos < table_wrap_pos < footer_row_pos < counts_pos
 
 
 @pytest.mark.django_db

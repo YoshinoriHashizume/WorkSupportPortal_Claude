@@ -11,6 +11,7 @@ from application.inventory_order_alert.domain.value_objects.list_client_data imp
 from application.inventory_order_alert.domain.value_objects.list_filter import visible_cust_options
 from application.inventory_order_alert.interfaces.wiring import (
     app_settings_usecase,
+    can_reset_confirmations,
     confirmation_memos_usecase,
     dashboard_summary_usecase,
     export_csv_usecase,
@@ -86,7 +87,6 @@ def list_page(request: HttpRequest) -> HttpResponse:
             "flow_period_options": context.flow_period_options,
             "flow_quadrant_filter": context.flow_quadrant_filter,
             "flow_quadrant_rule_rows": context.flow_quadrant_rule_rows,
-            "can_reset_confirmations": context.can_reset_confirmations,
             "test_data_warning": context.test_data_warning,
             "list_client_payload": list_client_payload,
         },
@@ -164,6 +164,7 @@ def settings_page(request: HttpRequest) -> HttpResponse:
         {
             "warning_days": settings.warning_days,
             "stock_stale_days": settings.stock_stale_days,
+            "can_reset_confirmations": can_reset_confirmations(),
         },
     )
 

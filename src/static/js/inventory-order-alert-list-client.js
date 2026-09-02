@@ -349,8 +349,6 @@
     const flowAxisSelect = pageRoot.querySelector("#ioa-flow-axis");
     const flowPeriodSelect = pageRoot.querySelector("#ioa-flow-period");
     const flowQuadrantSelect = pageRoot.querySelector("#ioa-flow-quadrant");
-    const flowAxisHelp = pageRoot.querySelector("#ioa-flow-axis-help");
-    const flowConditionLabel = pageRoot.querySelector(".ioa-flow-condition-label");
     const flowQuadrantLabels = payload.flowQuadrantLabels || {};
     const flowQuadrantDepartments = payload.flowQuadrantDepartments || {};
     const flowAxes = Array.isArray(payload.flowAxes) ? payload.flowAxes : [];
@@ -618,23 +616,23 @@
       }
       if (flowPeriodSelect) {
         // 選択中の判定軸に属する選択肢だけを見せる（design.md §6.6.1）。
+        // 判定期間の value は軸をまたいで重複する（例: 低流動1か月と死蔵1年がともに "1"）ため、
+        // <select>.value = "1" の代入は DOM 順で最初に一致した option（隠れていても）を選んでしまう。
+        // 軸と value の両方が一致する option を明示的に選択する。
+        let matchedOption = null;
         Array.from(flowPeriodSelect.options).forEach((option) => {
-          option.hidden = option.dataset.axis !== state.flowAxis;
+          const isCurrentAxis = option.dataset.axis === state.flowAxis;
+          option.hidden = !isCurrentAxis;
+          if (isCurrentAxis && Number(option.value) === Number(state.flowPeriod)) {
+            matchedOption = option;
+          }
         });
-        flowPeriodSelect.value = String(state.flowPeriod);
+        if (matchedOption) {
+          matchedOption.selected = true;
+        }
       }
       if (flowQuadrantSelect) {
         flowQuadrantSelect.value = state.flowQuadrant || "";
-      }
-      const axis = flowAxes.find((option) => option.value === state.flowAxis);
-      const period = (flowPeriods[state.flowAxis] || []).find(
-        (option) => Number(option.value) === Number(state.flowPeriod),
-      );
-      if (flowAxisHelp && axis) {
-        flowAxisHelp.textContent = axis.helpText || axis.help_text || flowAxisHelp.textContent;
-      }
-      if (flowConditionLabel && axis && period) {
-        flowConditionLabel.textContent = `${axis.label}・${period.label}で判定`;
       }
     }
 

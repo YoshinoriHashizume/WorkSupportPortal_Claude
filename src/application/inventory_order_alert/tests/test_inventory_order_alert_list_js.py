@@ -16,6 +16,21 @@ def test_inventory_order_alert_list_client_js_renders_sort_headers_as_links():
     assert "function renderTableHeaders()" not in source
 
 
+def test_inventory_order_alert_list_client_js_selects_flow_period_option_by_axis_and_value():
+    """判定期間の value は軸をまたいで重複する（低流動1か月＝死蔵1年＝どちらも "1"）。
+
+    select.value への代入は DOM 順で最初に一致した option（隠れていても）を選んでしまうため、
+    軸と value の両方が一致する option を明示的に選択しなければならない
+    （死蔵判定軸を選ぶと「1年」ではなく「1か月」と表示される不具合の再発防止）。
+    """
+    source = CLIENT_JS_PATH.read_text(encoding="utf-8")
+    sync_block = source.split("function syncFlowSelector()", 1)[1].split("flowAxisSelect?.addEventListener", 1)[0]
+
+    assert "flowPeriodSelect.value = String(state.flowPeriod)" not in sync_block
+    assert "option.dataset.axis === state.flowAxis" in sync_block
+    assert "matchedOption.selected = true" in sync_block
+
+
 def test_inventory_order_alert_list_client_js_sorts_confirmation_status_by_key_rank():
     source = CLIENT_JS_PATH.read_text(encoding="utf-8")
     assert "CONFIRMATION_STATUS_RANK" in source
@@ -31,7 +46,7 @@ def test_inventory_order_alert_list_client_js_sorts_confirmation_status_by_key_r
 
 def test_inventory_order_alert_list_js_init_location_dialog_has_no_duplicate_table_body():
     source = JS_PATH.read_text(encoding="utf-8")
-    block = source.split("function initLocationDialog(", 1)[1].split("function initConfirmationReset", 1)[0]
+    block = source.split("function initLocationDialog(", 1)[1].split("function initAlertRulesDialog", 1)[0]
     assert "const tableBody" not in block
     assert "const listTableBody" in block
     assert "const locationTableBody" in block
@@ -94,13 +109,6 @@ def test_inventory_order_alert_list_js_saves_confirmation_on_select_change():
     assert "saveConfirmationStatus" in source
 
 
-def test_inventory_order_alert_list_js_preserves_table_scroll_on_confirmation_reload():
-    source = JS_PATH.read_text(encoding="utf-8")
-    assert "saveTableScrollPosition" in source
-    assert "restoreTableScrollPosition" in source
-    assert "reloadInventoryOrderAlertPage" in source
-
-
 def test_inventory_order_alert_list_js_updates_table_counts_label():
     source = JS_PATH.read_text(encoding="utf-8")
     assert "ioa-table-counts-left" in source
@@ -111,8 +119,9 @@ def test_inventory_order_alert_list_js_updates_table_counts_label():
     assert "通常流動品" in source
     assert "全件数:" not in source
     assert "確認済み" in source
-    assert "ioa-confirmation-reset" in source
-    assert "confirmation/reset" in source
+    # 確認状態リセットは設定画面（SCR-02）へ移した。一覧の JS には持たない。
+    assert "ioa-confirmation-reset" not in source
+    assert "confirmation/reset" not in source
 
 
 def test_inventory_order_alert_list_js_initializes_location_dialog():
@@ -167,7 +176,7 @@ def test_inventory_order_alert_list_client_js_keeps_flow_quadrant_departments():
 
 def test_inventory_order_alert_list_js_fills_detail_dialog_sections():
     source = JS_PATH.read_text(encoding="utf-8")
-    block = source.split("function initLocationDialog(", 1)[1].split("function initConfirmationReset", 1)[0]
+    block = source.split("function initLocationDialog(", 1)[1].split("function initAlertRulesDialog", 1)[0]
 
     assert "ioa-detail-item" in block
     assert "ioa-detail-flow" in block

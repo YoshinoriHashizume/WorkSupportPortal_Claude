@@ -39,7 +39,11 @@
       {% endif %}
     </div>
     <div class="ioa-table-actions">
-      {# 判定ルールを開くボタンは判定条件セレクタ側に置く（design.md §6.6.1）。 #}
+      {% if has_list_data %}
+        <button type="button" class="button-link ioa-alert-rules-open" aria-haspopup="dialog" aria-controls="ioa-alert-rules-dialog">
+          判定ルール
+        </button>
+      {% endif %}
       <form method="post" enctype="multipart/form-data" class="ioa-import-form">
         {% csrf_token %}
         <input type="file" id="ioa-slims-csv" name="slims_csv" accept=".csv" class="ioa-file-picker-input">
@@ -71,7 +75,7 @@
         <span class="ioa-filter-field-label">判定軸</span>
         <select id="ioa-flow-axis" name="axis" class="ioa-filter-select ioa-filter-control">
           {% for option in flow_axis_options %}
-            <option value="{{ option.value }}" data-help-text="{{ option.help_text }}" {% if flow_selection.axis == option.value %}selected{% endif %}>{{ option.label }}</option>
+            <option value="{{ option.value }}" {% if flow_selection.axis == option.value %}selected{% endif %}>{{ option.label }}</option>
           {% endfor %}
         </select>
       </label>
@@ -97,53 +101,39 @@
           {% endfor %}
         </select>
       </label>
-      <div class="ioa-filter-field ioa-flow-selector-actions">
-        <span class="ioa-filter-field-label" aria-hidden="true">&nbsp;</span>
-        <button type="button" class="button-link ioa-alert-rules-open" aria-haspopup="dialog" aria-controls="ioa-alert-rules-dialog">
-          判定ルール
-        </button>
-      </div>
-    </div>
-    <p class="ioa-flow-selector-help muted" id="ioa-flow-axis-help">
-      {% for option in flow_axis_options %}{% if flow_selection.axis == option.value %}{{ option.help_text }}{% endif %}{% endfor %}
-    </p>
-  </div>
-
-  <div class="ioa-filter-panel">
-    <div class="ioa-filter-panel-fields">
-      <label class="ioa-filter-field">
-        <span class="ioa-filter-field-label">担当者コード</span>
-        <select name="cust_chrg_psn_cd" class="ioa-filter-select ioa-filter-control">
-          <option value="">すべて</option>
-          {% for option in filter_options.cust_chrg_psn_options %}
-            <option value="{{ option.value }}" {% if list_filter.cust_chrg_psn_cd == option.value %}selected{% endif %}>{{ option.label }}</option>
-          {% endfor %}
-        </select>
-      </label>
-      <label class="ioa-filter-field">
-        <span class="ioa-filter-field-label">得意先コード</span>
-        <select name="cust_code" class="ioa-filter-select ioa-filter-control">
-          <option value="">すべて</option>
-          {% for option in visible_cust_options %}
-            <option value="{{ option.value }}" {% if list_filter.cust_code == option.value %}selected{% endif %}>{{ option.label }}</option>
-          {% endfor %}
-        </select>
-      </label>
-      {% include "includes/portal_prefix_filter_field.html" with label="得意先品番" name="item_cd" value=list_filter.item_cd datalist_id="ioa-item-cd-options" placeholder="得意先品番" field_class="ioa-filter-field" label_class="ioa-filter-field-label" input_class="ioa-filter-control ioa-filter-item-cd" options=filter_options.item_cd_options %}
-      {% include "includes/portal_prefix_filter_field.html" with label="仕入先品番" name="level1_item_cd" value=list_filter.level1_item_cd datalist_id="ioa-level1-item-cd-options" placeholder="仕入先品番" field_class="ioa-filter-field" label_class="ioa-filter-field-label" input_class="ioa-filter-control ioa-filter-level1-item-cd" options=filter_options.level1_item_cd_options %}
     </div>
   </div>
 
+  {# フィルタパネルの枠を横いっぱいに広げる。並び替えはフィルタ項目の直後に置く。 #}
   <div class="ioa-table-toolbar">
-    <button type="button" class="button-link ioa-sort-open" aria-haspopup="dialog" aria-controls="ioa-sort-dialog">
-      並び替え
-    </button>
-    <p class="ioa-flow-condition-label muted">{{ flow_selection.axis_label }}・{{ flow_selection.period_label }}で判定</p>
-    <div class="ioa-table-counts">
-      <p class="ioa-table-counts-left">供給リスク品 {{ counts.supply_risk }} 件 / 在庫死蔵品 {{ counts.dormant_stock }} 件 / 在庫過剰リスク品 {{ counts.excess_stock_risk }} 件 / 通常流動品 {{ counts.normal_flow }} 件</p>
-      <div class="ioa-table-counts-right-wrap">
-        <p class="ioa-table-counts-right">確認済み {{ counts.confirmed }} 件 / 確認中 {{ counts.in_progress }} 件 / 未確認 {{ counts.unconfirmed }} 件</p>
-        <button type="button" class="button-link ioa-confirmation-reset" {% if not can_reset_confirmations %}disabled{% endif %}>リセット</button>
+    <div class="ioa-filter-panel">
+      <div class="ioa-filter-panel-fields">
+        <label class="ioa-filter-field">
+          <span class="ioa-filter-field-label">担当者コード</span>
+          <select name="cust_chrg_psn_cd" class="ioa-filter-select ioa-filter-control">
+            <option value="">すべて</option>
+            {% for option in filter_options.cust_chrg_psn_options %}
+              <option value="{{ option.value }}" {% if list_filter.cust_chrg_psn_cd == option.value %}selected{% endif %}>{{ option.label }}</option>
+            {% endfor %}
+          </select>
+        </label>
+        <label class="ioa-filter-field">
+          <span class="ioa-filter-field-label">得意先コード</span>
+          <select name="cust_code" class="ioa-filter-select ioa-filter-control">
+            <option value="">すべて</option>
+            {% for option in visible_cust_options %}
+              <option value="{{ option.value }}" {% if list_filter.cust_code == option.value %}selected{% endif %}>{{ option.label }}</option>
+            {% endfor %}
+          </select>
+        </label>
+        {% include "includes/portal_prefix_filter_field.html" with label="得意先品番" name="item_cd" value=list_filter.item_cd datalist_id="ioa-item-cd-options" placeholder="得意先品番" field_class="ioa-filter-field" label_class="ioa-filter-field-label" input_class="ioa-filter-control ioa-filter-item-cd" options=filter_options.item_cd_options %}
+        {% include "includes/portal_prefix_filter_field.html" with label="仕入先品番" name="level1_item_cd" value=list_filter.level1_item_cd datalist_id="ioa-level1-item-cd-options" placeholder="仕入先品番" field_class="ioa-filter-field" label_class="ioa-filter-field-label" input_class="ioa-filter-control ioa-filter-level1-item-cd" options=filter_options.level1_item_cd_options %}
+        <div class="ioa-filter-field ioa-filter-panel-sort">
+          <span class="ioa-filter-field-label" aria-hidden="true">&nbsp;</span>
+          <button type="button" class="button-link ioa-sort-open" aria-haspopup="dialog" aria-controls="ioa-sort-dialog">
+            並び替え
+          </button>
+        </div>
       </div>
     </div>
   </div>
@@ -208,23 +198,32 @@
     </table>
   </div>
 
-  <form method="get" class="ioa-table-footer"{% if not paginated.total_count %} hidden{% endif %}>
-    <div class="ioa-table-footer-left">
-      <label class="ioa-page-size-label" for="ioa-page-size">表示件数</label>
-      <select id="ioa-page-size" name="page_size" class="ioa-page-size-select">
-        {% for size in page_size_options %}
-          <option value="{{ size }}" {% if table_params.page_size == size %}selected{% endif %}>{{ size }} 件</option>
-        {% endfor %}
-      </select>
-      <nav class="ioa-pagination" aria-label="一覧ページ移動">
-        <button type="button" class="button-link ioa-pagination-prev"{% if not paginated.has_previous %} disabled{% endif %}>前へ</button>
-        <button type="button" class="button-link ioa-pagination-next"{% if not paginated.has_next %} disabled{% endif %}>次へ</button>
-      </nav>
-      {% if paginated.total_count %}
-        <p class="muted ioa-table-range">{{ paginated.start_index }}–{{ paginated.end_index }} 件目を表示（{{ paginated.page }} / {{ paginated.total_pages }} ページ）</p>
-      {% endif %}
+  <div class="ioa-table-footer-row">
+    <form method="get" class="ioa-table-footer"{% if not paginated.total_count %} hidden{% endif %}>
+      <div class="ioa-table-footer-left">
+        <label class="ioa-page-size-label" for="ioa-page-size">表示件数</label>
+        <select id="ioa-page-size" name="page_size" class="ioa-page-size-select">
+          {% for size in page_size_options %}
+            <option value="{{ size }}" {% if table_params.page_size == size %}selected{% endif %}>{{ size }} 件</option>
+          {% endfor %}
+        </select>
+        <nav class="ioa-pagination" aria-label="一覧ページ移動">
+          <button type="button" class="button-link ioa-pagination-prev"{% if not paginated.has_previous %} disabled{% endif %}>前へ</button>
+          <button type="button" class="button-link ioa-pagination-next"{% if not paginated.has_next %} disabled{% endif %}>次へ</button>
+        </nav>
+        {% if paginated.total_count %}
+          <p class="muted ioa-table-range">{{ paginated.start_index }}–{{ paginated.end_index }} 件目を表示（{{ paginated.page }} / {{ paginated.total_pages }} ページ）</p>
+        {% endif %}
+      </div>
+    </form>
+    {# 件数サマリは常時表示する（0件時も絞り込み状況が分かるように）。判定条件は判定軸・判定期間セレクトで分かるため表示しない。 #}
+    <div class="ioa-table-footer-right">
+      <div class="ioa-table-counts">
+        <p class="ioa-table-counts-left">供給リスク品 {{ counts.supply_risk }} 件 / 在庫死蔵品 {{ counts.dormant_stock }} 件 / 在庫過剰リスク品 {{ counts.excess_stock_risk }} 件 / 通常流動品 {{ counts.normal_flow }} 件</p>
+        <p class="ioa-table-counts-right">確認済み {{ counts.confirmed }} 件 / 確認中 {{ counts.in_progress }} 件 / 未確認 {{ counts.unconfirmed }} 件</p>
+      </div>
     </div>
-  </form>
+  </div>
 
   <dialog id="ioa-sort-dialog" class="ioa-sort-dialog">
     <form class="ioa-sort-form">
@@ -417,6 +416,6 @@
 <script src="/static/js/portal-list-prefix-filter.js?v=20260629-dependent-cust" defer></script>
 <script src="/static/js/portal-list-dependent-cust-filter.js?v=20260629-dependent-cust" defer></script>
 <script src="/static/js/portal-list-sort-dialog.js?v=20260629-dependent-cust" defer></script>
-<script src="/static/js/inventory-order-alert-list-client.js?v=20260831-mari-stock" defer></script>
-<script src="/static/js/inventory-order-alert-list.js?v=20260831-mari-stock" defer></script>
+<script src="/static/js/inventory-order-alert-list-client.js?v=20260901-dormant-period-fix" defer></script>
+<script src="/static/js/inventory-order-alert-list.js?v=20260901-reset-to-settings" defer></script>
 {% endblock %}

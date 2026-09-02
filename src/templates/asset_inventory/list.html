@@ -58,44 +58,44 @@
 
     {% if has_list_data %}
     <div class="aiv-results-body">
-    <div class="aiv-filter-panel">
-      <div class="aiv-filter-panel-fields">
-        <label class="aiv-filter-field">
-          <span class="aiv-filter-field-label">棚卸結果</span>
-          <select name="status" class="portal-filter-select aiv-filter-control">
-            {% for value, label in status_filter_options %}
-              <option value="{{ value }}" {% if status_filter == value %}selected{% endif %}>{{ label }}</option>
-            {% endfor %}
-          </select>
-        </label>
-        <label class="aiv-filter-field">
-          <span class="aiv-filter-field-label">プレート作成</span>
-          <select name="plate" class="portal-filter-select aiv-filter-control">
-            {% for value, label in plate_filter_options %}
-              <option value="{{ value }}" {% if plate_filter == value %}selected{% endif %}>{{ label }}</option>
-            {% endfor %}
-          </select>
-        </label>
-        <label class="aiv-filter-field">
-          <span class="aiv-filter-field-label">拠点</span>
-          <select name="site" class="portal-filter-select aiv-filter-control">
-            <option value="all" {% if site_filter == "all" %}selected{% endif %}>すべて</option>
-            {% for site in site_options %}
-              <option value="{{ site }}" {% if site_filter == site %}selected{% endif %}>{{ site }}</option>
-            {% endfor %}
-          </select>
-        </label>
-        {% include "includes/portal_prefix_filter_field.html" with label="資産番号" name="assetNumber" value=asset_number_filter datalist_id="aiv-asset-number-options" placeholder="資産番号" field_class="aiv-filter-field" label_class="aiv-filter-field-label" input_class="aiv-filter-control aiv-filter-asset-number" options=asset_number_options %}
-      </div>
-    </div>
-
+    {# フィルタパネルの枠を横いっぱいに広げる。並び替えボタンはフィルタ項目の直後に置く。 #}
     <div class="aiv-table-toolbar">
-      <button type="button" class="button-link aiv-sort-open" aria-haspopup="dialog" aria-controls="aiv-sort-dialog">
-        並び替え
-      </button>
-      <p class="aiv-table-counts">
-        棚卸済み {{ counts.matched }} 件 / 未棚卸 {{ counts.asset_only }} 件 / 台帳外 {{ counts.inventory_only }} 件
-      </p>
+      <div class="aiv-filter-panel">
+        <div class="aiv-filter-panel-fields">
+          <label class="aiv-filter-field">
+            <span class="aiv-filter-field-label">棚卸結果</span>
+            <select name="status" class="portal-filter-select aiv-filter-control">
+              {% for value, label in status_filter_options %}
+                <option value="{{ value }}" {% if status_filter == value %}selected{% endif %}>{{ label }}</option>
+              {% endfor %}
+            </select>
+          </label>
+          <label class="aiv-filter-field">
+            <span class="aiv-filter-field-label">プレート作成</span>
+            <select name="plate" class="portal-filter-select aiv-filter-control">
+              {% for value, label in plate_filter_options %}
+                <option value="{{ value }}" {% if plate_filter == value %}selected{% endif %}>{{ label }}</option>
+              {% endfor %}
+            </select>
+          </label>
+          <label class="aiv-filter-field">
+            <span class="aiv-filter-field-label">拠点</span>
+            <select name="site" class="portal-filter-select aiv-filter-control">
+              <option value="all" {% if site_filter == "all" %}selected{% endif %}>すべて</option>
+              {% for site in site_options %}
+                <option value="{{ site }}" {% if site_filter == site %}selected{% endif %}>{{ site }}</option>
+              {% endfor %}
+            </select>
+          </label>
+          {% include "includes/portal_prefix_filter_field.html" with label="資産番号" name="assetNumber" value=asset_number_filter datalist_id="aiv-asset-number-options" placeholder="資産番号" field_class="aiv-filter-field" label_class="aiv-filter-field-label" input_class="aiv-filter-control aiv-filter-asset-number" options=asset_number_options %}
+          <div class="aiv-filter-field aiv-filter-panel-sort">
+            <span class="aiv-filter-field-label" aria-hidden="true">&nbsp;</span>
+            <button type="button" class="button-link aiv-sort-open" aria-haspopup="dialog" aria-controls="aiv-sort-dialog">
+              並び替え
+            </button>
+          </div>
+        </div>
+      </div>
     </div>
 
     <div class="db-table-wrap aiv-table-wrap">
@@ -138,20 +138,26 @@
       </table>
     </div>
 
-    <div class="aiv-table-footer"{% if not filtered_total %} hidden{% endif %}>
-      <div class="aiv-table-footer-left">
-        <label class="aiv-page-size-label" for="aiv-page-size">表示件数</label>
-        <select id="aiv-page-size" name="page_size" class="aiv-page-size-select">
-          {% for size in page_size_options %}
-            <option value="{{ size }}" {% if page_size == size %}selected{% endif %}>{{ size }} 件</option>
-          {% endfor %}
-        </select>
-        <nav class="aiv-pagination" aria-label="一覧ページ移動">
-          <button type="button" class="button-link aiv-pagination-prev"{% if not has_previous %} disabled{% endif %}>前へ</button>
-          <button type="button" class="button-link aiv-pagination-next"{% if not has_next %} disabled{% endif %}>次へ</button>
-        </nav>
-        <p class="muted aiv-table-range">{{ start_index }}–{{ end_index }} 件目を表示（{{ page }} / {{ total_pages }} ページ）</p>
+    <div class="aiv-table-footer-row">
+      <div class="aiv-table-footer"{% if not filtered_total %} hidden{% endif %}>
+        <div class="aiv-table-footer-left">
+          <label class="aiv-page-size-label" for="aiv-page-size">表示件数</label>
+          <select id="aiv-page-size" name="page_size" class="aiv-page-size-select">
+            {% for size in page_size_options %}
+              <option value="{{ size }}" {% if page_size == size %}selected{% endif %}>{{ size }} 件</option>
+            {% endfor %}
+          </select>
+          <nav class="aiv-pagination" aria-label="一覧ページ移動">
+            <button type="button" class="button-link aiv-pagination-prev"{% if not has_previous %} disabled{% endif %}>前へ</button>
+            <button type="button" class="button-link aiv-pagination-next"{% if not has_next %} disabled{% endif %}>次へ</button>
+          </nav>
+          <p class="muted aiv-table-range">{{ start_index }}–{{ end_index }} 件目を表示（{{ page }} / {{ total_pages }} ページ）</p>
+        </div>
       </div>
+      {# 件数サマリは常時表示する（0件時も絞り込み状況が分かるように）。 #}
+      <p class="aiv-table-counts">
+        棚卸済み {{ counts.matched }} 件 / 未棚卸 {{ counts.asset_only }} 件 / 台帳外 {{ counts.inventory_only }} 件
+      </p>
     </div>
 
     <dialog id="aiv-sort-dialog" class="aiv-sort-dialog">
