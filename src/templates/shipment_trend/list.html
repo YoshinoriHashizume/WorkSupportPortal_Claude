@@ -48,16 +48,10 @@
   {% endif %}
 
   {% if has_list_data %}
-  {# フィルタパネルの枠を横いっぱいに広げる。並び替えボタンは枠内の左端に置く。 #}
+  {# フィルタパネルの枠を横いっぱいに広げる。並び替えボタンはフィルタ項目の直後に置く。 #}
   <div class="st-table-toolbar">
     <div class="st-filter-panel">
       <div class="st-filter-panel-fields">
-        <div class="st-filter-field st-filter-panel-sort">
-          <span class="st-filter-field-label" aria-hidden="true">&nbsp;</span>
-          <button type="button" class="button-link st-sort-open" aria-haspopup="dialog" aria-controls="st-sort-dialog">
-            並び替え
-          </button>
-        </div>
         <label class="st-filter-field">
           <span class="st-filter-field-label">担当者コード</span>
           <select name="cust_chrg_psn_cd" class="st-filter-select st-filter-control">
@@ -77,6 +71,12 @@
           </select>
         </label>
         {% include "includes/portal_prefix_filter_field.html" with label="内作品番" name="item_cd" value=list_filter.item_cd datalist_id="st-item-cd-options" placeholder="内作品番" field_class="st-filter-field" label_class="st-filter-field-label" input_class="st-filter-control st-filter-item-cd" options=filter_options.item_cd_options %}
+        <div class="st-filter-field st-filter-panel-sort">
+          <span class="st-filter-field-label" aria-hidden="true">&nbsp;</span>
+          <button type="button" class="button-link st-sort-open" aria-haspopup="dialog" aria-controls="st-sort-dialog">
+            並び替え
+          </button>
+        </div>
       </div>
     </div>
   </div>
