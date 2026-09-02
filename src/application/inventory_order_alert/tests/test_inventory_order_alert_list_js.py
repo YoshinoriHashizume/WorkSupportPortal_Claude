@@ -35,6 +35,25 @@ def test_TC_SHC_X_004_list_js_shows_empty_state_when_no_shipment_activity():
     assert "every" in chart_block or "some" in chart_block
 
 
+def test_TC_SHC_X_008_client_js_has_get_incoming_trend_getter():
+    source = CLIENT_JS_PATH.read_text(encoding="utf-8")
+    getter_block = source.split("getIncomingTrend(custCode, itemCd)", 1)[1].split("},", 1)[0]
+
+    # findRow() を再利用して行を引く（design.md §6.3, §6.1）。
+    assert "findRow(custCode, itemCd)" in getter_block
+    assert "incoming_trend" in getter_block
+
+
+def test_TC_SHC_X_009_list_js_renders_dual_series_chart_with_legend():
+    source = JS_PATH.read_text(encoding="utf-8")
+    chart_block = source.split("function renderShipmentTrendChart", 1)[1].split("\n  function ", 1)[0]
+
+    # 出荷(青)・入荷(橙)の2系列を共通スケールで重ね描き、凡例を出す（design.md §6.4）。
+    assert "getIncomingTrend" in source
+    assert "ioa-shipment-trend-legend" in chart_block
+    assert "ioa-shipment-trend-line--incoming" in chart_block or "incoming" in chart_block
+
+
 def test_inventory_order_alert_list_client_js_renders_sort_headers_as_links():
     source = CLIENT_JS_PATH.read_text(encoding="utf-8")
     assert "window.PortalListCore" in source

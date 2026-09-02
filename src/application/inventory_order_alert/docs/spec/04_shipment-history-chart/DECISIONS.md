@@ -16,6 +16,15 @@
 - **変更ファイル**（既存改修）: `infrastructure/oracle/summary_queries.py`、`templates/inventory_order_alert/list.html`、`static/js/inventory-order-alert-list-client.js`、`static/js/inventory-order-alert-list.js`、`static/css/app.css`、`docs/在庫発注アラート_機能仕様書.md`、`docs/ubiquitous_language.md`、および関連テストファイル数点
 - **Oracle への影響**: **なし**。新規クエリを追加せず、既存の `fetch_all_shipments()` の取得結果を月次に束ね直しただけ
 
+### 追記（2026/09/03、ユーザー指示「入荷も含めて」への対応）
+
+- **ブランチ**: `feature/ioa-shipment-history-chart-incoming`（`develop` から分岐。tasks.md ステージ6 タスク22〜33 実施）
+- **テスト**: `pytest` リポジトリ全体 1667件 Green（新規テスト11件追加）。`manage.py check` 問題なし。マイグレーション不要
+- **変更ファイル**（新規）: `tests/test_incoming_trend_query.py`
+- **変更ファイル**（既存改修）: `infrastructure/oracle/summary_queries.py`（`fetch_incoming_receipts()` 新設、`build_summary_rows()` に `incoming_trend` 付与）、`static/js/inventory-order-alert-list-client.js`（`getIncomingTrend` 追加）、`static/js/inventory-order-alert-list.js`（`renderShipmentTrendChart` を2系列描画に拡張）、`templates/inventory_order_alert/list.html`（見出しを「入出荷推移」に変更）、`static/css/app.css`（入荷系列・凡例のスタイル追加）、`docs/在庫発注アラート_機能仕様書.md`（§4.1.6・改訂履歴4.9）、`docs/ubiquitous_language.md`（V-217追加）
+- **Oracle への影響**: **あり（新規クエリ1件）**。`fetch_incoming_receipts()` を取込ごとに1回、直近24か月に絞って発行（詳細は下記「項目3」参照）
+- **push**: 本追記分も develop へのローカルコミットのみ。**origin への push は未実施**（本セッションの一貫方針どおり、明示指示待ち）
+
 ---
 
 ## 要確認・要判断（優先度順）
@@ -35,11 +44,16 @@
 - **実測結果（タスク17）**: 24か月ぶんの出荷推移で **1行あたり配信データ量が +794バイト**（見積りの約500バイトから乖離）。既存の1行あたりデータ量（実測約4,000バイト）に対し約2割増。**60か月に伸ばすと単純比例で約2,000バイト/行**になる見込みで、5,000行規模の一覧では合計 約10MBの増加になる。
 - **確認したいこと**: 24か月のままでよいか（判定根拠を見せきれない可能性を許容する）、60か月まで伸ばすか（配信量が明確に増える）、あるいは判定軸に応じて可変にするか。
 
-### 3. 入荷実績（入荷推移）をグラフに含めなかったこと
+### 3. 入荷実績（入荷推移）をグラフに含めなかったこと 【解決済み・2026/09/03】
 
-- 流動区分の判定は「入荷の有無」と「出荷の有無」の両方で決まるが、今回のグラフは**出荷のみ**を表示する。
-- 理由: スコープを絞るため（初版は最小限）。入荷側は `T_PAST_INSPC_ACPT` からの追加集計が必要で、実装量が増える。
-- **確認したいこと**: 出荷のみで判定根拠として十分か、入荷も並べて表示したいか。
+- ~~流動区分の判定は「入荷の有無」と「出荷の有無」の両方で決まるが、今回のグラフは**出荷のみ**を表示する。~~
+- **2026/09/03、ユーザー指示「入荷も含めて」により対応済み**。入荷推移（V-217）を第2系列として追加し、区分見出しも「出荷推移」から「**入出荷推移**」に変更した（design.md §3.3・§4.3・§6.1〜§6.5、tasks.md ステージ6、機能仕様書 改訂履歴 4.9）。
+- 追加時に生じた新規判断（対話で確認済みではなく、design.md 作成時の自己判断のため、念のため記録）:
+  - **数量フィールドの選択**: `T_PAST_INSPC_ACPT` には `ACPT_QTY`（受入数量）と `INSPC_ACPT_QTY`（検収数量）の2つの数量列がある。「検収済み＝正式に受け入れた数量」がより意味のある指標と判断し **`INSPC_ACPT_QTY`** を採用（ubiquitous_language.md V-217 に明記）。
+  - **突合キーの違い**: 出荷推移は「得意先×得意先品番」で突合するが、入荷推移は「BOM階層1構成子×仕入先」で突合する（既存の最終入荷日解決ロジックと同じ軸）。突合先が解決できない行（BOM未解決等）は入荷推移が全月0になる。
+  - **新規 Oracle クエリの追加**: 出荷推移はゼロ追加クエリで実現できたが、入荷推移は個々の検収明細（月次集計に必要な数量つき）を取る手段が既存になく、`fetch_incoming_receipts()` を新設した。既存の `fetch_last_incoming_by_item_vend()`（`MAX(ACPT_DATE)` の集約のみ、範囲指定なし）を安易に真似ず、**`WHERE ACPT_DATE >= :window_start` で直近24か月に絞った**（REQ-SHC-NF-008）。取込ごとに1回のみ発行。
+  - **命名債務（意図的に許容）**: `build_monthly_shipment_trend()`（domain関数）と `group_shipments_by_pair()`（infrastructure関数）を、名前を変えずに入荷推移でも汎用再利用した。「出荷」という名前が残ったまま入荷にも使う点は将来の可読性を損なうが、既にテスト済み・コミット済みのコードへの改名リスクとレビュー範囲拡大を避けるため許容した（design.md R-6）。同様に JS の `renderShipmentTrendChart` 関数名、CSS/HTML の `ioa-detail-shipment-trend-*` クラス名も維持した。
+  - **配信ペイロード増分**: 入荷推移単独 +793バイト/行、出荷+入荷合計 +1,587バイト/行（実測、design.md §6.2）。項目2（対象期間24か月固定）の判断により重要度が増す（60か月化すると合計で約4,000バイト/行になる見込み）。
 
 ### 4. グラフの描画方式（自前 SVG、外部ライブラリ不使用）
 

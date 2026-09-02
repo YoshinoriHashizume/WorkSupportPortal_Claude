@@ -1771,10 +1771,39 @@ body.inventory-order-alert-page .ioa-shipment-trend-line {
 body.inventory-order-alert-page .ioa-shipment-trend-point {
   fill: #0284c7;
 }
+body.inventory-order-alert-page .ioa-shipment-trend-line--incoming {
+  stroke: #ea580c;
+}
+body.inventory-order-alert-page .ioa-shipment-trend-point--incoming {
+  fill: #ea580c;
+}
 body.inventory-order-alert-page .ioa-shipment-trend-axis-label {
   font-size: 8px;
   fill: #64748b;
   text-anchor: middle;
+}
+body.inventory-order-alert-page .ioa-shipment-trend-legend {
+  display: flex;
+  gap: 12px;
+  font-size: 12px;
+  color: #475569;
+}
+body.inventory-order-alert-page .ioa-shipment-trend-legend-item {
+  position: relative;
+  padding-left: 16px;
+}
+body.inventory-order-alert-page .ioa-shipment-trend-legend-item::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 50%;
+  width: 10px;
+  height: 2px;
+  transform: translateY(-50%);
+  background: #0284c7;
+}
+body.inventory-order-alert-page .ioa-shipment-trend-legend-item--incoming::before {
+  background: #ea580c;
 }
 body.inventory-order-alert-page .ioa-detail-section-subtitle {
   margin: 4px 0 0;

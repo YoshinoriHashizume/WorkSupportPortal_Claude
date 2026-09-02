@@ -2,7 +2,7 @@
 
 文書ID: TEST-SHIPMENT-HISTORY-CHART-2026-001
 作成日: 2026/09/01
-更新日:
+更新日: 2026/09/03（入荷推移 V-217 のテストケース TC-SHC-I-009〜011・X-008〜009 を追加）
 対応文書: [design.md](./design.md)（DESIGN-SHIPMENT-HISTORY-CHART-2026-001）
 テスト戦略reference: 03_mari-stock-visibility/test-design.md と同一方針を踏襲（本書では差分のみ記述）
 テストフレームワークreference: django-pytest
@@ -77,6 +77,14 @@ Red → Green → Refactor。各実装タスクの直前にテスト作成タス
 | TC-SHC-I-007 | shipment_trend を含む行が保存・復元できる | 24件のリストを含む行 | 復元後も24件・値が一致（Decimal化されない） | REQ-SHC-NF-002 | P1 |
 | TC-SHC-I-008 | 既存スナップショット（shipment_trend キーなし）の読込で例外を出さない | キーなしの行 | `row.get("shipment_trend")` が `None`。例外なし | REQ-SHC-F-004 | **P1** |
 
+#### 入荷推移（V-217）の取得と付与
+
+| # | テストケース | 入力 | 期待結果 | 対応REQ-ID | 優先度 |
+|---|---|---|---|---|---|
+| TC-SHC-I-009 | `fetch_incoming_receipts` が window_start 以降のみ返す | window境界をまたぐ検収明細 | window内のみ返る | REQ-SHC-NF-008 | P1 |
+| TC-SHC-I-010 | `build_summary_rows` が `incoming_trend` を付与する | `_shipped_pair_patches` を拡張 | `rows[0]["incoming_trend"]` が24件 | REQ-SHC-F-005 | P1 |
+| TC-SHC-I-011 | 入荷推移クエリが1回だけ発行される | `build_summary_rows` 実行 | `fetch_incoming_receipts` の呼び出し回数が1 | REQ-SHC-NF-008 | **P1** |
+
 ### 2.3 Application層テスト
 
 | # | テストケース | 入力 | 期待結果 | 対応REQ-ID | 優先度 |
@@ -95,6 +103,8 @@ Red → Green → Refactor。各実装タスクの直前にテスト作成タス
 | TC-SHC-X-005 | 既存の4区分（品目・流動区分・在庫・メモ）の順序が変わらない | 一覧ページHTML | 出荷推移区分が「在庫」と「メモ」の間に挿入されている | design.md §6.5 | P2 |
 | TC-SHC-X-006 | 流動区分の判定結果が本要件の前後で変わらない | `pytest test_flow_quadrant.py` | 全件 Green（非回帰） | REQ-SHC-NF-004 | **P1** |
 | TC-SHC-X-007 | `config/tests/test_clean_architecture.py` が Green | 全体テスト | レイヤー違反なし | REQ-SHC-NF-006 | **P1** |
+| TC-SHC-X-008 | JS に getIncomingTrend ゲッターが定義されている | list-client.js ソース | 文字列 `getIncomingTrend` が存在 | REQ-SHC-F-005 | P1 |
+| TC-SHC-X-009 | チャートが出荷・入荷2系列を描画する凡例を持つ | list.js ソース | 凡例相当のクラス・2系列ぶんの `<polyline>` 生成コードが存在 | REQ-SHC-F-005 | P1 |
 
 ---
 
@@ -167,6 +177,8 @@ AS_OF_DATE = date(2026, 6, 17)
 | REQ-SHC-F-002 | TC-SHC-D-005, D-006, X-001, X-003 |
 | REQ-SHC-F-003 | TC-SHC-X-004 |
 | REQ-SHC-F-004 | TC-SHC-I-003, I-008 |
+| REQ-SHC-F-005 | TC-SHC-I-009〜011, X-008〜009 |
+| REQ-SHC-NF-008 | TC-SHC-I-009, I-011 |
 | REQ-SHC-NF-001 | TC-SHC-I-005, A-002 |
 | REQ-SHC-NF-002 | TC-SHC-I-007 |
 | REQ-SHC-NF-003 | TC-SHC-I-006 |
