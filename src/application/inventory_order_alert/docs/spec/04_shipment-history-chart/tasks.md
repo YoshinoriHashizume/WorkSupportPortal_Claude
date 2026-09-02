@@ -1,6 +1,6 @@
 文書ID: TASK-SHIPMENT-HISTORY-CHART-2026-001
 作成日: 2026/09/01
-更新日:
+更新日: 2026/09/03（入荷推移 V-217 追加分。ステージ6を新設）
 対応文書: ./design.md (DESIGN-SHIPMENT-HISTORY-CHART-2026-001), ./test-design.md (TEST-SHIPMENT-HISTORY-CHART-2026-001), ./requirements.md (REQ-SHIPMENT-HISTORY-CHART-2026-001)
 
 # shipment-history-chart タスクリスト
@@ -65,6 +65,23 @@
 | 19 | `collectstatic` とキャッシュバスターの更新 | 横断 | [✅2026/09/02 17:40] |
 | 20 | 機能仕様書の改訂 | docs | [✅2026/09/02 17:40] |
 | 21 | アプリ全体・リポジトリ全体テストの Green 化 | 横断 | [✅2026/09/02 17:40] |
+
+### ステージ6: 入荷推移（V-217）の追加
+
+| # | タスク | レイヤー | 状態 |
+|---|--------|---------|------|
+| 22 | `fetch_incoming_receipts()` のテスト作成（TC-SHC-I-009, I-011） | infrastructure | [✅2026/09/03 08:35] |
+| 23 | `fetch_incoming_receipts()` の実装 | infrastructure | [✅2026/09/03 08:35] |
+| 24 | `build_summary_rows()` への `incoming_trend` 付与のテスト作成（TC-SHC-I-010） | infrastructure | [✅2026/09/03 08:35] |
+| 25 | `build_summary_rows()` への `incoming_trend` 付与 | infrastructure | [✅2026/09/03 08:35] |
+| 26 | `getIncomingTrend` のテスト作成（TC-SHC-X-008） | interfaces | [✅2026/09/03 08:35] |
+| 27 | `inventory-order-alert-list-client.js` に `getIncomingTrend` を追加 | interfaces | [✅2026/09/03 08:35] |
+| 28 | 2系列描画のテスト作成（TC-SHC-X-009） | interfaces | [✅2026/09/03 08:35] |
+| 29 | `renderShipmentTrendChart` を2系列描画に拡張、凡例を追加 | interfaces | [✅2026/09/03 08:35] |
+| 30 | 詳細ダイアログの見出しを「入出荷推移」へ変更 | interfaces | [✅2026/09/03 08:35] |
+| 31 | ペイロード実測の更新（TC-SHC-E-001 を再測定） | 横断 | [✅2026/09/03 08:35] |
+| 32 | 機能仕様書の改訂（§4.1.6 入荷推移の追記） | docs | [✅2026/09/03 08:35] |
+| 33 | アプリ全体・リポジトリ全体テストの Green 化（再確認） | 横断 | [✅2026/09/03 08:40] |
 
 ---
 
@@ -225,6 +242,19 @@
 - **チーム共有ポイント**: ペイロード見積りは「キー名+区切り文字を含めて概算する」だけでは依然として過小評価しやすい（今回も約1.6倍の乖離）。**実測をタスクの完了条件に含める運用を今後も徹底する**。
 
 タスク1〜21すべて Green。詳細は各タスク実行時のテスト結果を参照（本レポートは自律実行のため簡潔にまとめた）。
+--------------------
+
+--------------------
+### ステージ6（タスク22〜33）完了（完了 2026/09/03 08:40）
+
+- **懸念事項**:
+  - 入荷推移は出荷推移と異なり、新規 Oracle クエリ（`fetch_incoming_receipts()`）が必要になった。既存の `fetch_last_incoming_by_item_vend()` が範囲指定なしの全件集約だったため、これを安易に模倣せず `WHERE ACPT_DATE >= :window_start` で直近24か月に絞った（REQ-SHC-NF-008）。基幹 Oracle への新規負荷が生じる点は DECISIONS.md 項目3に記録した。
+  - `build_monthly_shipment_trend()` / `group_shipments_by_pair()` / `renderShipmentTrendChart` / `ioa-detail-shipment-trend-*` のクラス名・関数名を、入荷にも使う形のまま改名しなかった（design.md R-6）。命名債務として DECISIONS.md に明記した。
+- **改善事項**: 出荷・入荷を同一スケール（共通の0〜最大値）で重ね描きすることで、2系列を1グラフで比較できるようにした。空表示の判定を「両系列とも全月0」に限定し、片方のみ実績がある行でもグラフが描かれるようにした。
+- **設計のGoodポイント**: 出荷推移で確立した「集計はSLIMS取込時のみ・一覧表示のたびにOracleを呼ばない」設計方針を入荷推移にもそのまま適用できた。`group_shipments_by_pair()` が汎用実装だったため、入荷明細の grouping にコード追加なしで再利用できた。
+- **チーム共有ポイント**: 「既存クエリの結果を束ね直すだけで済む」出荷推移と異なり、入荷推移は月次集計に必要な明細粒度のデータが既存クエリになかった。新規クエリを追加する際は、既存の集約専用クエリ（`MAX()`のみ等）を安易に流用せず、必要な粒度・範囲を都度見極める必要がある。
+
+タスク22〜33すべて Green。1行あたり配信ペイロード増分は出荷+入荷合計で実測 +1,587バイト（design.md §6.2）。
 --------------------
 
 ---
