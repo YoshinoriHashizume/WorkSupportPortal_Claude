@@ -110,6 +110,34 @@ def test_legacy_snapshot_does_not_raise_on_load():
 
 
 @pytest.mark.django_db
+def test_TC_SHC_I_007_snapshot_roundtrip_keeps_shipment_trend():
+    row = _sample_row() | {
+        "shipment_trend": [{"month": "2026-06", "qty": 120}, {"month": "2026-05", "qty": 0}],
+    }
+    import_record = SlimsStockImport.objects.create(file_name="sample.csv", row_count=1)
+    store_summary_snapshot(import_record, [row], as_of_date=date(2026, 6, 17))
+
+    summary = load_latest_summary()
+
+    trend = summary.rows[0]["shipment_trend"]
+    assert len(trend) == 2
+    assert trend[0] == {"month": "2026-06", "qty": 120}
+    # int のまま復元される（Decimal 化されない）
+    assert isinstance(trend[0]["qty"], int)
+
+
+@pytest.mark.django_db
+def test_TC_SHC_I_008_legacy_snapshot_without_shipment_trend_does_not_raise():
+    import_record = SlimsStockImport.objects.create(file_name="sample.csv", row_count=1)
+    store_summary_snapshot(import_record, [_legacy_row()], as_of_date=date(2026, 6, 17))
+
+    summary = load_latest_summary()
+
+    assert summary is not None
+    assert summary.rows[0].get("shipment_trend") is None
+
+
+@pytest.mark.django_db
 def test_snapshot_schema_has_no_new_column():
     columns = {field.name for field in InventoryOrderAlertSummarySnapshot._meta.get_fields()}
 

@@ -98,6 +98,20 @@ def test_list_page_table_headers_have_no_responsible_department():
     assert "responsible_department" not in keys
 
 
+def test_TC_SHC_A_001_list_page_passes_shipment_trend_through():
+    trend = [{"month": "2026-06", "qty": 10}]
+    context = _execute([_row(shipment_trend=trend)])
+
+    assert context.all_rows[0]["shipment_trend"] == trend
+
+
+def test_TC_SHC_A_002_list_page_does_not_import_stock_when_no_csv_is_uploaded():
+    # 出荷推移の追加後も、一覧表示では Oracle への集計を走らせない（REQ-SHC-NF-001）。
+    context = _execute([_row(shipment_trend=[{"month": "2026-06", "qty": 10}])])
+
+    assert context.error_message == ""
+
+
 def test_list_page_keeps_rows_without_mari_stock_key_unchanged():
     row = _row()
     del row["mari_stock_qty"]
