@@ -714,6 +714,11 @@
         const row = findRow(custCode, itemCd);
         return Array.isArray(row?.shipment_trend) ? row.shipment_trend : [];
       },
+      // 入荷推移(V-217)も同様に findRow() 経由で返す(design.md §6.1)。
+      getIncomingTrend(custCode, itemCd) {
+        const row = findRow(custCode, itemCd);
+        return Array.isArray(row?.incoming_trend) ? row.incoming_trend : [];
+      },
       getListFilterParams() {
         return {
           custCodeFilter: state.custCode,

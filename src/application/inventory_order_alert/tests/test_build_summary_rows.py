@@ -115,6 +115,7 @@ def _shipped_pair_patches(mari_stock_totals: dict[str, object] | None = None, **
         "fetch_vendor_by_component": {},
         "fetch_last_incoming_by_item_vend": {},
         "fetch_mari_stock_totals": mari_stock_totals if mari_stock_totals is not None else {},
+        "fetch_incoming_receipts": [],
     }
     defaults.update(overrides)
     return [
@@ -192,6 +193,18 @@ def test_TC_SHC_I_005_build_summary_rows_does_not_add_oracle_calls() -> None:
     assert started["fetch_all_shipments"].call_count == 1
 
 
+def test_TC_SHC_I_011_build_summary_rows_calls_fetch_incoming_receipts_once() -> None:
+    patches = _shipped_pair_patches({})
+    started = {p.attribute: p.start() for p in patches}
+    try:
+        build_summary_rows(MagicMock(), date(2026, 6, 29))
+    finally:
+        for p in patches:
+            p.stop()
+
+    assert started["fetch_incoming_receipts"].call_count == 1
+
+
 def test_TC_SHC_I_006_existing_shipment_stats_are_unchanged() -> None:
     """出荷推移の追加で既存の post_shipment_count 等が変わらないこと（非回帰）。"""
     rows = _build_rows_with({})
@@ -199,6 +212,32 @@ def test_TC_SHC_I_006_existing_shipment_stats_are_unchanged() -> None:
     assert rows[0]["post_shipment_count"] == 1
     assert rows[0]["post_shipment_total_qty"] == 10
     assert rows[0]["last_ship_date"] == "2026/06/01"
+
+
+def test_TC_SHC_I_010_build_summary_rows_attaches_incoming_trend() -> None:
+    """入荷推移(V-217)は level1_item_cd x level1_vend_cd で突合する(design.md §3.3)。"""
+    rows = _build_rows_with(
+        {},
+        fetch_bom_level1_by_root={"96160-00500": ["L1-A"]},
+        fetch_vendor_by_component={"L1-A": ("9209", "小野メッキ")},
+        fetch_last_incoming_by_item_vend={("L1-A", "9209"): date(2026, 1, 15)},
+        fetch_incoming_receipts=[("L1-A", "9209", date(2026, 6, 10), 30)],
+    )
+
+    assert rows[0]["level1_item_cd"] == "L1-A"
+    trend = rows[0]["incoming_trend"]
+    assert len(trend) == 24
+    june = next(point for point in trend if point["month"] == "2026-06")
+    assert june["qty"] == 30
+
+
+def test_TC_SHC_I_010_incoming_trend_is_all_zero_when_level1_item_unresolved() -> None:
+    # デフォルトフィクスチャは level1_item が解決できない（fetch_bom_level1_by_root が空）。
+    rows = _build_rows_with({})
+
+    trend = rows[0]["incoming_trend"]
+    assert len(trend) == 24
+    assert all(point["qty"] == 0 for point in trend)
 
 
 def _failing_aggregation(import_record, message: str):

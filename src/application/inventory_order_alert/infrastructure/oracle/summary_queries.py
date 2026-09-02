@@ -4,7 +4,7 @@ from datetime import date
 
 from application.sales.infrastructure.oracle.client import rows_as_dicts
 
-from application.inventory_order_alert.domain.value_objects.dates import to_date
+from application.inventory_order_alert.domain.value_objects.dates import add_calendar_months, to_date
 from application.inventory_order_alert.domain.value_objects.internal_item import resolve_cust_code, resolve_internal_item_cd
 from application.inventory_order_alert.domain.value_objects.shipment_trend import build_monthly_shipment_trend
 
@@ -223,6 +223,33 @@ def fetch_last_incoming_by_item_vend(connection: object) -> dict[tuple[str, str]
     return result
 
 
+def fetch_incoming_receipts(connection: object, window_start: date) -> list[tuple[str, str, date, int]]:
+    """(item_cd, vend_cd, acpt_date, qty) の個々の検収明細を window_start 以降に絞って取得する(design.md §3.3)。
+
+    fetch_last_incoming_by_item_vend() は MAX(ACPT_DATE) のみを返すため、
+    入荷推移(V-217)の月次集計に必要な個々の明細・数量はここで別途取得する。
+    直近 24 か月に絞り込むことで T_PAST_INSPC_ACPT の全件取得を避ける。
+    """
+    sql = """
+        SELECT TRIM(ITEM_CD) AS ITEM_CD,
+               TRIM(VEND_CD) AS VEND_CD,
+               ACPT_DATE,
+               NVL(INSPC_ACPT_QTY, 0) AS QTY
+          FROM T_PAST_INSPC_ACPT
+         WHERE ACPT_DATE >= :window_start
+    """
+    cursor = connection.cursor()
+    cursor.execute(sql, {"window_start": window_start})
+    receipts: list[tuple[str, str, date, int]] = []
+    for row in rows_as_dicts(cursor):
+        item_cd = str(row["item_cd"]).strip()
+        vend_cd = str(row["vend_cd"]).strip()
+        acpt_date = to_date(row.get("acpt_date"))
+        if item_cd and vend_cd and acpt_date:
+            receipts.append((item_cd, vend_cd, acpt_date, int(row.get("qty") or 0)))
+    return receipts
+
+
 def resolve_last_incoming_for_finished(
     finished_item: str,
     roots_by_finished: dict[str, set[str]],
@@ -366,6 +393,10 @@ def build_summary_rows(
     mari_stock_by_item = fetch_mari_stock_totals(connection, sorted(internal_items))
     # 出荷推移(V-216)は all_shipments を束ね直すだけで、追加の Oracle 問い合わせは発生しない(design.md §3.1)。
     shipments_by_pair = group_shipments_by_pair(all_shipments)
+    # 入荷推移(V-217)は level1_item_cd x level1_vend_cd で突合する。直近 24 か月に絞った専用クエリを 1 回だけ発行する(design.md §3.3, §6.1)。
+    window_start = add_calendar_months(date(as_of_date.year, as_of_date.month, 1), -23)
+    incoming_receipts = fetch_incoming_receipts(connection, window_start)
+    incoming_by_pair = group_shipments_by_pair(incoming_receipts)
 
     incoming_cache: dict[str, tuple[date | None, str, str, str]] = {}
     rows: list[dict[str, object]] = []
@@ -406,6 +437,10 @@ def build_summary_rows(
             shipments_by_pair.get((cust_code, cust_item_cd), []),
             as_of_date=as_of_date,
         )
+        incoming_trend = build_monthly_shipment_trend(
+            incoming_by_pair.get((level1_item, level1_vend), []),
+            as_of_date=as_of_date,
+        )
         rows.append(
             {
                 "cust_code": resolved_cust_code,
@@ -420,6 +455,7 @@ def build_summary_rows(
                 "post_shipment_count": post_count,
                 "post_shipment_total_qty": post_total_qty,
                 "shipment_trend": shipment_trend,
+                "incoming_trend": incoming_trend,
                 # 該当在庫が無い場合は空。0(在庫なし)とは区別する(design.md §4.2)
                 "mari_stock_qty": mari_stock_by_item.get(internal, ""),
             }
