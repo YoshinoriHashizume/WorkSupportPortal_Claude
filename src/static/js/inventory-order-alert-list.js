@@ -229,7 +229,6 @@
         stockSlims: dialog.querySelector(".ioa-detail-stock-slims"),
         stockMari: dialog.querySelector(".ioa-detail-stock-mari"),
     };
-    const shipmentTrendSection = dialog.querySelector(".ioa-detail-shipment-trend-section");
     const anchoredStockTrendSection = dialog.querySelector(".ioa-detail-anchored-stock-trend-section");
     const locationTableBody = dialog.querySelector(".ioa-location-table-body");
     const tableWrap = dialog.querySelector(".ioa-location-table-wrap");
@@ -354,114 +353,6 @@
       }
     }
 
-    function renderShipmentTrendChart(sectionEl, shipmentPoints, incomingPoints) {
-      if (!sectionEl) {
-        return;
-      }
-      const container = sectionEl.querySelector(".ioa-detail-shipment-trend-chart");
-      const emptyMessage = sectionEl.querySelector(".ioa-detail-shipment-trend-empty");
-      if (!container) {
-        return;
-      }
-
-      const shipments = Array.isArray(shipmentPoints) ? shipmentPoints : [];
-      const incomings = Array.isArray(incomingPoints) ? incomingPoints : [];
-      // 両系列とも実績なし（空配列 = 既存スナップショット互換、または全月0）の場合だけ空表示にする。
-      // 片方のみ実績があれば、もう片方が全0のラインでもグラフは描く（design.md §6.4）。
-      const hasActivity =
-        shipments.some((point) => Number(point.qty) !== 0) || incomings.some((point) => Number(point.qty) !== 0);
-      container.innerHTML = "";
-      if (!hasActivity) {
-        container.hidden = true;
-        if (emptyMessage) {
-          emptyMessage.hidden = false;
-        }
-        return;
-      }
-      container.hidden = false;
-      if (emptyMessage) {
-        emptyMessage.hidden = true;
-      }
-
-      const points = shipments.length ? shipments : incomings;
-      const width = 560;
-      const height = 140;
-      const paddingLeft = 32;
-      const paddingTop = 8;
-      const paddingBottom = 20;
-      const plotWidth = width - paddingLeft - 8;
-      const plotHeight = height - paddingTop - paddingBottom;
-      // 出荷・入荷を同一スケールで重ね描きするため、最大値は両系列から求める（design.md §6.4）。
-      const maxQty = Math.max(
-        1,
-        ...shipments.map((point) => Number(point.qty) || 0),
-        ...incomings.map((point) => Number(point.qty) || 0),
-      );
-      const stepX = points.length > 1 ? plotWidth / (points.length - 1) : 0;
-
-      function coordsOf(index, qty) {
-        const x = paddingLeft + stepX * index;
-        const y = paddingTop + plotHeight - (Number(qty) / maxQty) * plotHeight;
-        return [x, y];
-      }
-
-      const svgNs = "http://www.w3.org/2000/svg";
-      const svg = document.createElementNS(svgNs, "svg");
-      svg.setAttribute("viewBox", `0 0 ${width} ${height}`);
-      svg.setAttribute("class", "ioa-shipment-trend-svg");
-      svg.setAttribute("role", "img");
-      svg.setAttribute("aria-label", "月次出荷・入荷数量の推移");
-
-      function drawSeries(seriesPoints, lineClass, pointClass, label) {
-        if (!seriesPoints.length) {
-          return;
-        }
-        const linePoints = seriesPoints.map((point, index) => coordsOf(index, point.qty).join(",")).join(" ");
-        const polyline = document.createElementNS(svgNs, "polyline");
-        polyline.setAttribute("points", linePoints);
-        polyline.setAttribute("class", lineClass);
-        svg.append(polyline);
-
-        seriesPoints.forEach((point, index) => {
-          const [x, y] = coordsOf(index, point.qty);
-          const circle = document.createElementNS(svgNs, "circle");
-          circle.setAttribute("cx", String(x));
-          circle.setAttribute("cy", String(y));
-          circle.setAttribute("r", "2");
-          circle.setAttribute("class", pointClass);
-          const title = document.createElementNS(svgNs, "title");
-          title.textContent = `${label} ${point.month}: ${point.qty}`;
-          circle.append(title);
-          svg.append(circle);
-        });
-      }
-
-      drawSeries(shipments, "ioa-shipment-trend-line ioa-shipment-trend-line--shipment", "ioa-shipment-trend-point ioa-shipment-trend-point--shipment", "出荷");
-      drawSeries(incomings, "ioa-shipment-trend-line ioa-shipment-trend-line--incoming", "ioa-shipment-trend-point ioa-shipment-trend-point--incoming", "入荷");
-
-      // 横軸ラベルは間引く（24点すべては幅に収まらない。design.md §6.4）。
-      points.forEach((point, index) => {
-        if (index % 4 === 0 || index === points.length - 1) {
-          const [x] = coordsOf(index, 0);
-          const label = document.createElementNS(svgNs, "text");
-          label.setAttribute("x", String(x));
-          label.setAttribute("y", String(height - 4));
-          label.setAttribute("class", "ioa-shipment-trend-axis-label");
-          label.textContent = String(point.month || "").slice(2).replace("-", "/");
-          svg.append(label);
-        }
-      });
-
-      container.append(svg);
-
-      const legend = document.createElement("div");
-      legend.className = "ioa-shipment-trend-legend";
-      legend.innerHTML =
-        '<span class="ioa-shipment-trend-legend-item ioa-shipment-trend-legend-item--shipment">出荷</span>' +
-        '<span class="ioa-shipment-trend-legend-item ioa-shipment-trend-legend-item--incoming">入荷</span>';
-      container.append(legend);
-    }
-
     function parseAnchorQty(text) {
       const trimmed = String(text || "").trim();
       if (!trimmed) {
@@ -538,7 +429,7 @@
       const svgNs = "http://www.w3.org/2000/svg";
       const svg = document.createElementNS(svgNs, "svg");
       svg.setAttribute("viewBox", `0 0 ${width} ${height}`);
-      svg.setAttribute("class", "ioa-shipment-trend-svg");
+      svg.setAttribute("class", "ioa-anchored-stock-trend-svg");
       svg.setAttribute("role", "img");
       svg.setAttribute("aria-label", "推定在庫推移（参考値）");
 
@@ -584,7 +475,7 @@
           const label = document.createElementNS(svgNs, "text");
           label.setAttribute("x", String(x));
           label.setAttribute("y", String(height - 4));
-          label.setAttribute("class", "ioa-shipment-trend-axis-label");
+          label.setAttribute("class", "ioa-anchored-stock-trend-axis-label");
           label.textContent = String(point.month || "").slice(2).replace("-", "/");
           svg.append(label);
         }
@@ -593,7 +484,7 @@
       container.append(svg);
 
       const legend = document.createElement("div");
-      legend.className = "ioa-shipment-trend-legend";
+      legend.className = "ioa-anchored-stock-trend-legend";
       legend.innerHTML =
         '<span class="ioa-anchored-stock-trend-legend-item ioa-anchored-stock-trend-legend-item--slims">SLIMS起点</span>' +
         (mari.length
@@ -625,9 +516,10 @@
       // 在庫数は一覧と同じ表示文字列をそのまま出す（未取得の「－」と 0 を取り違えないため）。
       setDetailText(detailFields.stockSlims, row.dataset.stockQty || "-");
       setDetailText(detailFields.stockMari, row.dataset.mariStockQty || "-");
+      // 出荷推移(V-216)・入荷推移(V-217)は独立したグラフとしては表示しない。
+      // 推定在庫推移(V-218)の算出のみに用いる（DECISIONS.md参照）。
       const shipmentTrend = listClient?.getShipmentTrend?.(custCode, row.dataset.itemCd || "") || [];
       const incomingTrend = listClient?.getIncomingTrend?.(custCode, row.dataset.itemCd || "") || [];
-      renderShipmentTrendChart(shipmentTrendSection, shipmentTrend, incomingTrend);
 
       const slimsAnchor = parseAnchorQty(row.dataset.stockQty);
       const mariAnchor = parseAnchorQty(row.dataset.mariStockQty);

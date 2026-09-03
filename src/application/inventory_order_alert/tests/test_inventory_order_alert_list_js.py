@@ -16,25 +16,6 @@ def test_TC_SHC_X_002_client_js_has_get_shipment_trend_getter():
     assert "shipment_trend" in getter_block
 
 
-def test_TC_SHC_X_003_list_js_renders_shipment_trend_chart_as_svg():
-    source = JS_PATH.read_text(encoding="utf-8")
-
-    assert "function renderShipmentTrendChart" in source
-    assert "http://www.w3.org/2000/svg" in source
-    assert "ioa-detail-shipment-trend-chart" in source
-    assert "fillDetailSections" in source
-    assert "renderShipmentTrendChart(" in source.split("function fillDetailSections", 1)[1].split("async function openLocationDialog", 1)[0]
-
-
-def test_TC_SHC_X_004_list_js_shows_empty_state_when_no_shipment_activity():
-    source = JS_PATH.read_text(encoding="utf-8")
-    chart_block = source.split("function renderShipmentTrendChart", 1)[1].split("\n  function ", 1)[0]
-
-    assert "ioa-detail-shipment-trend-empty" in chart_block
-    # 全月0（実績なし）と空配列（既存スナップショット互換）の両方を「実績なし」表示に振り替える。
-    assert "every" in chart_block or "some" in chart_block
-
-
 def test_TC_SHC_X_008_client_js_has_get_incoming_trend_getter():
     source = CLIENT_JS_PATH.read_text(encoding="utf-8")
     getter_block = source.split("getIncomingTrend(custCode, itemCd)", 1)[1].split("},", 1)[0]
@@ -44,14 +25,17 @@ def test_TC_SHC_X_008_client_js_has_get_incoming_trend_getter():
     assert "incoming_trend" in getter_block
 
 
-def test_TC_SHC_X_009_list_js_renders_dual_series_chart_with_legend():
-    source = JS_PATH.read_text(encoding="utf-8")
-    chart_block = source.split("function renderShipmentTrendChart", 1)[1].split("\n  function ", 1)[0]
+def test_shipment_trend_dedicated_chart_removed():
+    """入出荷推移の独立グラフ区分は削除した（推定在庫推移に統合。DECISIONS.md参照）。
 
-    # 出荷(青)・入荷(橙)の2系列を共通スケールで重ね描き、凡例を出す（design.md §6.4）。
-    assert "getIncomingTrend" in source
-    assert "ioa-shipment-trend-legend" in chart_block
-    assert "ioa-shipment-trend-line--incoming" in chart_block or "incoming" in chart_block
+    getShipmentTrend/getIncomingTrend（データ取得）と shipment_trend/incoming_trend
+    の算出自体は推定在庫推移の入力として引き続き使うため、renderShipmentTrendChart
+    （専用グラフの描画）とその呼び出しのみが存在しないことを確認する。
+    """
+    source = JS_PATH.read_text(encoding="utf-8")
+
+    assert "function renderShipmentTrendChart" not in source
+    assert "ioa-detail-shipment-trend-chart" not in source
 
 
 def test_TC_SHC_X_010_list_js_builds_anchored_stock_trend_from_last_index():

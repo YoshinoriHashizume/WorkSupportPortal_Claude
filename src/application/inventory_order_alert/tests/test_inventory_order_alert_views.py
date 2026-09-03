@@ -709,20 +709,20 @@ def test_list_page_detail_dialog_has_four_sections(client, production_user):
 
 
 @pytest.mark.django_db
-def test_TC_SHC_X_001_detail_dialog_has_shipment_trend_section(client, production_user):
-    """詳細ダイアログに「出荷推移」区分がある（design.md §6.5）。"""
+def test_shipment_trend_dedicated_section_was_removed(client, production_user):
+    """入出荷推移の独立グラフ区分は削除した（推定在庫推移に統合。DECISIONS.md参照）。"""
     import_record = SlimsStockImport.objects.create(file_name="sample.csv", row_count=1)
     store_summary_snapshot(import_record, [_sample_export_row()], as_of_date=date(2026, 6, 17))
 
     client.force_login(production_user)
     html = client.get("/app/production/inventory-order-alert").content.decode("utf-8")
 
-    assert "ioa-detail-shipment-trend-section" in html
-    assert "出荷推移" in html
+    assert "ioa-detail-shipment-trend-section" not in html
 
 
 @pytest.mark.django_db
-def test_TC_SHC_X_005_shipment_trend_section_is_between_stock_and_memo(client, production_user):
+def test_TC_SHC_X_015_anchored_stock_trend_section_is_between_stock_and_memo(client, production_user):
+    """推定在庫推移区分が「在庫」と「メモ」の間にある（design.md §6.5）。"""
     import_record = SlimsStockImport.objects.create(file_name="sample.csv", row_count=1)
     store_summary_snapshot(import_record, [_sample_export_row()], as_of_date=date(2026, 6, 17))
 
@@ -730,7 +730,7 @@ def test_TC_SHC_X_005_shipment_trend_section_is_between_stock_and_memo(client, p
     html = client.get("/app/production/inventory-order-alert").content.decode("utf-8")
 
     stock_pos = html.index("ioa-detail-stock-section")
-    trend_pos = html.index("ioa-detail-shipment-trend-section")
+    trend_pos = html.index("ioa-detail-anchored-stock-trend-section")
     memo_pos = html.index("ioa-detail-memo-section")
     assert stock_pos < trend_pos < memo_pos
 
