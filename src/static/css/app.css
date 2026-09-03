@@ -1776,6 +1776,10 @@ body.inventory-order-alert-page .ioa-anchored-stock-trend-y-axis-label {
   font-size: 8px;
   fill: #64748b;
 }
+body.inventory-order-alert-page .ioa-anchored-stock-trend-grid-line {
+  stroke: #e2e8f0;
+  stroke-width: 1;
+}
 body.inventory-order-alert-page .ioa-anchored-stock-trend-legend {
   display: flex;
   gap: 12px;

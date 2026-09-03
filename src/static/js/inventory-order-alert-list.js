@@ -409,7 +409,7 @@
       const points = slims.length ? slims : mari;
       const width = 560;
       const height = 140;
-      const paddingLeft = 40;
+      const paddingLeft = 44;
       const paddingTop = 8;
       const paddingBottom = 20;
       const plotWidth = width - paddingLeft - 8;
@@ -433,31 +433,40 @@
       svg.setAttribute("role", "img");
       svg.setAttribute("aria-label", "推定在庫推移（参考値）");
 
-      const [, zeroY] = coordsOf(0, 0);
-      const zeroLine = document.createElementNS(svgNs, "line");
-      zeroLine.setAttribute("x1", String(paddingLeft));
-      zeroLine.setAttribute("x2", String(width - 8));
-      zeroLine.setAttribute("y1", String(zeroY));
-      zeroLine.setAttribute("y2", String(zeroY));
-      zeroLine.setAttribute("class", "ioa-anchored-stock-trend-zero-line");
-      svg.append(zeroLine);
+      // Excel風に、等間隔の目盛り線を GRID_LINE_COUNT 分割（=GRID_LINE_COUNT+1本）描画する。
+      const GRID_LINE_COUNT = 4;
+      for (let gridIndex = 0; gridIndex <= GRID_LINE_COUNT; gridIndex += 1) {
+        const gridQty = minQty + (valueRange * gridIndex) / GRID_LINE_COUNT;
+        const [, gridY] = coordsOf(0, gridQty);
 
-      function drawYAxisLabel(qty, y) {
-        const label = document.createElementNS(svgNs, "text");
-        label.setAttribute("x", String(paddingLeft - 4));
-        label.setAttribute("y", String(y + 3));
-        label.setAttribute("text-anchor", "end");
-        label.setAttribute("class", "ioa-anchored-stock-trend-y-axis-label");
-        label.textContent = Math.round(qty).toLocaleString("ja-JP");
-        svg.append(label);
+        const gridLine = document.createElementNS(svgNs, "line");
+        gridLine.setAttribute("x1", String(paddingLeft));
+        gridLine.setAttribute("x2", String(width - 8));
+        gridLine.setAttribute("y1", String(gridY));
+        gridLine.setAttribute("y2", String(gridY));
+        gridLine.setAttribute("class", "ioa-anchored-stock-trend-grid-line");
+        svg.append(gridLine);
+
+        const gridLabel = document.createElementNS(svgNs, "text");
+        gridLabel.setAttribute("x", String(paddingLeft - 4));
+        gridLabel.setAttribute("y", String(gridY + 3));
+        gridLabel.style.textAnchor = "end";
+        gridLabel.setAttribute("class", "ioa-anchored-stock-trend-y-axis-label");
+        gridLabel.textContent = Math.round(gridQty).toLocaleString("ja-JP");
+        svg.append(gridLabel);
       }
 
-      const [, maxY] = coordsOf(0, maxQty);
-      const [, minY] = coordsOf(0, minQty);
-      drawYAxisLabel(maxQty, maxY);
-      drawYAxisLabel(minQty, minY);
-      if (minQty < 0 && maxQty > 0) {
-        drawYAxisLabel(0, zeroY);
+      // 0 が目盛り線の途中に来る場合（マイナス域あり）は、危険水準として破線で強調する。
+      // 全点0以上（minQty===0）の場合は最下段の目盛り線が既に0を示しているため重ねて描かない。
+      if (minQty < 0) {
+        const [, zeroY] = coordsOf(0, 0);
+        const zeroLine = document.createElementNS(svgNs, "line");
+        zeroLine.setAttribute("x1", String(paddingLeft));
+        zeroLine.setAttribute("x2", String(width - 8));
+        zeroLine.setAttribute("y1", String(zeroY));
+        zeroLine.setAttribute("y2", String(zeroY));
+        zeroLine.setAttribute("class", "ioa-anchored-stock-trend-zero-line");
+        svg.append(zeroLine);
       }
 
       function drawSeries(seriesPoints, lineClass, pointClass, label) {
@@ -494,10 +503,12 @@
           label.setAttribute("x", String(x));
           label.setAttribute("y", String(height - 4));
           label.setAttribute("class", "ioa-anchored-stock-trend-axis-label");
+          // text-anchor は setAttribute だと CSS クラス（text-anchor: middle）に負けて
+          // 上書きされないため、優先度の高いインライン style で個別上書きする。
           if (index === 0) {
-            label.setAttribute("text-anchor", "start");
+            label.style.textAnchor = "start";
           } else if (index === points.length - 1) {
-            label.setAttribute("text-anchor", "end");
+            label.style.textAnchor = "end";
           }
           label.textContent = String(point.month || "").slice(2).replace("-", "/");
           svg.append(label);

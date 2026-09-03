@@ -284,8 +284,10 @@ function buildAnchoredStockTrend(shipmentTrend, incomingTrend, anchorQty) {
 - SLIMS起点を**インディゴ系**、MARI起点を**緑系**の折れ線で描く。凡例を上部に表示する。
 - 両系列とも空配列（SLIMS・MARI いずれの在庫数も未取得、または出荷推移・入荷推移そのものが存在しない既存スナップショット）の場合は、グラフを描画せず「推定在庫推移を算出できません」を表示する。
 - `fillDetailSections()` 内で、出荷推移・入荷推移・在庫数（`row.dataset.stockQty` / `row.dataset.mariStockQty`）から算出して描画する。
-- **左側にY軸目盛り（数量）を表示する**（2026/09/03追記）。最大値・最小値の2点（0がその間にある場合は0も追加）を `toLocaleString("ja-JP")` でカンマ区切り表示する。目盛り分のスペースとして `paddingLeft` を32→40に拡張した。
+- **左側にY軸目盛り（数量）を表示する**（2026/09/03追記、同日中に等間隔グリッド線方式へ改訂）。ユーザー提示のExcelグラフを参考に、`GRID_LINE_COUNT`（=4）で値域を4分割した**等間隔の目盛り線5本**を横線＋数値ラベルで描画する（Excel既定の目盛り線に近い見た目）。数値は `toLocaleString("ja-JP")` でカンマ区切り表示。目盛り分のスペースとして `paddingLeft` を32→44に拡張した。目盛り線のクラスは `ioa-anchored-stock-trend-grid-line`（薄いグレー実線）。
+  - ゼロ基準線（破線・`ioa-anchored-stock-trend-zero-line`）は、マイナス域が存在する場合（`minQty < 0`）のみ別途強調表示する。全点0以上（`minQty === 0`）の場合は最下段の目盛り線が既に0を示すため重ねて描画しない。
 - **月ラベル（X軸）の見切れ防止**（2026/09/03追記）。`text-anchor: middle` のままだと先頭・末尾のラベルがグラフ外にはみ出すため、先頭は `text-anchor: start`、末尾は `text-anchor: end` に個別設定する。
+  - **注意（実装時のバグと修正）**: 当初 `setAttribute("text-anchor", ...)` で実装したが、CSSクラス（`.ioa-anchored-stock-trend-axis-label { text-anchor: middle; }`）の方がSVG要素では優先度が高く上書きされず、実際の描画では見切れが解消されなかった。**`label.style.textAnchor = "start" / "end"`（インラインstyle）で上書きする**ことで解消した。SVGのpresentation attributeはCSSカスケードにおいて優先度が低い点に注意。
 
 ```js
 // static/js/inventory-order-alert-list.js の fillDetailSections(row) 内に追加

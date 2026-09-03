@@ -85,18 +85,31 @@ def test_TC_SHC_X_016_list_js_month_labels_avoid_edge_clipping():
     source = JS_PATH.read_text(encoding="utf-8")
     render_block = source.split("function renderAnchoredStockChart", 1)[1].split("\n  function ", 1)[0]
 
-    # 先頭/末尾の月ラベルは text-anchor を start/end に切り替え、グラフ端での見切れを防ぐ。
-    assert 'text-anchor", "start"' in render_block
-    assert 'text-anchor", "end"' in render_block
+    # text-anchor は setAttribute ではなく label.style（インラインstyle）で上書きする。
+    # setAttribute はCSSクラス（.ioa-anchored-stock-trend-axis-label の text-anchor: middle）
+    # より優先度が低く上書きされないため、実際の描画では見切れが解消されなかった不具合の修正。
+    assert "label.style.textAnchor" in render_block
+    assert '"start"' in render_block
+    assert '"end"' in render_block
+    assert 'setAttribute("text-anchor"' not in render_block
 
 
 def test_TC_SHC_X_017_list_js_renders_y_axis_scale_labels():
     source = JS_PATH.read_text(encoding="utf-8")
     render_block = source.split("function renderAnchoredStockChart", 1)[1].split("\n  function ", 1)[0]
 
-    # 左側に最大値・最小値の数量目盛りを表示する。
+    # 左側に数量目盛りを表示する。
     assert "ioa-anchored-stock-trend-y-axis-label" in render_block
     assert "toLocaleString" in render_block
+
+
+def test_TC_SHC_X_018_list_js_renders_evenly_spaced_grid_lines():
+    source = JS_PATH.read_text(encoding="utf-8")
+    render_block = source.split("function renderAnchoredStockChart", 1)[1].split("\n  function ", 1)[0]
+
+    # Excel風の等間隔複数目盛り線（GRID_LINE_COUNT 分割）をループで描画する。
+    assert "GRID_LINE_COUNT" in render_block
+    assert "ioa-anchored-stock-trend-grid-line" in render_block
 
 
 def test_TC_SHC_X_015_list_html_has_anchored_stock_trend_section():

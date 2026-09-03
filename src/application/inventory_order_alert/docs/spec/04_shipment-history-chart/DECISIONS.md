@@ -63,6 +63,18 @@
 - **変更ファイル**（既存改修）: `static/js/inventory-order-alert-list.js`（`renderAnchoredStockChart()` の月ラベルtext-anchor調整・Y軸目盛り追加）、`static/css/app.css`（`.ioa-anchored-stock-trend-y-axis-label` 追加）、`docs/spec/04_shipment-history-chart/design.md`（§6.6追記）、`tests/test_inventory_order_alert_list_js.py`（新規テスト2件: TC-SHC-X-016, X-017）
 - Oracle・配信ペイロードへの影響: なし（表示のみの変更）
 
+### 追記（2026/09/03、「まだ見切れてる」への再対応・ステージ10）
+
+ステージ9で月ラベルの見切れを修正したはずだったが、ユーザーから「まだ見切れてる」と再指摘を受けた。あわせてExcelグラフの画像を提示され、Y軸目盛りを等間隔の複数目盛り線にしたい旨が伝わった。
+
+- **見切れが直っていなかった根本原因**: `label.setAttribute("text-anchor", "end")` で設定していたが、SVGではCSSクラス（`.ioa-anchored-stock-trend-axis-label { text-anchor: middle; }`）の方が優先度が高く、setAttributeでの上書きが無視されていた。**`label.style.textAnchor = "end"`（インラインstyle）に変更**して解消した。
+- **Y軸目盛りの方式**: AskUserQuestionで「最大値・最小値のみ（現状維持）」と「等間隔の複数目盛り線（推奨）」を提示し、後者を選択いただいた。`GRID_LINE_COUNT = 4`（値域を4分割=5本の目盛り線）で実装し、Excelのデフォルトに近い見た目にした。
+- **ゼロ基準線の扱い**: グリッド線導入に伴い、ゼロ基準線（破線）は「マイナス域が実際にある場合のみ」描画するよう条件を追加した。全点0以上の行では最下段のグリッド線が0を兼ねるため、重複を避けた。
+- **ブランチ**: `develop` 上で直接実施（ステージ10、tasks.md タスク56〜61）。`origin` への push は未実施（明示指示待ち）
+- **テスト**: `pytest` アプリ内 659件・リポジトリ全体 1674件 Green。`manage.py check` 問題なし。マイグレーション不要
+- **変更ファイル**（既存改修）: `static/js/inventory-order-alert-list.js`（text-anchorのstyle上書き化、等間隔グリッド線描画への置き換え）、`static/css/app.css`（`.ioa-anchored-stock-trend-grid-line` 追加）、`docs/spec/04_shipment-history-chart/design.md`（§6.6再改訂）、`tests/test_inventory_order_alert_list_js.py`（TC-SHC-X-016改訂、TC-SHC-X-018新設）
+- **教訓**: SVG手組み実装で `setAttribute` によるpresentation attributeの上書きはCSSクラス指定に負けることがある。確実に上書きしたい場合は `element.style.xxx`（インラインstyle）を使うこと。
+
 ---
 
 ## 要確認・要判断（優先度順）
