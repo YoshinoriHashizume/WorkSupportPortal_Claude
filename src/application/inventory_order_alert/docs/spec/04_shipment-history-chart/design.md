@@ -2,7 +2,7 @@
 
 文書ID: DESIGN-SHIPMENT-HISTORY-CHART-2026-001
 作成日: 2026/09/01
-更新日: 2026/09/03（推定在庫推移 V-218 の追加。§6.6 を新設。§7.1〜7.2・§8・§9 を更新）
+更新日: 2026/09/03（入出荷推移の独立グラフ表示を撤去。§6.4・§6.5・§7.2・§9 R-6 を更新。DECISIONS.md参照）
 対応文書: [requirements.md](./requirements.md)（REQ-SHIPMENT-HISTORY-CHART-2026-001）
 アーキテクチャreference: django-clean-architecture version 1.0（`make-design`/`design-review-l1`/`implement-review-l1` と一致確認済み。03_mari-stock-visibility/design.md で確認済みのため本書では再掲のみ）
 
@@ -216,35 +216,31 @@ getIncomingTrend(custCode, itemCd) {
 ```
 
 ```js
-// static/js/inventory-order-alert-list.js の fillDetailSections(row) 内に追加
+// static/js/inventory-order-alert-list.js の fillDetailSections(row) 内
+// 出荷推移・入荷推移は独立したグラフとしては表示しない（§6.4）。
+// 推定在庫推移（§6.6）の算出のみに用いる。
 const shipmentTrend = listClient?.getShipmentTrend?.(custCode, row.dataset.itemCd || "") || [];
 const incomingTrend = listClient?.getIncomingTrend?.(custCode, row.dataset.itemCd || "") || [];
-renderShipmentTrendChart(shipmentTrendSection, shipmentTrend, incomingTrend);
 ```
 
-### 6.4 グラフ描画（REQ-SHC-F-002 / F-005 / NF-006）
+### 6.4 ［撤去済み］入出荷推移の独立グラフ表示（REQ-SHC-F-002 / F-005）
 
-`static/js/inventory-order-alert-list.js` の `renderShipmentTrendChart(sectionEl, shipmentPoints, incomingPoints)` を **2系列描画に拡張**する（関数名は既存のまま。命名の妥協は DECISIONS.md 参照）。
+> **2026/09/03、ユーザー指示「左に台数と入出荷のグラフはいらない」により、本節が定義していた独立グラフ表示を撤去した。** 出荷推移（V-216）・入荷推移（V-217）の**算出処理・データ自体は引き続き行う**（§6.6 推定在庫推移の入力として必要なため）。撤去したのは、それらを**専用の折れ線グラフとして詳細ダイアログに表示する処理**（`renderShipmentTrendChart()` 関数と `.ioa-detail-shipment-trend-*` の DOM）のみ。判断の経緯は DECISIONS.md 参照。
+>
+> REQ-SHC-F-002（グラフ表示）・REQ-SHC-F-003（実績なし表示）・REQ-SHC-F-005 の「表示」に関する部分は、本節の撤去に伴い**適用しない**。データ算出に関する部分（REQ-SHC-F-001・F-004・F-005 の算出部分）は有効のまま。
 
-- 外部ライブラリを使わず、SVG 要素を手組みして注入する（`shipment_trend` アプリの `buildChartSvgMarkup` と同じ方式だが、コードは独立実装。REQ-SHC-NF-005 / NF-006）。
-- 出荷を**青の折れ線**、入荷を**橙の折れ線**で重ねて描く。凡例（色スウォッチ + ラベル）を上部に表示する。
-- 縦軸は 0 〜 **両系列を通した最大値**（片方だけでスケールを決めると比較できないため）。最大値が 0 の場合は 1 として除算エラーを避ける。
-- 横軸ラベルは 24 点すべてには付けず、**間引いて表示**する（例: 4 か月おき）。
-- **両系列とも全点が 0**（＝対象期間内に入荷も出荷も実績が 1 件もない）場合のみ、グラフを描画せず `.ioa-detail-shipment-trend-empty` に「入荷・出荷の実績がありません」を表示する（REQ-SHC-F-003 の拡張）。**片方だけ実績がある場合はグラフを描画する**（実績がない系列は横一直線の 0 として描かれ、それ自体が意味のある情報になる）。
-- `shipment_trend` / `incoming_trend` が空配列（既存スナップショット互換。REQ-SHC-F-004）の場合もそれぞれ「実績なし」として扱う（全体が空なら上記の分岐に従う）。
+### 6.5 詳細ダイアログの構成
 
-### 6.5 詳細ダイアログの構成変更
-
-03_mari-stock-visibility で確立した 4 区分（品目 / 流動区分 / 在庫 / メモ）に、**「入出荷推移」区分を「在庫」と「メモ」の間に追加**し、5 区分にする。見出し文言は「出荷推移」から**「入出荷推移」**へ改める（入荷も含むため）。DOM のクラス名は `ioa-detail-shipment-trend-*` のまま据え置く（命名の妥協。DECISIONS.md 参照）。
+03_mari-stock-visibility で確立した 4 区分（品目 / 流動区分 / 在庫 / メモ）に、**「推定在庫推移（参考値）」区分を「在庫」と「メモ」の間に追加**し、5 区分にする（§6.6）。入出荷推移の独立した区分は追加しない（§6.4）。
 
 ```
 ┌ 詳細 ────────────────────────────────────┐
 │ ■ 品目 / ■ 流動区分 / ■ 在庫  … 既存      │
 │                                            │
-│ ■ 入出荷推移                               │
-│   ● 出荷  ● 入荷  （凡例）                 │
-│   [SVG 折れ線グラフ 24か月・2系列]          │
-│   または「入荷・出荷の実績がありません」     │
+│ ■ 推定在庫推移（参考値）                    │
+│   ● SLIMS起点  ● MARI起点  （凡例）        │
+│   [SVG 折れ線グラフ 24か月・2系列・ゼロ基準線]│
+│   または「推定在庫推移を算出できません」     │
 │                                            │
 │ ■ メモ … 既存                              │
 └────────────────────────────────────────────┘
@@ -285,7 +281,7 @@ function buildAnchoredStockTrend(shipmentTrend, incomingTrend, anchorQty) {
 
 - 縦軸のスケールは `[Math.min(0, ...両系列の全qty), Math.max(1, ...両系列の全qty)]`。**0 を必ず範囲に含める**ことで、ゼロ基準線を常に描画できるようにする（クランプはしないが、視覚的な危険水準を示す線として 0 を明示する）。
 - ゼロ基準線は破線（`stroke-dasharray`）で描画する。
-- SLIMS起点を**青系**、MARI起点を**緑系**の折れ線で描く（既存の出荷=青・入荷=橙と色を分け、隣接する2つのグラフ区分を混同しないようにする）。凡例を上部に表示する。
+- SLIMS起点を**インディゴ系**、MARI起点を**緑系**の折れ線で描く。凡例を上部に表示する。
 - 両系列とも空配列（SLIMS・MARI いずれの在庫数も未取得、または出荷推移・入荷推移そのものが存在しない既存スナップショット）の場合は、グラフを描画せず「推定在庫推移を算出できません」を表示する。
 - `fillDetailSections()` 内で、出荷推移・入荷推移・在庫数（`row.dataset.stockQty` / `row.dataset.mariStockQty`）から算出して描画する。
 
@@ -312,16 +308,18 @@ renderAnchoredStockChart(anchoredStockTrendSection, slimsAnchoredTrend, mariAnch
 
 | ファイル | 変更概要 |
 |---------|---------|
-| `infrastructure/oracle/summary_queries.py` | `group_shipments_by_pair()`・`fetch_incoming_receipts()` を追加。`build_summary_rows()` の行に `shipment_trend`・`incoming_trend` を付与 |
-| `templates/inventory_order_alert/list.html` | 詳細ダイアログに「入出荷推移」区分・凡例を追加 |
-| `static/js/inventory-order-alert-list-client.js` | `getShipmentTrend()`・`getIncomingTrend()` ゲッターを追加 |
-| `static/js/inventory-order-alert-list.js` | `renderShipmentTrendChart()` を2系列描画に拡張。`buildAnchoredStockTrend()`・`parseAnchorQty()`・`renderAnchoredStockChart()` を新設し `fillDetailSections()` から呼ぶ |
-| `static/css/app.css` | 入出荷推移グラフ区分・凡例のスタイル、推定在庫推移グラフ区分・ゼロ基準線のスタイルを追加 |
+| `infrastructure/oracle/summary_queries.py` | `group_shipments_by_pair()`・`fetch_incoming_receipts()` を追加。`build_summary_rows()` の行に `shipment_trend`・`incoming_trend` を付与（引き続き算出。表示はしない） |
+| `templates/inventory_order_alert/list.html` | 詳細ダイアログに「推定在庫推移（参考値）」区分・凡例を追加（「入出荷推移」区分は追加後に撤去した） |
+| `static/js/inventory-order-alert-list-client.js` | `getShipmentTrend()`・`getIncomingTrend()` ゲッターを追加（推定在庫推移の算出に使用） |
+| `static/js/inventory-order-alert-list.js` | `buildAnchoredStockTrend()`・`parseAnchorQty()`・`renderAnchoredStockChart()` を新設し `fillDetailSections()` から呼ぶ。`renderShipmentTrendChart()` は一度追加した後に撤去した |
+| `static/css/app.css` | 推定在庫推移グラフ区分・ゼロ基準線のスタイルを追加。入出荷推移グラフ専用のスタイルは追加後に撤去した |
 | `docs/在庫発注アラート_機能仕様書.md` | §4.1.6（詳細ダイアログ）を改訂 |
 
 ### 7.3 削除するもの
 
-なし。
+- `static/js/inventory-order-alert-list.js` の `renderShipmentTrendChart()` 関数（一度追加した後、ユーザー指示により撤去。DECISIONS.md参照）
+- `templates/inventory_order_alert/list.html` の `ioa-detail-shipment-trend-section`（同上）
+- `static/css/app.css` の `.ioa-shipment-trend-*` 系スタイル（同上）
 
 ## 8. エラーハンドリング方針
 
@@ -345,7 +343,7 @@ renderAnchoredStockChart(anchoredStockTrendSection, slimsAnchoredTrend, mariAnch
 | R-3 | 対象期間 24 か月が死蔵判定軸（最大 5 年）の判定根拠を包含しない | 5 年判定の行でグラフが判定期間全体をカバーしない | DECISIONS.md に明記し、期間の妥当性を翌営業日に確認する |
 | R-4 | `aggregate_shipment_stats()` と本機能の月次集計が二重に全出荷明細を扱う | コードの重複（ロジックは別だが元データは同じ） | 許容する。`aggregate_shipment_stats()` 自体の変更はスコープ外とし、リスクを増やさない |
 | R-5 | 入荷推移のクエリ追加で Oracle 負荷が増える | 取込処理が遅くなる可能性 | `ACPT_DATE >= window_start`（直近24か月）で絞り込み、全件取得を避ける（§3.3） |
-| R-6 | `renderShipmentTrendChart` 等の識別子に "shipment" が残るが入荷も扱う | 命名と実態の不一致で将来のメンテナが混乱しうる | リネームコストと速度を天秤にかけ、識別子は据え置き見出し文言のみ「入出荷推移」に改めた。DECISIONS.md に明記 |
+| R-6 | ～～ ［解消済み］`renderShipmentTrendChart` 等の識別子に "shipment" が残るが入荷も扱う ～～ | 命名と実態の不一致で将来のメンテナが混乱しうる | 2026/09/03、当該グラフ表示自体をユーザー指示により撤去したため本リスクは解消した（§6.4・§7.3）。撤去後の推定在庫推移側の識別子（`ioa-anchored-stock-trend-*`）は命名と実態が一致している |
 | R-7 | 推定在庫推移は出荷・入荷以外の在庫変動（棚卸差異・生産消費・返品等）を反映しない近似値 | 実際の在庫推移と乖離し、利用者が誤って実測値と誤認する可能性 | 区分見出し・注記に「参考値」であることを明記する。判定（流動区分）には用いない（REQ-SHC-NF-004） |
 
 ---
@@ -371,3 +369,10 @@ renderAnchoredStockChart(anchoredStockTrendSection, slimsAnchoredTrend, mariAnch
 - **性能・配信量**: OK。既に配信済みのデータ（出荷推移・入荷推移・在庫数）のみから算出するため、新規 Oracle 問い合わせ・配信データ増加ともになし（R-1 と同水準を維持）。
 - **判定への不使用**: OK。REQ-SHC-NF-004 に V-218 を追加し、判定に使わない付加情報である旨を明記した。
 - **実測との誤認防止**: 「参考値」である旨をユーザー承認済みの上で仕様に明記（R-7）。ユーザー自身の判断（マイナス値をそのまま見せる）を反映した。
+
+### 追記レビュー（入出荷推移の独立グラフ表示の撤去） (2026/09/03)
+
+- **経緯**: 推定在庫推移（V-218）を追加した直後、ユーザーから「左に台数と入出荷のグラフはいらない」との指示を受けた。AskUserQuestionで「詳細ダイアログの『入出荷推移』区分（出荷=青・入荷=橙の2系列グラフ）を区分ごと削除する」認識を確認した上で実施した。
+- **データ算出への影響**: なし。出荷推移（V-216）・入荷推移（V-217）は推定在庫推移（V-218）の算出に引き続き必要なため、`shipment_trend`/`incoming_trend` の算出・配信・`getShipmentTrend`/`getIncomingTrend` ゲッターはすべて維持した。撤去したのは「専用グラフとして描画する」処理のみ（§6.4・§7.3）。
+- **命名リスク（R-6）の解消**: 撤去対象だった `renderShipmentTrendChart` 等の識別子ごと削除したため、命名の妥協（"shipment" が入荷も扱う不一致）は自然に解消した。
+- **テスト**: 撤去に伴い、独立グラフの存在を前提としたテスト（TC-SHC-X-001, X-003, X-004, X-005, X-009）を削除・置き換えた。データ算出のテスト（domain/infrastructure層）は無変更。

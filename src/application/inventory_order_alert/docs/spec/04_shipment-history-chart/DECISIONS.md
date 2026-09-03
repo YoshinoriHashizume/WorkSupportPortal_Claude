@@ -37,6 +37,19 @@
 - **テスト**: `pytest` リポジトリ全体 1673件 Green。`manage.py check` 問題なし。マイグレーション不要
 - **変更ファイル**（既存改修）: `static/js/inventory-order-alert-list.js`（`parseAnchorQty`・`buildAnchoredStockTrend`・`renderAnchoredStockChart` を新設）、`templates/inventory_order_alert/list.html`（「推定在庫推移（参考値）」区分を追加）、`static/css/app.css`（新系列・ゼロ基準線のスタイル追加）、`docs/在庫発注アラート_機能仕様書.md`（§4.1.6・改訂履歴4.10）、`docs/ubiquitous_language.md`（V-218追加）、`tests/test_inventory_order_alert_list_js.py`（新規テスト6件）
 
+### 追記（2026/09/03、ユーザー指示「入出荷のグラフはいらない」への対応・ステージ8）
+
+ユーザーから「左に台数と入出荷のグラフはいらない」との指示を受けた。曖昧だったため AskUserQuestion で
+「詳細ダイアログの『入出荷推移』区分（出荷=青・入荷=橙の2系列グラフ）を区分ごと削除する、という理解であっていますか？」
+と確認し、「はい、入出荷推移区分を丸ごと削除」の回答を得てから着手した。
+
+- **撤去した範囲の判断**: 出荷推移（V-216）・入荷推移（V-217）の**算出処理**（Oracle集計・`shipment_trend`/`incoming_trend`の付与）は撤去せず維持した。これらは推定在庫推移（V-218、直前の追記で実装済み）の算出材料として必須のため。撤去したのは**専用グラフとして描画・表示していた部分のみ**（`renderShipmentTrendChart()` 関数本体、`ioa-detail-shipment-trend-section` テンプレート区分、対応CSS）。
+- **命名債務の解消**: 直前の追記（項目3）で「許容した」としていた命名債務のうち、CSS/JSクラス名（`.ioa-shipment-trend-svg` 等）は `renderAnchoredStockChart()` が流用していたため、削除ではなく `.ioa-anchored-stock-trend-*` へ付け替えた。一方 `build_monthly_shipment_trend()` / `group_shipments_by_pair()`（Python側、出荷・入荷共通で使う集計関数）は表示撤去と無関係のため変更していない（引き続き design.md R-6 の債務として残る）。
+- **仕様書の記述方針**: CLAUDE.mdの「仕様が正しい。コードを修正すること」「削除対象を明示してから実行する」の原則に従い、requirements.md / design.md / test-design.md / 機能仕様書 / ubiquitous_language.md のいずれも元の記述を削除せず、「［撤去済み］」「（削除）」等の注記を付けて履歴を残した。
+- **ブランチ**: `develop` 上で直接実施（ステージ8、tasks.md タスク43〜49）。`origin` への push は未実施（明示指示待ち）
+- **テスト**: `pytest` アプリ内 656件・リポジトリ全体 1671件 Green。`manage.py check` 問題なし。マイグレーション不要
+- **変更ファイル**（既存改修）: `templates/inventory_order_alert/list.html`（「入出荷推移」区分を削除）、`static/js/inventory-order-alert-list.js`（`renderShipmentTrendChart()` 削除、`renderAnchoredStockChart()` のクラス参照を付け替え）、`static/css/app.css`（`.ioa-shipment-trend-*` 削除、`.ioa-anchored-stock-trend-*` 追加）、`docs/在庫発注アラート_機能仕様書.md`（§4.1.6・改訂履歴4.11）、`docs/ubiquitous_language.md`（V-216/V-217定義改訂）、`tests/test_inventory_order_alert_views.py`・`tests/test_inventory_order_alert_list_js.py`（撤去確認テストへ置き換え）
+
 ---
 
 ## 要確認・要判断（優先度順）

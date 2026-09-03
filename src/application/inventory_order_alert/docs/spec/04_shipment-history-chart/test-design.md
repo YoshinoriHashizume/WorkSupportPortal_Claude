@@ -2,7 +2,7 @@
 
 文書ID: TEST-SHIPMENT-HISTORY-CHART-2026-001
 作成日: 2026/09/01
-更新日: 2026/09/03（推定在庫推移 V-218 のテストケース TC-SHC-X-010〜015 を追加）
+更新日: 2026/09/03（入出荷推移の独立グラフ表示を撤去。TC-SHC-X-001, X-003, X-004, X-005, X-009 を撤去・置き換え）
 対応文書: [design.md](./design.md)（DESIGN-SHIPMENT-HISTORY-CHART-2026-001）
 テスト戦略reference: 03_mari-stock-visibility/test-design.md と同一方針を踏襲（本書では差分のみ記述）
 テストフレームワークreference: django-pytest
@@ -96,15 +96,22 @@ Red → Green → Refactor。各実装タスクの直前にテスト作成タス
 
 | # | テストケース | 入力 | 期待結果 | 対応REQ-ID | 優先度 |
 |---|---|---|---|---|---|
-| TC-SHC-X-001 | 詳細ダイアログに「出荷推移」区分が存在する | 一覧ページHTML | `ioa-detail-shipment-trend-section` 等のクラスが存在 | REQ-SHC-F-002 | P1 |
-| TC-SHC-X-002 | JS に getShipmentTrend ゲッターが定義されている | list-client.js ソース | 文字列 `getShipmentTrend` が存在 | design.md §6.3 | P1 |
-| TC-SHC-X-003 | JS に renderShipmentTrendChart が定義され SVG を組み立てる | list.js ソース | `renderShipmentTrendChart` と `createElementNS` 等のSVG生成コードが存在 | REQ-SHC-F-002 | P1 |
-| TC-SHC-X-004 | 実績なし時の表示ロジックが存在する | list.js ソース | 「出荷実績がありません」相当の分岐が存在 | REQ-SHC-F-003 | P1 |
-| TC-SHC-X-005 | 既存の4区分（品目・流動区分・在庫・メモ）の順序が変わらない | 一覧ページHTML | 出荷推移区分が「在庫」と「メモ」の間に挿入されている | design.md §6.5 | P2 |
+| TC-SHC-X-001 | ～～［2026/09/03撤去］詳細ダイアログに「出荷推移」区分が存在する～～ | — | （独立グラフ表示の撤去に伴い削除。下記の撤去確認テストに置き換え） | REQ-SHC-F-002（撤去） | — |
+| TC-SHC-X-002 | JS に getShipmentTrend ゲッターが定義されている | list-client.js ソース | 文字列 `getShipmentTrend` が存在（推定在庫推移の算出に引き続き使用） | design.md §6.3 | P1 |
+| TC-SHC-X-003 | ～～［2026/09/03撤去］JS に renderShipmentTrendChart が定義され SVG を組み立てる～～ | — | （同上） | REQ-SHC-F-002（撤去） | — |
+| TC-SHC-X-004 | ～～［2026/09/03撤去］実績なし時の表示ロジックが存在する～～ | — | （同上） | REQ-SHC-F-003（撤去） | — |
+| TC-SHC-X-005 | ～～［2026/09/03撤去］既存の4区分の順序が変わらない（出荷推移区分の位置）～～ | — | （推定在庫推移の位置確認テストに置き換え。下記参照） | design.md §6.5（撤去） | — |
 | TC-SHC-X-006 | 流動区分の判定結果が本要件の前後で変わらない | `pytest test_flow_quadrant.py` | 全件 Green（非回帰） | REQ-SHC-NF-004 | **P1** |
 | TC-SHC-X-007 | `config/tests/test_clean_architecture.py` が Green | 全体テスト | レイヤー違反なし | REQ-SHC-NF-006 | **P1** |
-| TC-SHC-X-008 | JS に getIncomingTrend ゲッターが定義されている | list-client.js ソース | 文字列 `getIncomingTrend` が存在 | REQ-SHC-F-005 | P1 |
-| TC-SHC-X-009 | チャートが出荷・入荷2系列を描画する凡例を持つ | list.js ソース | 凡例相当のクラス・2系列ぶんの `<polyline>` 生成コードが存在 | REQ-SHC-F-005 | P1 |
+| TC-SHC-X-008 | JS に getIncomingTrend ゲッターが定義されている | list-client.js ソース | 文字列 `getIncomingTrend` が存在（推定在庫推移の算出に引き続き使用） | REQ-SHC-F-005 | P1 |
+| TC-SHC-X-009 | ～～［2026/09/03撤去］チャートが出荷・入荷2系列を描画する凡例を持つ～～ | — | （同上） | REQ-SHC-F-005（撤去） | — |
+
+#### 入出荷推移の独立グラフ表示の撤去確認（2026/09/03、DECISIONS.md参照）
+
+| # | テストケース | 入力 | 期待結果 | 対応REQ-ID | 優先度 |
+|---|---|---|---|---|---|
+| （新設） | 入出荷推移の専用グラフ描画関数・DOM区分が存在しない | list.js ソース / 一覧ページHTML | `renderShipmentTrendChart` 関数・`ioa-detail-shipment-trend-section` がいずれも存在しない | REQ-SHC-F-002撤去 | P1 |
+| TC-SHC-X-015（再掲） | 推定在庫推移区分が「在庫」と「メモ」の間にある（旧X-005の位置検証を引き継ぐ） | 一覧ページHTML | `ioa-detail-anchored-stock-trend-section` の位置が在庫区分とメモ区分の間 | design.md §6.5 | P1 |
 
 #### 推定在庫推移（V-218）のJSロジック
 
@@ -185,10 +192,10 @@ AS_OF_DATE = date(2026, 6, 17)
 | 要件ID | テストケース |
 |---|---|
 | REQ-SHC-F-001 | TC-SHC-D-001〜004, D-006〜008, I-001, I-004 |
-| REQ-SHC-F-002 | TC-SHC-D-005, D-006, X-001, X-003 |
-| REQ-SHC-F-003 | TC-SHC-X-004 |
+| REQ-SHC-F-002（表示は撤去） | TC-SHC-D-005, D-006（算出部分のみ有効） |
+| REQ-SHC-F-003（撤去） | — |
 | REQ-SHC-F-004 | TC-SHC-I-003, I-008 |
-| REQ-SHC-F-005 | TC-SHC-I-009〜011, X-008〜009 |
+| REQ-SHC-F-005（表示は撤去） | TC-SHC-I-009〜011, X-008（算出・取得部分のみ有効） |
 | REQ-SHC-F-006 | TC-SHC-X-010〜015 |
 | REQ-SHC-NF-008 | TC-SHC-I-009, I-011 |
 | REQ-SHC-NF-001 | TC-SHC-I-005, A-002 |
@@ -211,3 +218,9 @@ AS_OF_DATE = date(2026, 6, 17)
 
 - JS ロジックはこれまでの出荷推移・入荷推移と同じ**ソース文字列アサーション方式**で検証する（実行環境に JS テストランナーがないため、厳密な数値計算の正しさまでは自動検証できない。design.md の算出式レビューと目視確認で補う）。
 - ペイロード・Oracle 問い合わせ回数への影響がないことは、既存の TC-SHC-I-005 / E-001 系の実測が本機能追加後も変わらないことで間接的に確認する（新規テストは追加しない。算出がクライアント側の純粋計算のため）。
+
+### 追記レビュー（入出荷推移の独立グラフ表示の撤去） (2026/09/03)
+
+- 独立グラフ表示を前提としていた TC-SHC-X-001, X-003, X-004, X-005, X-009 を撤去した。これらが検証していた「グラフが存在する」性質は不要になったため、代わりに「専用グラフの描画関数・DOM区分が存在しないこと」を検証する撤去確認テストを新設した（回帰防止：将来再度うっかり同じ関数を復活させた場合に気づけるようにする）。
+- TC-SHC-X-005 が担っていた「区分の位置検証」の役割は、推定在庫推移区分の位置検証（TC-SHC-X-015 の拡張）に引き継いだ。
+- データ算出（TC-SHC-D-005, D-006, TC-SHC-I-009〜011, X-002, X-008）は無変更のまま有効。
