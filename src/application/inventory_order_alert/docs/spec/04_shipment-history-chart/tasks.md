@@ -137,6 +137,19 @@
 | 60 | design.md §6.6 に改訂内容（バグの原因と修正、グリッド線方式）を追記 | docs | [✅2026/09/03 10:40] |
 | 61 | アプリ全体・リポジトリ全体テストの Green 化（再確認） | 横断 | [✅2026/09/03 10:50] |
 
+### ステージ11: 推定在庫推移からMARI起点系列の撤去
+
+ユーザー指示「ここでの、MARI視点のグラフは削除して」への対応。「推定在庫推移」グラフのMARI起点系列（緑系の折れ線）を撤去し、SLIMS起点の1系列のみにする。「在庫数(MARI)」欄自体（数値表示）は変更しない。
+
+| # | タスク | レイヤー | 状態 |
+|---|--------|---------|------|
+| 62 | MARI系列撤去確認テストの作成（TC-SHC-X-019, X-020） | interfaces | [✅2026/09/03 11:05] |
+| 63 | `inventory-order-alert-list.js` を改修（`renderAnchoredStockChart()` から `mariSeries` 引数・MARI描画・MARI凡例を削除、`fillDetailSections()` から `mariAnchor`/`mariAnchoredTrend` を削除） | interfaces | [✅2026/09/03 11:05] |
+| 64 | `static/css/app.css` からMARI系列専用スタイル（`.ioa-anchored-stock-trend-line--mari`等）を削除 | interfaces | [✅2026/09/03 11:05] |
+| 65 | キャッシュバスター更新・`collectstatic` | 横断 | [✅2026/09/03 11:10] |
+| 66 | requirements.md / design.md / test-design.md / ubiquitous_language.md / 機能仕様書 に撤去注記を追加 | docs | [✅2026/09/03 11:15] |
+| 67 | アプリ全体・リポジトリ全体テストの Green 化（再確認） | 横断 | [✅2026/09/03 11:20] |
+
 ---
 
 ## 2. タスク詳細
@@ -362,6 +375,19 @@
 - **チーム共有ポイント**: SVGを直接操作する実装では、`setAttribute("text-anchor", ...)` のような**presentation attributeでの上書きはCSSクラス指定に負ける**ことがある。優先度を確実にしたい場合は `element.style.xxx`（インラインstyle）を使う、または `!important` 付きCSSを避けて属性側を信頼しないという教訓を得た。今後SVGを手組みする際のチェックポイントとして記憶する。
 
 タスク56〜61すべて Green。新規テスト1件追加（TC-SHC-X-018）、既存テスト1件（TC-SHC-X-016）を実描画に即した内容へ改訂。アプリ内テスト659件・リポジトリ全体1674件、`manage.py check`／`makemigrations --check --dry-run`とも問題なし。キャッシュバスターを `20260903-anchored-chart-grid-lines` に更新し `collectstatic` 実行済み。
+--------------------
+
+--------------------
+### ステージ11（タスク62〜67）完了（完了 2026/09/03 11:20）
+
+- **懸念事項**:
+  - V-218（推定在庫推移）は当初「SLIMS在庫起点とMARI在庫起点の２つを表示して」というユーザーの明示指示（ステージ7着手時）に基づいて実装したものだった。今回の「MARI視点のグラフは削除して」はその決定を覆す指示であり、過去の決定を無条件に前提とせず、都度の指示を優先して反映する必要があった。SDDの原則どおり、元の要件・設計記述は削除せず「撤去済み」注記で履歴を残す方式を踏襲した。
+  - `renderAnchoredStockChart()` のシグネチャから `mariSeries` 引数を削除したことで、`minQty`/`maxQty` の算出が `slims` のみを対象にする形に単純化された。結果としてコードは複雑さが減った（2系列分のnullチェック・空判定が不要になった）。
+- **改善事項**: MARI系列専用のCSSクラス（`.ioa-anchored-stock-trend-line--mari`等）を削除したことで、未使用スタイルの蓄積を防いだ。
+- **設計のGoodポイント**: `buildAnchoredStockTrend()`（算出関数）自体はSLIMS/MARIの区別を持たない汎用実装だったため、変更不要だった。変更が必要だったのは呼び出し側（`fillDetailSections()`）と描画側（`renderAnchoredStockChart()`）のみで、影響範囲を局所化できた。
+- **チーム共有ポイント**: 一度承認を得て実装した機能でも、実画面を見たユーザーから「思っていたのと違う」というフィードバックで撤回されることがある。今回のように「在庫数(MARI)欄は残すが、グラフのMARI系列だけ消す」という細かい範囲指定は、変更対象ファイル・影響範囲を事前提示してから着手する運用（CLAUDE.md）が手戻りを防ぐ上で有効だった。
+
+タスク62〜67すべて Green。新規テスト2件追加（TC-SHC-X-019, X-020）。アプリ内テスト661件・リポジトリ全体1676件、`manage.py check`／`makemigrations --check --dry-run`とも問題なし。キャッシュバスターを `20260903-anchored-chart-slims-only` に更新し `collectstatic` 実行済み。
 --------------------
 
 ---

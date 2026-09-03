@@ -2,7 +2,7 @@
 
 文書ID: DESIGN-SHIPMENT-HISTORY-CHART-2026-001
 作成日: 2026/09/01
-更新日: 2026/09/03（入出荷推移の独立グラフ表示を撤去。§6.4・§6.5・§7.2・§9 R-6 を更新。DECISIONS.md参照）
+更新日: 2026/09/03（推定在庫推移からMARI起点系列を撤去。入出荷推移の独立グラフ表示を撤去。§6.4・§6.5・§6.6・§7.2・§9 R-6 を更新。DECISIONS.md参照）
 対応文書: [requirements.md](./requirements.md)（REQ-SHIPMENT-HISTORY-CHART-2026-001）
 アーキテクチャreference: django-clean-architecture version 1.0（`make-design`/`design-review-l1`/`implement-review-l1` と一致確認済み。03_mari-stock-visibility/design.md で確認済みのため本書では再掲のみ）
 
@@ -238,8 +238,8 @@ const incomingTrend = listClient?.getIncomingTrend?.(custCode, row.dataset.itemC
 │ ■ 品目 / ■ 流動区分 / ■ 在庫  … 既存      │
 │                                            │
 │ ■ 推定在庫推移（参考値）                    │
-│   ● SLIMS起点  ● MARI起点  （凡例）        │
-│   [SVG 折れ線グラフ 24か月・2系列・ゼロ基準線]│
+│   ● SLIMS起点  （凡例）                    │
+│   [SVG 折れ線グラフ 24か月・1系列・等間隔グリッド線]│
 │   または「推定在庫推移を算出できません」     │
 │                                            │
 │ ■ メモ … 既存                              │
@@ -248,7 +248,9 @@ const incomingTrend = listClient?.getIncomingTrend?.(custCode, row.dataset.itemC
 
 ### 6.6 推定在庫推移の算出とグラフ描画（REQ-SHC-F-006、V-218）
 
-出荷推移・入荷推移・SLIMS/MARI在庫数はいずれも**既にクライアントへ配信済み**のため、推定在庫推移の算出には新規 Oracle 問い合わせも配信データの追加も不要である。算出は `static/js/inventory-order-alert-list.js` に純粋関数として実装し、`fillDetailSections()` から呼ぶ。
+> **［2026/09/03 改訂］** 当初は SLIMS起点・MARI起点の2系列を表示していたが、ユーザー指示「MARI視点のグラフは削除して」により**MARI起点の系列を撤去**した。以下は撤去後（SLIMS起点の1系列のみ）の仕様として記述する。撤去前の設計（2系列版）との差分は本節末尾の注記を参照。DECISIONS.md も参照。
+
+出荷推移・入荷推移・SLIMS在庫数はいずれも**既にクライアントへ配信済み**のため、推定在庫推移の算出には新規 Oracle 問い合わせも配信データの追加も不要である。算出は `static/js/inventory-order-alert-list.js` に純粋関数として実装し、`fillDetailSections()` から呼ぶ。
 
 **算出関数**:
 
@@ -273,17 +275,19 @@ function buildAnchoredStockTrend(shipmentTrend, incomingTrend, anchorQty) {
 ```
 
 - 直近月（配列末尾）を `anchorQty`（起点在庫数）とし、過去に向かって「当月末推定 = 翌月末推定 + 翌月出荷 − 翌月入荷」を適用する（§1.5）。
-- `anchorQty` の解析は `parseAnchorQty(text)`（新設）で行う。カンマを除去して `Number()` に変換し、空文字・NaN の場合は `null` を返す（未取得を区別する。「0」は有効な起点として扱う）。呼び出し元は `row.dataset.stockQty`（SLIMS）・`row.dataset.mariStockQty`（MARI）を渡す。
-- `anchorQty` が `null`（=在庫数が未取得）の場合、その起点の系列は算出せず空配列を返す。**MARI 在庫数が未取得の行では MARI起点の系列を描画しない**（REQ-SHC-F-006）。
+- `anchorQty` の解析は `parseAnchorQty(text)`（新設）で行う。カンマを除去して `Number()` に変換し、空文字・NaN の場合は `null` を返す（未取得を区別する。「0」は有効な起点として扱う）。呼び出し元は `row.dataset.stockQty`（SLIMS）を渡す。
+- `anchorQty` が `null`（=在庫数が未取得）の場合、系列を算出せず空配列を返す。
 - 推定値は**クランプしない**。マイナスもそのまま返す（§1.5）。
 
-**描画関数**: `renderAnchoredStockChart(sectionEl, slimsSeries, mariSeries)`（新設）。
+**描画関数**: `renderAnchoredStockChart(sectionEl, slimsSeries)`。
 
-- 縦軸のスケールは `[Math.min(0, ...両系列の全qty), Math.max(1, ...両系列の全qty)]`。**0 を必ず範囲に含める**ことで、ゼロ基準線を常に描画できるようにする（クランプはしないが、視覚的な危険水準を示す線として 0 を明示する）。
-- ゼロ基準線は破線（`stroke-dasharray`）で描画する。
-- SLIMS起点を**インディゴ系**、MARI起点を**緑系**の折れ線で描く。凡例を上部に表示する。
-- 両系列とも空配列（SLIMS・MARI いずれの在庫数も未取得、または出荷推移・入荷推移そのものが存在しない既存スナップショット）の場合は、グラフを描画せず「推定在庫推移を算出できません」を表示する。
-- `fillDetailSections()` 内で、出荷推移・入荷推移・在庫数（`row.dataset.stockQty` / `row.dataset.mariStockQty`）から算出して描画する。
+- 縦軸のスケールは `[Math.min(0, ...slimsの全qty), Math.max(1, ...slimsの全qty)]`。**0 を必ず範囲に含める**ことで、ゼロ基準線を常に描画できるようにする（クランプはしないが、視覚的な危険水準を示す線として 0 を明示する）。
+- ゼロ基準線は破線（`stroke-dasharray`）で描画する（マイナス域がある場合のみ。後述）。
+- SLIMS起点を**インディゴ系**の折れ線で描く。凡例を上部に表示する。
+- 空配列（SLIMS 在庫数が未取得、または出荷推移・入荷推移そのものが存在しない既存スナップショット）の場合は、グラフを描画せず「推定在庫推移を算出できません」を表示する。
+- `fillDetailSections()` 内で、出荷推移・入荷推移・在庫数（`row.dataset.stockQty`）から算出して描画する。
+
+> **［2026/09/03 撤去済み・撤去前の設計との差分］** 撤去前は `parseAnchorQty(row.dataset.mariStockQty)` で MARI 在庫数（V-215）も起点値として解析し、`buildAnchoredStockTrend()` で MARI起点の系列（`mariSeries`）も算出、`renderAnchoredStockChart(sectionEl, slimsSeries, mariSeries)` の第3引数として渡し、緑系の折れ線・専用の凡例項目（`ioa-anchored-stock-trend-legend-item--mari`）を描画していた。MARI 在庫数が未取得の行では MARI起点の系列を描画しない仕様だった（旧REQ-SHC-F-006）。ユーザー指示により撤去し、関数シグネチャからも `mariSeries` 引数を削除した。
 - **左側にY軸目盛り（数量）を表示する**（2026/09/03追記、同日中に等間隔グリッド線方式へ改訂）。ユーザー提示のExcelグラフを参考に、`GRID_LINE_COUNT`（=4）で値域を4分割した**等間隔の目盛り線5本**を横線＋数値ラベルで描画する（Excel既定の目盛り線に近い見た目）。数値は `toLocaleString("ja-JP")` でカンマ区切り表示。目盛り分のスペースとして `paddingLeft` を32→44に拡張した。目盛り線のクラスは `ioa-anchored-stock-trend-grid-line`（薄いグレー実線）。
   - ゼロ基準線（破線・`ioa-anchored-stock-trend-zero-line`）は、マイナス域が存在する場合（`minQty < 0`）のみ別途強調表示する。全点0以上（`minQty === 0`）の場合は最下段の目盛り線が既に0を示すため重ねて描画しない。
 - **月ラベル（X軸）の見切れ防止**（2026/09/03追記）。`text-anchor: middle` のままだと先頭・末尾のラベルがグラフ外にはみ出すため、先頭は `text-anchor: start`、末尾は `text-anchor: end` に個別設定する。
@@ -292,10 +296,8 @@ function buildAnchoredStockTrend(shipmentTrend, incomingTrend, anchorQty) {
 ```js
 // static/js/inventory-order-alert-list.js の fillDetailSections(row) 内に追加
 const slimsAnchor = parseAnchorQty(row.dataset.stockQty);
-const mariAnchor = parseAnchorQty(row.dataset.mariStockQty);
 const slimsAnchoredTrend = buildAnchoredStockTrend(shipmentTrend, incomingTrend, slimsAnchor);
-const mariAnchoredTrend = buildAnchoredStockTrend(shipmentTrend, incomingTrend, mariAnchor);
-renderAnchoredStockChart(anchoredStockTrendSection, slimsAnchoredTrend, mariAnchoredTrend);
+renderAnchoredStockChart(anchoredStockTrendSection, slimsAnchoredTrend);
 ```
 
 ## 7. 既存コードへの変更点
@@ -315,7 +317,7 @@ renderAnchoredStockChart(anchoredStockTrendSection, slimsAnchoredTrend, mariAnch
 | `infrastructure/oracle/summary_queries.py` | `group_shipments_by_pair()`・`fetch_incoming_receipts()` を追加。`build_summary_rows()` の行に `shipment_trend`・`incoming_trend` を付与（引き続き算出。表示はしない） |
 | `templates/inventory_order_alert/list.html` | 詳細ダイアログに「推定在庫推移（参考値）」区分・凡例を追加（「入出荷推移」区分は追加後に撤去した） |
 | `static/js/inventory-order-alert-list-client.js` | `getShipmentTrend()`・`getIncomingTrend()` ゲッターを追加（推定在庫推移の算出に使用） |
-| `static/js/inventory-order-alert-list.js` | `buildAnchoredStockTrend()`・`parseAnchorQty()`・`renderAnchoredStockChart()` を新設し `fillDetailSections()` から呼ぶ。`renderShipmentTrendChart()` は一度追加した後に撤去した |
+| `static/js/inventory-order-alert-list.js` | `buildAnchoredStockTrend()`・`parseAnchorQty()`・`renderAnchoredStockChart()` を新設し `fillDetailSections()` から呼ぶ。`renderShipmentTrendChart()` は一度追加した後に撤去した。`renderAnchoredStockChart()` は当初SLIMS/MARI2系列だったが、MARI起点系列を撤去しSLIMS起点1系列のみに変更した |
 | `static/css/app.css` | 推定在庫推移グラフ区分・ゼロ基準線のスタイルを追加。入出荷推移グラフ専用のスタイルは追加後に撤去した |
 | `docs/在庫発注アラート_機能仕様書.md` | §4.1.6（詳細ダイアログ）を改訂 |
 
@@ -335,7 +337,7 @@ renderAnchoredStockChart(anchoredStockTrendSection, slimsAnchoredTrend, mariAnch
 | `ship_qty` が負値（返品等） | 加工せずそのまま月次合計に含める（基幹の値を加工しない。03_mari-stock-visibility の MARI 在庫の方針を踏襲） |
 | 入荷推移の集計中に例外が発生した | 出荷推移と同じく取込全体を失敗させる |
 | `level1_item_cd` / `level1_vend_cd` が解決できない行 | `incoming_trend` は全月 0（該当キーなしとして扱う） |
-| 推定在庫推移の起点（SLIMS在庫数・MARI在庫数）が未取得 | 該当起点の系列を算出せず（`parseAnchorQty` が `null` を返す）、その系列を描画しない。両方未取得なら「算出できません」表示 |
+| 推定在庫推移の起点（SLIMS在庫数）が未取得 | 系列を算出せず（`parseAnchorQty` が `null` を返す）、「算出できません」表示 |
 | 推定在庫推移の算出値がマイナスになる | クランプせずそのまま表示する（§1.5・§6.6。仕様どおりの挙動でありエラーではない） |
 
 ## 9. リスクと対策

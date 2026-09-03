@@ -1798,14 +1798,8 @@ body.inventory-order-alert-page .ioa-anchored-stock-trend-line {
 body.inventory-order-alert-page .ioa-anchored-stock-trend-line--slims {
   stroke: #4f46e5;
 }
-body.inventory-order-alert-page .ioa-anchored-stock-trend-line--mari {
-  stroke: #16a34a;
-}
 body.inventory-order-alert-page .ioa-anchored-stock-trend-point--slims {
   fill: #4f46e5;
-}
-body.inventory-order-alert-page .ioa-anchored-stock-trend-point--mari {
-  fill: #16a34a;
 }
 body.inventory-order-alert-page .ioa-anchored-stock-trend-legend-item {
   position: relative;
@@ -1820,9 +1814,6 @@ body.inventory-order-alert-page .ioa-anchored-stock-trend-legend-item::before {
   height: 2px;
   transform: translateY(-50%);
   background: #4f46e5;
-}
-body.inventory-order-alert-page .ioa-anchored-stock-trend-legend-item--mari::before {
-  background: #16a34a;
 }
 body.inventory-order-alert-page .ioa-detail-section-subtitle {
   margin: 4px 0 0;

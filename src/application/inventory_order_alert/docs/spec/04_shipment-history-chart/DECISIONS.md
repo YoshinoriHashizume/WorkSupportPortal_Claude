@@ -75,6 +75,17 @@
 - **変更ファイル**（既存改修）: `static/js/inventory-order-alert-list.js`（text-anchorのstyle上書き化、等間隔グリッド線描画への置き換え）、`static/css/app.css`（`.ioa-anchored-stock-trend-grid-line` 追加）、`docs/spec/04_shipment-history-chart/design.md`（§6.6再改訂）、`tests/test_inventory_order_alert_list_js.py`（TC-SHC-X-016改訂、TC-SHC-X-018新設）
 - **教訓**: SVG手組み実装で `setAttribute` によるpresentation attributeの上書きはCSSクラス指定に負けることがある。確実に上書きしたい場合は `element.style.xxx`（インラインstyle）を使うこと。
 
+### 追記（2026/09/03、「MARI視点のグラフは削除して」への対応・ステージ11）
+
+推定在庫推移グラフ（ステージ7でSLIMS起点・MARI起点の2系列として実装）について、ユーザーから「ここでの、MARI視点のグラフは削除して」との指示を受けた。事前に変更対象ファイル・影響範囲を提示し承認を得てから着手した。
+
+- **撤去した範囲**: 「推定在庫推移」グラフのMARI起点系列（緑系の折れ線・凡例項目）のみ。**「在庫数(MARI)」欄自体（詳細ダイアログ上部の数値表示、§4.1.6「在庫」区分）は変更していない**。MARI在庫データの取得処理（`fetch_mari_stock_totals()`等）にも影響なし。
+- **過去の決定との関係**: ステージ7着手時点でユーザーから明示的に「SLIMS在庫起点とMARI在庫起点の２つを表示して」との指示を受けて2系列にした経緯がある。今回はその決定を覆す新たな指示であり、そのまま反映した（SDDの原則どおり、旧要件・旧設計は削除せず「撤去済み」注記で履歴を残した）。
+- **実装への影響**: `renderAnchoredStockChart(sectionEl, slimsSeries, mariSeries)` から `mariSeries` 引数を削除し `renderAnchoredStockChart(sectionEl, slimsSeries)` に簡略化。`fillDetailSections()` から `mariAnchor`/`mariAnchoredTrend` の算出を削除。`buildAnchoredStockTrend()`（算出関数）自体はSLIMS/MARIを区別しない汎用実装のため変更不要だった。
+- **ブランチ**: `develop` 上で直接実施（ステージ11、tasks.md タスク62〜67）。`origin` への push は未実施（明示指示待ち）
+- **テスト**: `pytest` アプリ内 661件・リポジトリ全体 1676件 Green。`manage.py check` 問題なし。マイグレーション不要
+- **変更ファイル**（既存改修）: `static/js/inventory-order-alert-list.js`（`renderAnchoredStockChart()`・`fillDetailSections()` からMARI関連コードを削除）、`static/css/app.css`（MARI系列専用スタイルを削除）、`docs/spec/04_shipment-history-chart/requirements.md`・`design.md`・`test-design.md`（REQ-SHC-F-006等に撤去注記）、`docs/ubiquitous_language.md`（V-218定義改訂）、`docs/在庫発注アラート_機能仕様書.md`（§4.1.6・改訂履歴4.12）、`tests/test_inventory_order_alert_list_js.py`（TC-SHC-X-019, X-020新設）
+
 ---
 
 ## 要確認・要判断（優先度順）

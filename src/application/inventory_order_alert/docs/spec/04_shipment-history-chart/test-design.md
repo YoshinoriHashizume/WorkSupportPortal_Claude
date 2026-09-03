@@ -2,7 +2,7 @@
 
 文書ID: TEST-SHIPMENT-HISTORY-CHART-2026-001
 作成日: 2026/09/01
-更新日: 2026/09/03（入出荷推移の独立グラフ表示を撤去。TC-SHC-X-001, X-003, X-004, X-005, X-009 を撤去・置き換え）
+更新日: 2026/09/03（入出荷推移の独立グラフ表示を撤去。TC-SHC-X-001, X-003, X-004, X-005, X-009 を撤去・置き換え。TC-SHC-X-016〜018を追加。推定在庫推移からMARI起点系列を撤去しTC-SHC-X-019・X-020を追加）
 対応文書: [design.md](./design.md)（DESIGN-SHIPMENT-HISTORY-CHART-2026-001）
 テスト戦略reference: 03_mari-stock-visibility/test-design.md と同一方針を踏襲（本書では差分のみ記述）
 テストフレームワークreference: django-pytest
@@ -124,6 +124,21 @@ Red → Green → Refactor。各実装タスクの直前にテスト作成タス
 | TC-SHC-X-014 | `fillDetailSections` から算出・描画が呼ばれる | list.js ソース | `buildAnchoredStockTrend(` と `renderAnchoredStockChart(` の呼び出しが `fillDetailSections` 内に存在 | design.md §6.6 | P1 |
 | TC-SHC-X-015 | 詳細ダイアログに「推定在庫推移」区分が存在する | 一覧ページHTML | 新規区分クラスが存在し、「参考値」相当の注記文言が存在 | REQ-SHC-F-006 | P1 |
 
+#### 推定在庫推移グラフの表示改善（2026/09/03、実画面フィードバック対応）
+
+| # | テストケース | 入力 | 期待結果 | 対応REQ-ID | 優先度 |
+|---|---|---|---|---|---|
+| TC-SHC-X-016 | 月ラベルの見切れ防止（text-anchorをインラインstyleで上書き） | list.js ソース | `label.style.textAnchor` の使用と `setAttribute("text-anchor"` の不使用を確認（CSSクラスに負けて上書きされない不具合の再発防止） | REQ-SHC-F-006 | P1 |
+| TC-SHC-X-017 | Y軸に数量目盛りラベルを表示する | list.js ソース | `ioa-anchored-stock-trend-y-axis-label` クラスと `toLocaleString` の使用が存在 | REQ-SHC-F-006 | P2 |
+| TC-SHC-X-018 | Y軸目盛りを等間隔グリッド線で描画する | list.js ソース | `GRID_LINE_COUNT` 定数と `ioa-anchored-stock-trend-grid-line` クラスの使用が存在 | REQ-SHC-F-006 | P2 |
+
+#### 推定在庫推移からのMARI起点系列撤去（2026/09/03、DECISIONS.md参照）
+
+| # | テストケース | 入力 | 期待結果 | 対応REQ-ID | 優先度 |
+|---|---|---|---|---|---|
+| TC-SHC-X-019 | `renderAnchoredStockChart` がMARI系列を扱わない | list.js ソース | 関数内に `mariSeries`／`ioa-anchored-stock-trend-line--mari`／`ioa-anchored-stock-trend-point--mari`／`ioa-anchored-stock-trend-legend-item--mari`／`MARI起点` のいずれも存在しない | REQ-SHC-F-006（改訂） | P1 |
+| TC-SHC-X-020 | `fillDetailSections` がMARI起点系列を算出しない | list.js ソース | `mariAnchor`／`mariAnchoredTrend` が存在せず、`renderAnchoredStockChart(anchoredStockTrendSection, slimsAnchoredTrend)` （引数1つ）で呼ばれる | REQ-SHC-F-006（改訂） | P1 |
+
 ---
 
 ## 3. テストデータ
@@ -196,7 +211,7 @@ AS_OF_DATE = date(2026, 6, 17)
 | REQ-SHC-F-003（撤去） | — |
 | REQ-SHC-F-004 | TC-SHC-I-003, I-008 |
 | REQ-SHC-F-005（表示は撤去） | TC-SHC-I-009〜011, X-008（算出・取得部分のみ有効） |
-| REQ-SHC-F-006 | TC-SHC-X-010〜015 |
+| REQ-SHC-F-006（MARI起点系列は撤去） | TC-SHC-X-010〜020 |
 | REQ-SHC-NF-008 | TC-SHC-I-009, I-011 |
 | REQ-SHC-NF-001 | TC-SHC-I-005, A-002 |
 | REQ-SHC-NF-002 | TC-SHC-I-007 |

@@ -112,6 +112,27 @@ def test_TC_SHC_X_018_list_js_renders_evenly_spaced_grid_lines():
     assert "ioa-anchored-stock-trend-grid-line" in render_block
 
 
+def test_TC_SHC_X_019_render_anchored_stock_chart_no_longer_takes_mari_series():
+    """推定在庫推移グラフはSLIMS起点の1系列のみ描画する（MARI起点は撤去。DECISIONS.md参照）。"""
+    source = JS_PATH.read_text(encoding="utf-8")
+    render_block = source.split("function renderAnchoredStockChart", 1)[1].split("\n  function ", 1)[0]
+
+    assert "mariSeries" not in render_block
+    assert "ioa-anchored-stock-trend-line--mari" not in render_block
+    assert "ioa-anchored-stock-trend-point--mari" not in render_block
+    assert "ioa-anchored-stock-trend-legend-item--mari" not in render_block
+    assert "MARI起点" not in render_block
+
+
+def test_TC_SHC_X_020_fill_detail_sections_does_not_build_mari_anchored_trend():
+    source = JS_PATH.read_text(encoding="utf-8")
+    fill_block = source.split("function fillDetailSections", 1)[1].split("async function openLocationDialog", 1)[0]
+
+    assert "mariAnchor" not in fill_block
+    assert "mariAnchoredTrend" not in fill_block
+    assert "renderAnchoredStockChart(anchoredStockTrendSection, slimsAnchoredTrend)" in fill_block
+
+
 def test_TC_SHC_X_015_list_html_has_anchored_stock_trend_section():
     template = (
         Path(__file__).resolve().parents[3] / "templates" / "inventory_order_alert" / "list.html"

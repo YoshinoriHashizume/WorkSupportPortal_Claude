@@ -381,7 +381,7 @@
       return result;
     }
 
-    function renderAnchoredStockChart(sectionEl, slimsSeries, mariSeries) {
+    function renderAnchoredStockChart(sectionEl, slimsSeries) {
       if (!sectionEl) {
         return;
       }
@@ -392,9 +392,8 @@
       }
 
       const slims = Array.isArray(slimsSeries) ? slimsSeries : [];
-      const mari = Array.isArray(mariSeries) ? mariSeries : [];
       container.innerHTML = "";
-      if (!slims.length && !mari.length) {
+      if (!slims.length) {
         container.hidden = true;
         if (emptyMessage) {
           emptyMessage.hidden = false;
@@ -406,7 +405,7 @@
         emptyMessage.hidden = true;
       }
 
-      const points = slims.length ? slims : mari;
+      const points = slims;
       const width = 560;
       const height = 140;
       const paddingLeft = 44;
@@ -415,8 +414,8 @@
       const plotWidth = width - paddingLeft - 8;
       const plotHeight = height - paddingTop - paddingBottom;
       // マイナスもそのまま表示するため、0 を必ず範囲に含めてゼロ基準線を描けるようにする（design.md §6.6）。
-      const minQty = Math.min(0, ...slims.map((point) => Number(point.qty) || 0), ...mari.map((point) => Number(point.qty) || 0));
-      const maxQty = Math.max(1, ...slims.map((point) => Number(point.qty) || 0), ...mari.map((point) => Number(point.qty) || 0));
+      const minQty = Math.min(0, ...slims.map((point) => Number(point.qty) || 0));
+      const maxQty = Math.max(1, ...slims.map((point) => Number(point.qty) || 0));
       const valueRange = maxQty - minQty || 1;
       const stepX = points.length > 1 ? plotWidth / (points.length - 1) : 0;
 
@@ -494,7 +493,6 @@
       }
 
       drawSeries(slims, "ioa-anchored-stock-trend-line ioa-anchored-stock-trend-line--slims", "ioa-anchored-stock-trend-point ioa-anchored-stock-trend-point--slims", "SLIMS起点");
-      drawSeries(mari, "ioa-anchored-stock-trend-line ioa-anchored-stock-trend-line--mari", "ioa-anchored-stock-trend-point ioa-anchored-stock-trend-point--mari", "MARI起点");
 
       points.forEach((point, index) => {
         if (index % 4 === 0 || index === points.length - 1) {
@@ -520,10 +518,7 @@
       const legend = document.createElement("div");
       legend.className = "ioa-anchored-stock-trend-legend";
       legend.innerHTML =
-        '<span class="ioa-anchored-stock-trend-legend-item ioa-anchored-stock-trend-legend-item--slims">SLIMS起点</span>' +
-        (mari.length
-          ? '<span class="ioa-anchored-stock-trend-legend-item ioa-anchored-stock-trend-legend-item--mari">MARI起点</span>'
-          : "");
+        '<span class="ioa-anchored-stock-trend-legend-item ioa-anchored-stock-trend-legend-item--slims">SLIMS起点</span>';
       container.append(legend);
     }
 
@@ -556,10 +551,8 @@
       const incomingTrend = listClient?.getIncomingTrend?.(custCode, row.dataset.itemCd || "") || [];
 
       const slimsAnchor = parseAnchorQty(row.dataset.stockQty);
-      const mariAnchor = parseAnchorQty(row.dataset.mariStockQty);
       const slimsAnchoredTrend = buildAnchoredStockTrend(shipmentTrend, incomingTrend, slimsAnchor);
-      const mariAnchoredTrend = buildAnchoredStockTrend(shipmentTrend, incomingTrend, mariAnchor);
-      renderAnchoredStockChart(anchoredStockTrendSection, slimsAnchoredTrend, mariAnchoredTrend);
+      renderAnchoredStockChart(anchoredStockTrendSection, slimsAnchoredTrend);
     }
 
     async function openLocationDialog(row) {
