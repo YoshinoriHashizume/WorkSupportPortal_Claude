@@ -50,6 +50,19 @@
 - **テスト**: `pytest` アプリ内 656件・リポジトリ全体 1671件 Green。`manage.py check` 問題なし。マイグレーション不要
 - **変更ファイル**（既存改修）: `templates/inventory_order_alert/list.html`（「入出荷推移」区分を削除）、`static/js/inventory-order-alert-list.js`（`renderShipmentTrendChart()` 削除、`renderAnchoredStockChart()` のクラス参照を付け替え）、`static/css/app.css`（`.ioa-shipment-trend-*` 削除、`.ioa-anchored-stock-trend-*` 追加）、`docs/在庫発注アラート_機能仕様書.md`（§4.1.6・改訂履歴4.11）、`docs/ubiquitous_language.md`（V-216/V-217定義改訂）、`tests/test_inventory_order_alert_views.py`・`tests/test_inventory_order_alert_list_js.py`（撤去確認テストへ置き換え）
 
+### 追記（2026/09/03、実画面フィードバック3件への対応・ステージ9）
+
+推定在庫推移グラフを実際にブラウザで確認したユーザーから3件の指摘を受けた。事前に変更対象ファイル・影響範囲を提示し承認を得てから着手した。
+
+1. **「点線は何？」**: ゼロ基準線（推定在庫0の目印）である旨を回答。コード変更なし。
+2. **「右の年月がかけている」**: 月ラベルが `text-anchor: middle` 一律だったため、末尾ラベルがSVG右端からはみ出して見切れていた。先頭は`start`、末尾は`end`にtext-anchorを個別設定して解消。
+3. **「左にメモリが欲しい」**: Y軸の数量目盛りが存在しなかったため、最大値・最小値（0がその間にあれば0も）をカンマ区切りで表示するように追加。表示スペース確保のため`paddingLeft`を32→40に拡張。
+
+- **ブランチ**: `develop` 上で直接実施（ステージ9、tasks.md タスク50〜55）。`origin` への push は未実施（明示指示待ち）
+- **テスト**: `pytest` アプリ内 658件・リポジトリ全体 1673件 Green。`manage.py check` 問題なし。マイグレーション不要
+- **変更ファイル**（既存改修）: `static/js/inventory-order-alert-list.js`（`renderAnchoredStockChart()` の月ラベルtext-anchor調整・Y軸目盛り追加）、`static/css/app.css`（`.ioa-anchored-stock-trend-y-axis-label` 追加）、`docs/spec/04_shipment-history-chart/design.md`（§6.6追記）、`tests/test_inventory_order_alert_list_js.py`（新規テスト2件: TC-SHC-X-016, X-017）
+- Oracle・配信ペイロードへの影響: なし（表示のみの変更）
+
 ---
 
 ## 要確認・要判断（優先度順）

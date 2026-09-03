@@ -409,7 +409,7 @@
       const points = slims.length ? slims : mari;
       const width = 560;
       const height = 140;
-      const paddingLeft = 32;
+      const paddingLeft = 40;
       const paddingTop = 8;
       const paddingBottom = 20;
       const plotWidth = width - paddingLeft - 8;
@@ -441,6 +441,24 @@
       zeroLine.setAttribute("y2", String(zeroY));
       zeroLine.setAttribute("class", "ioa-anchored-stock-trend-zero-line");
       svg.append(zeroLine);
+
+      function drawYAxisLabel(qty, y) {
+        const label = document.createElementNS(svgNs, "text");
+        label.setAttribute("x", String(paddingLeft - 4));
+        label.setAttribute("y", String(y + 3));
+        label.setAttribute("text-anchor", "end");
+        label.setAttribute("class", "ioa-anchored-stock-trend-y-axis-label");
+        label.textContent = Math.round(qty).toLocaleString("ja-JP");
+        svg.append(label);
+      }
+
+      const [, maxY] = coordsOf(0, maxQty);
+      const [, minY] = coordsOf(0, minQty);
+      drawYAxisLabel(maxQty, maxY);
+      drawYAxisLabel(minQty, minY);
+      if (minQty < 0 && maxQty > 0) {
+        drawYAxisLabel(0, zeroY);
+      }
 
       function drawSeries(seriesPoints, lineClass, pointClass, label) {
         if (!seriesPoints.length) {
@@ -476,6 +494,11 @@
           label.setAttribute("x", String(x));
           label.setAttribute("y", String(height - 4));
           label.setAttribute("class", "ioa-anchored-stock-trend-axis-label");
+          if (index === 0) {
+            label.setAttribute("text-anchor", "start");
+          } else if (index === points.length - 1) {
+            label.setAttribute("text-anchor", "end");
+          }
           label.textContent = String(point.month || "").slice(2).replace("-", "/");
           svg.append(label);
         }

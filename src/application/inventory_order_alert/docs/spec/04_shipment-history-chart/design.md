@@ -284,6 +284,8 @@ function buildAnchoredStockTrend(shipmentTrend, incomingTrend, anchorQty) {
 - SLIMS起点を**インディゴ系**、MARI起点を**緑系**の折れ線で描く。凡例を上部に表示する。
 - 両系列とも空配列（SLIMS・MARI いずれの在庫数も未取得、または出荷推移・入荷推移そのものが存在しない既存スナップショット）の場合は、グラフを描画せず「推定在庫推移を算出できません」を表示する。
 - `fillDetailSections()` 内で、出荷推移・入荷推移・在庫数（`row.dataset.stockQty` / `row.dataset.mariStockQty`）から算出して描画する。
+- **左側にY軸目盛り（数量）を表示する**（2026/09/03追記）。最大値・最小値の2点（0がその間にある場合は0も追加）を `toLocaleString("ja-JP")` でカンマ区切り表示する。目盛り分のスペースとして `paddingLeft` を32→40に拡張した。
+- **月ラベル（X軸）の見切れ防止**（2026/09/03追記）。`text-anchor: middle` のままだと先頭・末尾のラベルがグラフ外にはみ出すため、先頭は `text-anchor: start`、末尾は `text-anchor: end` に個別設定する。
 
 ```js
 // static/js/inventory-order-alert-list.js の fillDetailSections(row) 内に追加
