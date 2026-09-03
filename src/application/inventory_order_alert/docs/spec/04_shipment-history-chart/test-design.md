@@ -2,7 +2,7 @@
 
 文書ID: TEST-SHIPMENT-HISTORY-CHART-2026-001
 作成日: 2026/09/01
-更新日: 2026/09/03（入荷推移 V-217 のテストケース TC-SHC-I-009〜011・X-008〜009 を追加）
+更新日: 2026/09/03（推定在庫推移 V-218 のテストケース TC-SHC-X-010〜015 を追加）
 対応文書: [design.md](./design.md)（DESIGN-SHIPMENT-HISTORY-CHART-2026-001）
 テスト戦略reference: 03_mari-stock-visibility/test-design.md と同一方針を踏襲（本書では差分のみ記述）
 テストフレームワークreference: django-pytest
@@ -106,6 +106,17 @@ Red → Green → Refactor。各実装タスクの直前にテスト作成タス
 | TC-SHC-X-008 | JS に getIncomingTrend ゲッターが定義されている | list-client.js ソース | 文字列 `getIncomingTrend` が存在 | REQ-SHC-F-005 | P1 |
 | TC-SHC-X-009 | チャートが出荷・入荷2系列を描画する凡例を持つ | list.js ソース | 凡例相当のクラス・2系列ぶんの `<polyline>` 生成コードが存在 | REQ-SHC-F-005 | P1 |
 
+#### 推定在庫推移（V-218）のJSロジック
+
+| # | テストケース | 入力 | 期待結果 | 対応REQ-ID | 優先度 |
+|---|---|---|---|---|---|
+| TC-SHC-X-010 | `buildAnchoredStockTrend` が定義され末尾要素を起点値とする | list.js ソース | 関数定義と `length - 1` を使った代入コードが存在 | REQ-SHC-F-006 | P1 |
+| TC-SHC-X-011 | `parseAnchorQty` がカンマ除去・空文字で `null` を返す | list.js ソース | 関数定義とカンマ除去・空文字判定の分岐が存在 | REQ-SHC-F-006 | P1 |
+| TC-SHC-X-012 | `renderAnchoredStockChart` がゼロ基準線を含むスケールで描画する | list.js ソース | 関数定義と `Math.min(0` 等、0 を範囲に含めるスケール計算コードが存在 | REQ-SHC-F-006 | P1 |
+| TC-SHC-X-013 | 推定値をクランプしていない（マイナスのまま表示） | list.js ソース | `buildAnchoredStockTrend` / `renderAnchoredStockChart` 内に負値を0に切り上げる処理（`Math.max(0,` 等）が存在しない | REQ-SHC-F-006 | P1 |
+| TC-SHC-X-014 | `fillDetailSections` から算出・描画が呼ばれる | list.js ソース | `buildAnchoredStockTrend(` と `renderAnchoredStockChart(` の呼び出しが `fillDetailSections` 内に存在 | design.md §6.6 | P1 |
+| TC-SHC-X-015 | 詳細ダイアログに「推定在庫推移」区分が存在する | 一覧ページHTML | 新規区分クラスが存在し、「参考値」相当の注記文言が存在 | REQ-SHC-F-006 | P1 |
+
 ---
 
 ## 3. テストデータ
@@ -178,6 +189,7 @@ AS_OF_DATE = date(2026, 6, 17)
 | REQ-SHC-F-003 | TC-SHC-X-004 |
 | REQ-SHC-F-004 | TC-SHC-I-003, I-008 |
 | REQ-SHC-F-005 | TC-SHC-I-009〜011, X-008〜009 |
+| REQ-SHC-F-006 | TC-SHC-X-010〜015 |
 | REQ-SHC-NF-008 | TC-SHC-I-009, I-011 |
 | REQ-SHC-NF-001 | TC-SHC-I-005, A-002 |
 | REQ-SHC-NF-002 | TC-SHC-I-007 |
@@ -194,3 +206,8 @@ AS_OF_DATE = date(2026, 6, 17)
 ### 自己実施レビュー (2026/09/01)
 
 網羅性・境界値・非回帰観点を確認し、NG相当の指摘なし。E-001（ペイロード実測）は design.md のリスクR-1と対応しており、実測後に許容値を確定する（DECISIONS.md 参照）。
+
+### 追記レビュー（推定在庫推移 V-218 追加分） (2026/09/03)
+
+- JS ロジックはこれまでの出荷推移・入荷推移と同じ**ソース文字列アサーション方式**で検証する（実行環境に JS テストランナーがないため、厳密な数値計算の正しさまでは自動検証できない。design.md の算出式レビューと目視確認で補う）。
+- ペイロード・Oracle 問い合わせ回数への影響がないことは、既存の TC-SHC-I-005 / E-001 系の実測が本機能追加後も変わらないことで間接的に確認する（新規テストは追加しない。算出がクライアント側の純粋計算のため）。

@@ -2,7 +2,7 @@
 
 文書ID: DESIGN-SHIPMENT-HISTORY-CHART-2026-001
 作成日: 2026/09/01
-更新日: 2026/09/03（入荷推移 V-217 の追加。§3.3・§4.3・§5.2・§6.1・§6.3・§6.4・§6.5 を更新）
+更新日: 2026/09/03（推定在庫推移 V-218 の追加。§6.6 を新設。§7.1〜7.2・§8・§9 を更新）
 対応文書: [requirements.md](./requirements.md)（REQ-SHIPMENT-HISTORY-CHART-2026-001）
 アーキテクチャreference: django-clean-architecture version 1.0（`make-design`/`design-review-l1`/`implement-review-l1` と一致確認済み。03_mari-stock-visibility/design.md で確認済みのため本書では再掲のみ）
 
@@ -250,6 +250,54 @@ renderShipmentTrendChart(shipmentTrendSection, shipmentTrend, incomingTrend);
 └────────────────────────────────────────────┘
 ```
 
+### 6.6 推定在庫推移の算出とグラフ描画（REQ-SHC-F-006、V-218）
+
+出荷推移・入荷推移・SLIMS/MARI在庫数はいずれも**既にクライアントへ配信済み**のため、推定在庫推移の算出には新規 Oracle 問い合わせも配信データの追加も不要である。算出は `static/js/inventory-order-alert-list.js` に純粋関数として実装し、`fillDetailSections()` から呼ぶ。
+
+**算出関数**:
+
+```js
+function buildAnchoredStockTrend(shipmentTrend, incomingTrend, anchorQty) {
+  if (anchorQty === null) {
+    return [];
+  }
+  const length = shipmentTrend.length;
+  const result = new Array(length);
+  result[length - 1] = { month: shipmentTrend[length - 1].month, qty: anchorQty };
+  for (let index = length - 2; index >= 0; index -= 1) {
+    const nextShipped = Number(shipmentTrend[index + 1]?.qty) || 0;
+    const nextReceived = Number(incomingTrend[index + 1]?.qty) || 0;
+    result[index] = {
+      month: shipmentTrend[index].month,
+      qty: result[index + 1].qty + nextShipped - nextReceived,
+    };
+  }
+  return result;
+}
+```
+
+- 直近月（配列末尾）を `anchorQty`（起点在庫数）とし、過去に向かって「当月末推定 = 翌月末推定 + 翌月出荷 − 翌月入荷」を適用する（§1.5）。
+- `anchorQty` の解析は `parseAnchorQty(text)`（新設）で行う。カンマを除去して `Number()` に変換し、空文字・NaN の場合は `null` を返す（未取得を区別する。「0」は有効な起点として扱う）。呼び出し元は `row.dataset.stockQty`（SLIMS）・`row.dataset.mariStockQty`（MARI）を渡す。
+- `anchorQty` が `null`（=在庫数が未取得）の場合、その起点の系列は算出せず空配列を返す。**MARI 在庫数が未取得の行では MARI起点の系列を描画しない**（REQ-SHC-F-006）。
+- 推定値は**クランプしない**。マイナスもそのまま返す（§1.5）。
+
+**描画関数**: `renderAnchoredStockChart(sectionEl, slimsSeries, mariSeries)`（新設）。
+
+- 縦軸のスケールは `[Math.min(0, ...両系列の全qty), Math.max(1, ...両系列の全qty)]`。**0 を必ず範囲に含める**ことで、ゼロ基準線を常に描画できるようにする（クランプはしないが、視覚的な危険水準を示す線として 0 を明示する）。
+- ゼロ基準線は破線（`stroke-dasharray`）で描画する。
+- SLIMS起点を**青系**、MARI起点を**緑系**の折れ線で描く（既存の出荷=青・入荷=橙と色を分け、隣接する2つのグラフ区分を混同しないようにする）。凡例を上部に表示する。
+- 両系列とも空配列（SLIMS・MARI いずれの在庫数も未取得、または出荷推移・入荷推移そのものが存在しない既存スナップショット）の場合は、グラフを描画せず「推定在庫推移を算出できません」を表示する。
+- `fillDetailSections()` 内で、出荷推移・入荷推移・在庫数（`row.dataset.stockQty` / `row.dataset.mariStockQty`）から算出して描画する。
+
+```js
+// static/js/inventory-order-alert-list.js の fillDetailSections(row) 内に追加
+const slimsAnchor = parseAnchorQty(row.dataset.stockQty);
+const mariAnchor = parseAnchorQty(row.dataset.mariStockQty);
+const slimsAnchoredTrend = buildAnchoredStockTrend(shipmentTrend, incomingTrend, slimsAnchor);
+const mariAnchoredTrend = buildAnchoredStockTrend(shipmentTrend, incomingTrend, mariAnchor);
+renderAnchoredStockChart(anchoredStockTrendSection, slimsAnchoredTrend, mariAnchoredTrend);
+```
+
 ## 7. 既存コードへの変更点
 
 ### 7.1 新規ファイル
@@ -267,8 +315,8 @@ renderShipmentTrendChart(shipmentTrendSection, shipmentTrend, incomingTrend);
 | `infrastructure/oracle/summary_queries.py` | `group_shipments_by_pair()`・`fetch_incoming_receipts()` を追加。`build_summary_rows()` の行に `shipment_trend`・`incoming_trend` を付与 |
 | `templates/inventory_order_alert/list.html` | 詳細ダイアログに「入出荷推移」区分・凡例を追加 |
 | `static/js/inventory-order-alert-list-client.js` | `getShipmentTrend()`・`getIncomingTrend()` ゲッターを追加 |
-| `static/js/inventory-order-alert-list.js` | `renderShipmentTrendChart()` を2系列描画に拡張し `fillDetailSections()` から呼ぶ |
-| `static/css/app.css` | 入出荷推移グラフ区分・凡例のスタイルを追加 |
+| `static/js/inventory-order-alert-list.js` | `renderShipmentTrendChart()` を2系列描画に拡張。`buildAnchoredStockTrend()`・`parseAnchorQty()`・`renderAnchoredStockChart()` を新設し `fillDetailSections()` から呼ぶ |
+| `static/css/app.css` | 入出荷推移グラフ区分・凡例のスタイル、推定在庫推移グラフ区分・ゼロ基準線のスタイルを追加 |
 | `docs/在庫発注アラート_機能仕様書.md` | §4.1.6（詳細ダイアログ）を改訂 |
 
 ### 7.3 削除するもの
@@ -285,6 +333,8 @@ renderShipmentTrendChart(shipmentTrendSection, shipmentTrend, incomingTrend);
 | `ship_qty` が負値（返品等） | 加工せずそのまま月次合計に含める（基幹の値を加工しない。03_mari-stock-visibility の MARI 在庫の方針を踏襲） |
 | 入荷推移の集計中に例外が発生した | 出荷推移と同じく取込全体を失敗させる |
 | `level1_item_cd` / `level1_vend_cd` が解決できない行 | `incoming_trend` は全月 0（該当キーなしとして扱う） |
+| 推定在庫推移の起点（SLIMS在庫数・MARI在庫数）が未取得 | 該当起点の系列を算出せず（`parseAnchorQty` が `null` を返す）、その系列を描画しない。両方未取得なら「算出できません」表示 |
+| 推定在庫推移の算出値がマイナスになる | クランプせずそのまま表示する（§1.5・§6.6。仕様どおりの挙動でありエラーではない） |
 
 ## 9. リスクと対策
 
@@ -296,6 +346,7 @@ renderShipmentTrendChart(shipmentTrendSection, shipmentTrend, incomingTrend);
 | R-4 | `aggregate_shipment_stats()` と本機能の月次集計が二重に全出荷明細を扱う | コードの重複（ロジックは別だが元データは同じ） | 許容する。`aggregate_shipment_stats()` 自体の変更はスコープ外とし、リスクを増やさない |
 | R-5 | 入荷推移のクエリ追加で Oracle 負荷が増える | 取込処理が遅くなる可能性 | `ACPT_DATE >= window_start`（直近24か月）で絞り込み、全件取得を避ける（§3.3） |
 | R-6 | `renderShipmentTrendChart` 等の識別子に "shipment" が残るが入荷も扱う | 命名と実態の不一致で将来のメンテナが混乱しうる | リネームコストと速度を天秤にかけ、識別子は据え置き見出し文言のみ「入出荷推移」に改めた。DECISIONS.md に明記 |
+| R-7 | 推定在庫推移は出荷・入荷以外の在庫変動（棚卸差異・生産消費・返品等）を反映しない近似値 | 実際の在庫推移と乖離し、利用者が誤って実測値と誤認する可能性 | 区分見出し・注記に「参考値」であることを明記する。判定（流動区分）には用いない（REQ-SHC-NF-004） |
 
 ---
 
@@ -314,3 +365,9 @@ renderShipmentTrendChart(shipmentTrendSection, shipmentTrend, incomingTrend);
 - **コンテキスト境界**: OK。`T_PAST_INSPC_ACPT` は既存の `fetch_last_incoming_by_item_vend()` が既に参照しているテーブルであり、新規テーブル参照ではない。
 - **性能**: OK。日付範囲で絞り込む設計とした（R-5）。実測はタスク実行時に行う。
 - **命名の妥協（R-6）**: 許容。関数名・クラス名は据え置き、ユーザー向け表示のみ「入出荷推移」に改めた。
+
+### 追記レビュー（推定在庫推移 V-218 追加分） (2026/09/03)
+
+- **性能・配信量**: OK。既に配信済みのデータ（出荷推移・入荷推移・在庫数）のみから算出するため、新規 Oracle 問い合わせ・配信データ増加ともになし（R-1 と同水準を維持）。
+- **判定への不使用**: OK。REQ-SHC-NF-004 に V-218 を追加し、判定に使わない付加情報である旨を明記した。
+- **実測との誤認防止**: 「参考値」である旨をユーザー承認済みの上で仕様に明記（R-7）。ユーザー自身の判断（マイナス値をそのまま見せる）を反映した。
