@@ -54,6 +54,58 @@ def test_TC_SHC_X_009_list_js_renders_dual_series_chart_with_legend():
     assert "ioa-shipment-trend-line--incoming" in chart_block or "incoming" in chart_block
 
 
+def test_TC_SHC_X_010_list_js_builds_anchored_stock_trend_from_last_index():
+    source = JS_PATH.read_text(encoding="utf-8")
+    func_block = source.split("function buildAnchoredStockTrend", 1)[1].split("\n  function ", 1)[0]
+
+    # 末尾要素（直近月）を起点値（anchorQty）とし、過去へ逆算する（design.md §6.6）。
+    assert "length - 1" in func_block
+    assert "anchorQty" in func_block
+
+
+def test_TC_SHC_X_011_list_js_parses_anchor_qty_strips_commas_and_returns_null():
+    source = JS_PATH.read_text(encoding="utf-8")
+    func_block = source.split("function parseAnchorQty", 1)[1].split("\n  function ", 1)[0]
+
+    assert "replace" in func_block
+    assert "null" in func_block
+
+
+def test_TC_SHC_X_012_list_js_renders_anchored_stock_chart_with_zero_baseline():
+    source = JS_PATH.read_text(encoding="utf-8")
+    func_block = source.split("function renderAnchoredStockChart", 1)[1].split("\n  function ", 1)[0]
+
+    # 0 を必ず範囲に含めるスケールでゼロ基準線を描く（design.md §6.6）。
+    assert "Math.min(0" in func_block
+
+
+def test_TC_SHC_X_013_anchored_stock_trend_is_not_clamped_to_zero():
+    source = JS_PATH.read_text(encoding="utf-8")
+    build_block = source.split("function buildAnchoredStockTrend", 1)[1].split("\n  function ", 1)[0]
+    render_block = source.split("function renderAnchoredStockChart", 1)[1].split("\n  function ", 1)[0]
+
+    # マイナスのまま表示する（クランプしない）合意事項（requirements.md §1.5）。
+    assert "Math.max(0," not in build_block
+    assert "Math.max(0," not in render_block
+
+
+def test_TC_SHC_X_014_fill_detail_sections_wires_anchored_stock_chart():
+    source = JS_PATH.read_text(encoding="utf-8")
+    fill_block = source.split("function fillDetailSections", 1)[1].split("async function openLocationDialog", 1)[0]
+
+    assert "buildAnchoredStockTrend(" in fill_block
+    assert "renderAnchoredStockChart(" in fill_block
+
+
+def test_TC_SHC_X_015_list_html_has_anchored_stock_trend_section():
+    template = (
+        Path(__file__).resolve().parents[3] / "templates" / "inventory_order_alert" / "list.html"
+    ).read_text(encoding="utf-8")
+
+    assert "ioa-detail-anchored-stock-trend-section" in template
+    assert "参考値" in template
+
+
 def test_inventory_order_alert_list_client_js_renders_sort_headers_as_links():
     source = CLIENT_JS_PATH.read_text(encoding="utf-8")
     assert "window.PortalListCore" in source

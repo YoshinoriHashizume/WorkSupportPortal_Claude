@@ -230,6 +230,7 @@
         stockMari: dialog.querySelector(".ioa-detail-stock-mari"),
     };
     const shipmentTrendSection = dialog.querySelector(".ioa-detail-shipment-trend-section");
+    const anchoredStockTrendSection = dialog.querySelector(".ioa-detail-anchored-stock-trend-section");
     const locationTableBody = dialog.querySelector(".ioa-location-table-body");
     const tableWrap = dialog.querySelector(".ioa-location-table-wrap");
     const emptyMessage = dialog.querySelector(".ioa-location-empty");
@@ -461,6 +462,146 @@
       container.append(legend);
     }
 
+    function parseAnchorQty(text) {
+      const trimmed = String(text || "").trim();
+      if (!trimmed) {
+        return null;
+      }
+      const normalized = trimmed.replace(/,/g, "");
+      const number = Number(normalized);
+      return Number.isFinite(number) ? number : null;
+    }
+
+    function buildAnchoredStockTrend(shipmentTrend, incomingTrend, anchorQty) {
+      if (anchorQty === null || !Array.isArray(shipmentTrend) || !shipmentTrend.length) {
+        return [];
+      }
+      const length = shipmentTrend.length;
+      const result = new Array(length);
+      result[length - 1] = { month: shipmentTrend[length - 1].month, qty: anchorQty };
+      for (let index = length - 2; index >= 0; index -= 1) {
+        const nextShipped = Number(shipmentTrend[index + 1]?.qty) || 0;
+        const nextReceived = Number(incomingTrend[index + 1]?.qty) || 0;
+        result[index] = {
+          month: shipmentTrend[index].month,
+          qty: result[index + 1].qty + nextShipped - nextReceived,
+        };
+      }
+      return result;
+    }
+
+    function renderAnchoredStockChart(sectionEl, slimsSeries, mariSeries) {
+      if (!sectionEl) {
+        return;
+      }
+      const container = sectionEl.querySelector(".ioa-detail-anchored-stock-trend-chart");
+      const emptyMessage = sectionEl.querySelector(".ioa-detail-anchored-stock-trend-empty");
+      if (!container) {
+        return;
+      }
+
+      const slims = Array.isArray(slimsSeries) ? slimsSeries : [];
+      const mari = Array.isArray(mariSeries) ? mariSeries : [];
+      container.innerHTML = "";
+      if (!slims.length && !mari.length) {
+        container.hidden = true;
+        if (emptyMessage) {
+          emptyMessage.hidden = false;
+        }
+        return;
+      }
+      container.hidden = false;
+      if (emptyMessage) {
+        emptyMessage.hidden = true;
+      }
+
+      const points = slims.length ? slims : mari;
+      const width = 560;
+      const height = 140;
+      const paddingLeft = 32;
+      const paddingTop = 8;
+      const paddingBottom = 20;
+      const plotWidth = width - paddingLeft - 8;
+      const plotHeight = height - paddingTop - paddingBottom;
+      // マイナスもそのまま表示するため、0 を必ず範囲に含めてゼロ基準線を描けるようにする（design.md §6.6）。
+      const minQty = Math.min(0, ...slims.map((point) => Number(point.qty) || 0), ...mari.map((point) => Number(point.qty) || 0));
+      const maxQty = Math.max(1, ...slims.map((point) => Number(point.qty) || 0), ...mari.map((point) => Number(point.qty) || 0));
+      const valueRange = maxQty - minQty || 1;
+      const stepX = points.length > 1 ? plotWidth / (points.length - 1) : 0;
+
+      function coordsOf(index, qty) {
+        const x = paddingLeft + stepX * index;
+        const y = paddingTop + plotHeight - ((Number(qty) - minQty) / valueRange) * plotHeight;
+        return [x, y];
+      }
+
+      const svgNs = "http://www.w3.org/2000/svg";
+      const svg = document.createElementNS(svgNs, "svg");
+      svg.setAttribute("viewBox", `0 0 ${width} ${height}`);
+      svg.setAttribute("class", "ioa-shipment-trend-svg");
+      svg.setAttribute("role", "img");
+      svg.setAttribute("aria-label", "推定在庫推移（参考値）");
+
+      const [, zeroY] = coordsOf(0, 0);
+      const zeroLine = document.createElementNS(svgNs, "line");
+      zeroLine.setAttribute("x1", String(paddingLeft));
+      zeroLine.setAttribute("x2", String(width - 8));
+      zeroLine.setAttribute("y1", String(zeroY));
+      zeroLine.setAttribute("y2", String(zeroY));
+      zeroLine.setAttribute("class", "ioa-anchored-stock-trend-zero-line");
+      svg.append(zeroLine);
+
+      function drawSeries(seriesPoints, lineClass, pointClass, label) {
+        if (!seriesPoints.length) {
+          return;
+        }
+        const linePoints = seriesPoints.map((point, index) => coordsOf(index, point.qty).join(",")).join(" ");
+        const polyline = document.createElementNS(svgNs, "polyline");
+        polyline.setAttribute("points", linePoints);
+        polyline.setAttribute("class", lineClass);
+        svg.append(polyline);
+
+        seriesPoints.forEach((point, index) => {
+          const [x, y] = coordsOf(index, point.qty);
+          const circle = document.createElementNS(svgNs, "circle");
+          circle.setAttribute("cx", String(x));
+          circle.setAttribute("cy", String(y));
+          circle.setAttribute("r", "2");
+          circle.setAttribute("class", pointClass);
+          const title = document.createElementNS(svgNs, "title");
+          title.textContent = `${label} ${point.month}: ${point.qty}`;
+          circle.append(title);
+          svg.append(circle);
+        });
+      }
+
+      drawSeries(slims, "ioa-anchored-stock-trend-line ioa-anchored-stock-trend-line--slims", "ioa-anchored-stock-trend-point ioa-anchored-stock-trend-point--slims", "SLIMS起点");
+      drawSeries(mari, "ioa-anchored-stock-trend-line ioa-anchored-stock-trend-line--mari", "ioa-anchored-stock-trend-point ioa-anchored-stock-trend-point--mari", "MARI起点");
+
+      points.forEach((point, index) => {
+        if (index % 4 === 0 || index === points.length - 1) {
+          const [x] = coordsOf(index, minQty);
+          const label = document.createElementNS(svgNs, "text");
+          label.setAttribute("x", String(x));
+          label.setAttribute("y", String(height - 4));
+          label.setAttribute("class", "ioa-shipment-trend-axis-label");
+          label.textContent = String(point.month || "").slice(2).replace("-", "/");
+          svg.append(label);
+        }
+      });
+
+      container.append(svg);
+
+      const legend = document.createElement("div");
+      legend.className = "ioa-shipment-trend-legend";
+      legend.innerHTML =
+        '<span class="ioa-anchored-stock-trend-legend-item ioa-anchored-stock-trend-legend-item--slims">SLIMS起点</span>' +
+        (mari.length
+          ? '<span class="ioa-anchored-stock-trend-legend-item ioa-anchored-stock-trend-legend-item--mari">MARI起点</span>'
+          : "");
+      container.append(legend);
+    }
+
     function fillDetailSections(row) {
       const custCode = row.dataset.custCode || "";
       const custName = row.dataset.custName || "";
@@ -487,6 +628,12 @@
       const shipmentTrend = listClient?.getShipmentTrend?.(custCode, row.dataset.itemCd || "") || [];
       const incomingTrend = listClient?.getIncomingTrend?.(custCode, row.dataset.itemCd || "") || [];
       renderShipmentTrendChart(shipmentTrendSection, shipmentTrend, incomingTrend);
+
+      const slimsAnchor = parseAnchorQty(row.dataset.stockQty);
+      const mariAnchor = parseAnchorQty(row.dataset.mariStockQty);
+      const slimsAnchoredTrend = buildAnchoredStockTrend(shipmentTrend, incomingTrend, slimsAnchor);
+      const mariAnchoredTrend = buildAnchoredStockTrend(shipmentTrend, incomingTrend, mariAnchor);
+      renderAnchoredStockChart(anchoredStockTrendSection, slimsAnchoredTrend, mariAnchoredTrend);
     }
 
     async function openLocationDialog(row) {

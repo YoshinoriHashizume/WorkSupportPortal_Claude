@@ -1751,9 +1751,14 @@ body.inventory-order-alert-page .ioa-detail-item-section,
 body.inventory-order-alert-page .ioa-detail-flow-section,
 body.inventory-order-alert-page .ioa-detail-stock-section,
 body.inventory-order-alert-page .ioa-detail-shipment-trend-section,
+body.inventory-order-alert-page .ioa-detail-anchored-stock-trend-section,
 body.inventory-order-alert-page .ioa-detail-memo-section {
   display: grid;
   gap: 8px;
+}
+body.inventory-order-alert-page .ioa-detail-section-note {
+  margin: 0;
+  font-size: 12px;
 }
 body.inventory-order-alert-page .ioa-detail-shipment-trend-chart {
   width: 100%;
@@ -1804,6 +1809,47 @@ body.inventory-order-alert-page .ioa-shipment-trend-legend-item::before {
 }
 body.inventory-order-alert-page .ioa-shipment-trend-legend-item--incoming::before {
   background: #ea580c;
+}
+body.inventory-order-alert-page .ioa-detail-anchored-stock-trend-chart {
+  width: 100%;
+}
+body.inventory-order-alert-page .ioa-anchored-stock-trend-zero-line {
+  stroke: #94a3b8;
+  stroke-width: 1;
+  stroke-dasharray: 3 3;
+}
+body.inventory-order-alert-page .ioa-anchored-stock-trend-line {
+  fill: none;
+  stroke-width: 1.5;
+}
+body.inventory-order-alert-page .ioa-anchored-stock-trend-line--slims {
+  stroke: #4f46e5;
+}
+body.inventory-order-alert-page .ioa-anchored-stock-trend-line--mari {
+  stroke: #16a34a;
+}
+body.inventory-order-alert-page .ioa-anchored-stock-trend-point--slims {
+  fill: #4f46e5;
+}
+body.inventory-order-alert-page .ioa-anchored-stock-trend-point--mari {
+  fill: #16a34a;
+}
+body.inventory-order-alert-page .ioa-anchored-stock-trend-legend-item {
+  position: relative;
+  padding-left: 16px;
+}
+body.inventory-order-alert-page .ioa-anchored-stock-trend-legend-item::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 50%;
+  width: 10px;
+  height: 2px;
+  transform: translateY(-50%);
+  background: #4f46e5;
+}
+body.inventory-order-alert-page .ioa-anchored-stock-trend-legend-item--mari::before {
+  background: #16a34a;
 }
 body.inventory-order-alert-page .ioa-detail-section-subtitle {
   margin: 4px 0 0;
