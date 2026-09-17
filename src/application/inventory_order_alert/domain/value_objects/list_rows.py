@@ -10,12 +10,16 @@ from application.inventory_order_alert.domain.value_objects.flow_quadrant import
     QUADRANT_NORMAL_FLOW,
     RESPONSIBLE_DEPARTMENT_SEPARATOR,
     flow_quadrant_sort_rank,
-    format_responsible_departments,
     is_no_incoming_record,
     resolve_flow_quadrant,
     resolve_flow_quadrant_matrix,
 )
 from application.inventory_order_alert.domain.value_objects.list_query import ListQuery
+from application.inventory_order_alert.domain.value_objects.recommended_action import (
+    DEFAULT_RECOMMENDED_ACTIONS,
+    RecommendedActions,
+    render_status,
+)
 from application.inventory_order_alert.domain.value_objects.slims_stock import SlimsStockLocationLine
 from application.inventory_order_alert.domain.value_objects.stock_join import attach_stock_fields
 
@@ -36,11 +40,13 @@ def apply_flow_quadrants_to_rows(
     *,
     as_of_date: date,
     query: ListQuery,
+    recommended_actions: RecommendedActions = DEFAULT_RECOMMENDED_ACTIONS,
 ) -> list[dict[str, object]]:
-    """行に流動区分（S-203）と副次情報を付与する。
+    """行に流動区分（S-203）・状況・推奨アクション（T-207）・責任部署（R-201）を付与する。
 
-    判定条件6値ぶんの結果（`flow_quadrants`）も併せて持たせ、判定軸・判定期間の切り替えを
-    クライアント側で再判定なしに行えるようにする（design.md §3.2 案B）。
+    判定期間 3 値ぶんの結果（`flow_quadrants`、キー Y1/Y3/Y5）も併せて持たせ、判定期間の切り替えを
+    クライアント側で再判定なしに行えるようにする（05 design §3.1）。
+    状況（`flow_status`）は選択中の判定期間で描画した文字列。通常流動品は状況・推奨アクションとも空。
     """
     selection = query.flow_selection
     enriched: list[dict[str, object]] = []
@@ -54,6 +60,8 @@ def apply_flow_quadrants_to_rows(
             as_of_date=as_of_date,
             selection=selection,
         )
+        no_incoming_record = is_no_incoming_record(last_incoming)
+        recommended = recommended_actions.for_quadrant(quadrant)
         copied["flow_quadrant"] = quadrant
         copied["flow_quadrant_key"] = FLOW_QUADRANT_KEYS[quadrant]
         copied["flow_quadrants"] = resolve_flow_quadrant_matrix(
@@ -61,8 +69,16 @@ def apply_flow_quadrants_to_rows(
             last_ship,
             as_of_date=as_of_date,
         )
-        copied["no_incoming_record"] = is_no_incoming_record(last_incoming)
-        copied["responsible_department"] = format_responsible_departments(quadrant)
+        copied["no_incoming_record"] = no_incoming_record
+        copied["flow_status"] = render_status(
+            recommended,
+            period=selection.period,
+            last_incoming=str(copied.get("last_incoming_date") or ""),
+            last_ship=str(copied.get("last_ship_date") or ""),
+            no_incoming_record=no_incoming_record,
+        )
+        copied["recommended_action"] = recommended.action
+        copied["responsible_department"] = RESPONSIBLE_DEPARTMENT_SEPARATOR.join(recommended.departments)
         enriched.append(copied)
     return enriched
 
@@ -75,9 +91,15 @@ def enrich_summary_rows(
     stock_lines: list[SlimsStockLocationLine] | None = None,
     stock_as_of_date: date | None = None,
     confirmations: dict[tuple[str, str], ConfirmationRecord] | None = None,
+    recommended_actions: RecommendedActions = DEFAULT_RECOMMENDED_ACTIONS,
 ) -> list[dict[str, object]]:
     rows_with_stock = attach_stock_fields(rows, stock_lines, stock_as_of_date=stock_as_of_date)
-    enriched = apply_flow_quadrants_to_rows(rows_with_stock, as_of_date=as_of_date, query=query)
+    enriched = apply_flow_quadrants_to_rows(
+        rows_with_stock,
+        as_of_date=as_of_date,
+        query=query,
+        recommended_actions=recommended_actions,
+    )
     confirmation_map = confirmations if confirmations is not None else {}
     return attach_confirmation_fields(enriched, confirmation_map)
 

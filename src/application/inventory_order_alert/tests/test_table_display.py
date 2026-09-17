@@ -2,9 +2,9 @@ from __future__ import annotations
 
 from application.inventory_order_alert.domain.value_objects.flow_quadrant import (
     QUADRANT_DORMANT_STOCK,
-    QUADRANT_EXCESS_STOCK_RISK,
+    QUADRANT_LOW_FLOW_NO_SHIPMENT,
     QUADRANT_NORMAL_FLOW,
-    QUADRANT_SUPPLY_RISK,
+    QUADRANT_LOW_FLOW_NO_INCOMING,
     responsible_departments,
 )
 from application.inventory_order_alert.domain.value_objects.table_display import (
@@ -26,22 +26,22 @@ from application.inventory_order_alert.domain.value_objects.table_display import
 #: 緊急度ランクの逆順（通常流動品が先頭）。ソートで並べ替えられることを見るための入力順。
 QUADRANTS_IN_REVERSE_RANK = (
     QUADRANT_NORMAL_FLOW,
-    QUADRANT_EXCESS_STOCK_RISK,
+    QUADRANT_LOW_FLOW_NO_SHIPMENT,
     QUADRANT_DORMANT_STOCK,
-    QUADRANT_SUPPLY_RISK,
+    QUADRANT_LOW_FLOW_NO_INCOMING,
 )
 QUADRANTS_IN_RANK_ORDER = (
-    QUADRANT_SUPPLY_RISK,
+    QUADRANT_LOW_FLOW_NO_INCOMING,
     QUADRANT_DORMANT_STOCK,
-    QUADRANT_EXCESS_STOCK_RISK,
+    QUADRANT_LOW_FLOW_NO_SHIPMENT,
     QUADRANT_NORMAL_FLOW,
 )
 #: 流動区分キー（ASCII）の辞書順。ランク順とは別物であることを D-106 で確かめる。
 QUADRANTS_IN_KEY_ORDER = (
     QUADRANT_DORMANT_STOCK,
-    QUADRANT_EXCESS_STOCK_RISK,
+    QUADRANT_LOW_FLOW_NO_SHIPMENT,
     QUADRANT_NORMAL_FLOW,
-    QUADRANT_SUPPLY_RISK,
+    QUADRANT_LOW_FLOW_NO_INCOMING,
 )
 
 
@@ -166,16 +166,16 @@ def test_sort_summary_rows_uses_rank_not_label_collation():
     sorted_rows = sort_rows_legacy(rows, sort="flow_quadrant", direction="asc")
 
     assert [row["flow_quadrant"] for row in sorted_rows] != list(QUADRANTS_IN_KEY_ORDER)
-    assert sorted_rows[0]["flow_quadrant"] == QUADRANT_SUPPLY_RISK
+    assert sorted_rows[0]["flow_quadrant"] == QUADRANT_LOW_FLOW_NO_INCOMING
 
 
 def test_sort_summary_rows_supports_flow_quadrant_in_five_key_multi_sort():
     rows = [
-        _quadrant_row(QUADRANT_SUPPLY_RISK, cust_code="100", item_cd="A", post_shipment_count=5, stock_qty="10"),
-        _quadrant_row(QUADRANT_SUPPLY_RISK, cust_code="100", item_cd="A", post_shipment_count=5, stock_qty="20"),
-        _quadrant_row(QUADRANT_SUPPLY_RISK, cust_code="100", item_cd="A", post_shipment_count=9, stock_qty="1"),
-        _quadrant_row(QUADRANT_SUPPLY_RISK, cust_code="100", item_cd="B", post_shipment_count=1, stock_qty="1"),
-        _quadrant_row(QUADRANT_SUPPLY_RISK, cust_code="200", item_cd="A", post_shipment_count=1, stock_qty="1"),
+        _quadrant_row(QUADRANT_LOW_FLOW_NO_INCOMING, cust_code="100", item_cd="A", post_shipment_count=5, stock_qty="10"),
+        _quadrant_row(QUADRANT_LOW_FLOW_NO_INCOMING, cust_code="100", item_cd="A", post_shipment_count=5, stock_qty="20"),
+        _quadrant_row(QUADRANT_LOW_FLOW_NO_INCOMING, cust_code="100", item_cd="A", post_shipment_count=9, stock_qty="1"),
+        _quadrant_row(QUADRANT_LOW_FLOW_NO_INCOMING, cust_code="100", item_cd="B", post_shipment_count=1, stock_qty="1"),
+        _quadrant_row(QUADRANT_LOW_FLOW_NO_INCOMING, cust_code="200", item_cd="A", post_shipment_count=1, stock_qty="1"),
         _quadrant_row(QUADRANT_NORMAL_FLOW, cust_code="100", item_cd="A", post_shipment_count=1, stock_qty="1"),
     ]
 
@@ -194,11 +194,11 @@ def test_sort_summary_rows_supports_flow_quadrant_in_five_key_multi_sort():
         (row["flow_quadrant"], row["cust_code"], row["item_cd"], row["post_shipment_count"], row["stock_qty"])
         for row in sorted_rows
     ] == [
-        (QUADRANT_SUPPLY_RISK, "100", "A", 9, "1"),
-        (QUADRANT_SUPPLY_RISK, "100", "A", 5, "20"),
-        (QUADRANT_SUPPLY_RISK, "100", "A", 5, "10"),
-        (QUADRANT_SUPPLY_RISK, "100", "B", 1, "1"),
-        (QUADRANT_SUPPLY_RISK, "200", "A", 1, "1"),
+        (QUADRANT_LOW_FLOW_NO_INCOMING, "100", "A", 9, "1"),
+        (QUADRANT_LOW_FLOW_NO_INCOMING, "100", "A", 5, "20"),
+        (QUADRANT_LOW_FLOW_NO_INCOMING, "100", "A", 5, "10"),
+        (QUADRANT_LOW_FLOW_NO_INCOMING, "100", "B", 1, "1"),
+        (QUADRANT_LOW_FLOW_NO_INCOMING, "200", "A", 1, "1"),
         (QUADRANT_NORMAL_FLOW, "100", "A", 1, "1"),
     ]
 
@@ -296,20 +296,20 @@ def test_sort_rows_by_last_incoming_date_puts_empty_last_in_desc():
 def test_apply_table_display_sorts_then_paginates():
     rows = [
         _quadrant_row(QUADRANT_NORMAL_FLOW, post_shipment_total_qty=1),
-        _quadrant_row(QUADRANT_SUPPLY_RISK, post_shipment_total_qty=99),
+        _quadrant_row(QUADRANT_LOW_FLOW_NO_INCOMING, post_shipment_total_qty=99),
         _quadrant_row(QUADRANT_DORMANT_STOCK, post_shipment_total_qty=50),
     ]
     params = _params(sort_specs=(SortSpec("flow_quadrant", "asc"),), page=1, page_size=2)
     paginated = apply_table_display(rows, params)
-    assert [row["flow_quadrant"] for row in paginated.rows] == [QUADRANT_SUPPLY_RISK, QUADRANT_DORMANT_STOCK]
+    assert [row["flow_quadrant"] for row in paginated.rows] == [QUADRANT_LOW_FLOW_NO_INCOMING, QUADRANT_DORMANT_STOCK]
     assert paginated.total_pages == 2
 
 
 def test_sort_rows_by_flow_quadrant_uses_cust_code_and_item_cd_as_tiebreakers():
     rows = [
-        _quadrant_row(QUADRANT_SUPPLY_RISK, cust_code="200", item_cd="ITEM-B"),
-        _quadrant_row(QUADRANT_SUPPLY_RISK, cust_code="100", item_cd="ITEM-B"),
-        _quadrant_row(QUADRANT_SUPPLY_RISK, cust_code="100", item_cd="ITEM-A"),
+        _quadrant_row(QUADRANT_LOW_FLOW_NO_INCOMING, cust_code="200", item_cd="ITEM-B"),
+        _quadrant_row(QUADRANT_LOW_FLOW_NO_INCOMING, cust_code="100", item_cd="ITEM-B"),
+        _quadrant_row(QUADRANT_LOW_FLOW_NO_INCOMING, cust_code="100", item_cd="ITEM-A"),
     ]
     sorted_rows = sort_rows_legacy(rows, sort="flow_quadrant", direction="asc")
     assert [row["item_cd"] for row in sorted_rows] == ["ITEM-A", "ITEM-B", "ITEM-B"]
@@ -332,3 +332,49 @@ def test_sort_rows_by_confirmation_status_uses_logical_order():
     assert [row["item_cd"] for row in sorted_rows] == ["B", "C", "A"]
     sorted_rows_desc = sort_rows_legacy(rows, sort="confirmation_status", direction="desc")
     assert [row["item_cd"] for row in sorted_rows_desc] == ["A", "C", "B"]
+
+
+# --- 05_single-flow-view 第 2 段階: TC-SFV-D-059 在庫月数ソート（空は末尾） ---
+
+from application.inventory_order_alert.domain.value_objects.table_display import (  # noqa: E402
+    SORT_ONLY_COLUMNS,
+    SORTABLE_KEYS,
+    sort_rows,
+    sort_spec_label,
+)
+
+
+def _months_row(months_of_stock: float | None, item_cd: str) -> dict[str, object]:
+    return {"cust_code": "100", "item_cd": item_cd, "months_of_stock": months_of_stock}
+
+
+def test_d059_months_of_stock_sort_asc_puts_none_last():
+    rows = [_months_row(3.0, "A"), _months_row(None, "B"), _months_row(0.5, "C")]
+
+    ordered = sort_rows(rows, sort_specs=(SortSpec("months_of_stock", "asc"),))
+
+    assert [row["months_of_stock"] for row in ordered] == [0.5, 3.0, None]
+
+
+def test_d059_months_of_stock_sort_desc_puts_none_last():
+    rows = [_months_row(3.0, "A"), _months_row(None, "B"), _months_row(0.5, "C")]
+
+    ordered = sort_rows(rows, sort_specs=(SortSpec("months_of_stock", "desc"),))
+
+    assert [row["months_of_stock"] for row in ordered] == [3.0, 0.5, None]
+
+
+def test_d059_months_of_stock_missing_key_is_treated_as_none():
+    rows = [{"cust_code": "100", "item_cd": "A"}, _months_row(1.0, "B")]
+
+    ordered = sort_rows(rows, sort_specs=(SortSpec("months_of_stock", "asc"),))
+
+    assert [row["item_cd"] for row in ordered] == ["B", "A"]
+
+
+def test_d059_months_of_stock_is_sortable_but_not_a_table_column():
+    assert SORT_ONLY_COLUMNS == (("months_of_stock", "在庫月数"),)
+    assert "months_of_stock" in SORTABLE_KEYS
+    assert "months_of_stock" not in [column for column, _label in SORTABLE_COLUMNS]
+    assert parse_sort_specs({"sort": "months_of_stock", "dir": "asc"}) == (SortSpec("months_of_stock", "asc"),)
+    assert sort_spec_label(SortSpec("months_of_stock", "desc")) == "在庫月数（降順）"

@@ -15,6 +15,7 @@ from application.inventory_order_alert.use_cases.summary_api import (
     SummaryApi,
     Vendors,
 )
+from application.inventory_order_alert.infrastructure.config.recommended_actions import load_recommended_actions
 from application.inventory_order_alert.infrastructure.oracle.list_rows_builder import ListQuery, build_list_rows
 from application.inventory_order_alert.infrastructure.persistence.confirmation_repository import (
     add_confirmation_memo,
@@ -49,6 +50,7 @@ def list_page_usecase() -> ListPage:
         import_stock_usecase(),
         load_latest_summary,
         load_app_settings,
+        recommended_actions=load_recommended_actions(),
     )
 
 
@@ -78,7 +80,7 @@ def app_settings_usecase() -> AppSettingsUseCase:
 
 
 def export_csv_usecase() -> ExportCsv:
-    return ExportCsv(load_latest_summary)
+    return ExportCsv(load_latest_summary, recommended_actions=load_recommended_actions())
 
 
 def portal_dashboard_usecase() -> PortalDashboard:

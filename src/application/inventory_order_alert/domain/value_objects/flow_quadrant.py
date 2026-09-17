@@ -1,4 +1,8 @@
-"""流動区分（S-203）と判定条件（判定軸 V-210 × 判定期間 V-211）のドメイン定義。"""
+"""流動区分（S-203）と判定期間（V-211）のドメイン定義。
+
+05_single-flow-view（2026-09）で判定軸（V-210）を廃止し、判定期間を 1/3/5 年に一本化した。
+流動区分は 低流動品（入荷なし）/ 在庫死蔵品 / 低流動品（出荷なし）/ 通常流動品 の 4 値。
+"""
 
 from __future__ import annotations
 
@@ -7,71 +11,56 @@ from datetime import date
 
 from application.inventory_order_alert.domain.value_objects.dates import add_calendar_months
 
-# --- 判定軸（V-210） ---
-
-FLOW_AXIS_LOW_FLOW = "low_flow"
-FLOW_AXIS_DORMANT = "dormant"
-
-FLOW_AXIS_LABELS = {
-    FLOW_AXIS_LOW_FLOW: "低流動判定軸",
-    FLOW_AXIS_DORMANT: "死蔵判定軸",
-}
-
-#: 判定軸ごとの補助テキスト（design.md §6.6.6）
-FLOW_AXIS_HELP_TEXTS = {
-    FLOW_AXIS_LOW_FLOW: "判定期間内に入出荷のない品目（低流動品）を洗い出します",
-    FLOW_AXIS_DORMANT: "長期にわたり動きのない品目（在庫死蔵品）を洗い出します",
-}
-
-DEFAULT_FLOW_AXIS = FLOW_AXIS_LOW_FLOW
-
-DEFAULT_LOW_FLOW_VALUE = 3
-DEFAULT_DORMANT_VALUE = 1
-
-
 # --- 判定期間（V-211） ---
+
+#: 選択できる判定期間（年）。固定 3 値。
+EVALUATION_PERIOD_YEARS = (1, 3, 5)
 
 
 @dataclass(frozen=True)
 class EvaluationPeriod:
-    axis: str
-    value: int
+    """判定期間（V-211）。入荷または出荷が止まってから「対応が必要」と判断するまでの年数。"""
+
+    years: int
+
+    def __post_init__(self) -> None:
+        if self.years not in EVALUATION_PERIOD_YEARS:
+            raise ValueError(f"判定期間は {EVALUATION_PERIOD_YEARS} 年のいずれか: {self.years}")
 
     @property
     def months(self) -> int:
-        if self.axis == FLOW_AXIS_DORMANT:
-            return self.value * 12
-        return self.value
+        return self.years * 12
 
     @property
     def key(self) -> str:
-        prefix = "D" if self.axis == FLOW_AXIS_DORMANT else "L"
-        return f"{prefix}{self.value}"
+        """事前判定行列のキー・URL 値（例: `Y3`）。"""
+
+        return f"Y{self.years}"
 
     @property
     def label(self) -> str:
-        if self.axis == FLOW_AXIS_DORMANT:
-            return f"{self.value}年"
-        return f"{self.value}か月"
+        return f"{self.years}年"
 
 
 class EvaluationPeriods:
-    """選択可能な判定期間6値のファーストクラスコレクション。"""
+    """選択可能な判定期間 3 値のファーストクラスコレクション。"""
 
     def __init__(self, periods: tuple[EvaluationPeriod, ...]) -> None:
         self._periods = tuple(periods)
 
-    def for_axis(self, axis: str) -> tuple[EvaluationPeriod, ...]:
-        return tuple(period for period in self._periods if period.axis == axis)
-
-    def default_for_axis(self, axis: str) -> EvaluationPeriod:
-        if axis == FLOW_AXIS_DORMANT:
-            return EvaluationPeriod(FLOW_AXIS_DORMANT, DEFAULT_DORMANT_VALUE)
-        return EvaluationPeriod(FLOW_AXIS_LOW_FLOW, DEFAULT_LOW_FLOW_VALUE)
+    @property
+    def default(self) -> EvaluationPeriod:
+        return DEFAULT_EVALUATION_PERIOD
 
     def find(self, key: str) -> EvaluationPeriod | None:
         for period in self._periods:
             if period.key == key:
+                return period
+        return None
+
+    def find_by_years(self, years: int) -> EvaluationPeriod | None:
+        for period in self._periods:
+            if period.years == years:
                 return period
         return None
 
@@ -82,92 +71,79 @@ class EvaluationPeriods:
         return len(self._periods)
 
 
-EVALUATION_PERIODS = EvaluationPeriods(
-    (
-        EvaluationPeriod(FLOW_AXIS_LOW_FLOW, 1),
-        EvaluationPeriod(FLOW_AXIS_LOW_FLOW, 3),
-        EvaluationPeriod(FLOW_AXIS_LOW_FLOW, 6),
-        EvaluationPeriod(FLOW_AXIS_DORMANT, 1),
-        EvaluationPeriod(FLOW_AXIS_DORMANT, 2),
-        EvaluationPeriod(FLOW_AXIS_DORMANT, 5),
-    )
-)
+DEFAULT_EVALUATION_PERIOD = EvaluationPeriod(1)
+
+EVALUATION_PERIODS = EvaluationPeriods(tuple(EvaluationPeriod(years) for years in EVALUATION_PERIOD_YEARS))
 
 
 @dataclass(frozen=True)
 class FlowSelection:
-    """利用者が選択した判定条件（判定軸 × 判定期間）。"""
+    """利用者が選択した判定期間。"""
 
     period: EvaluationPeriod
-
-    @property
-    def axis(self) -> str:
-        return self.period.axis
 
     @property
     def key(self) -> str:
         return self.period.key
 
     @property
-    def axis_label(self) -> str:
-        return FLOW_AXIS_LABELS.get(self.period.axis, "")
-
-    @property
     def period_label(self) -> str:
         return self.period.label
 
 
-#: メニュー画面のアラート帯・確認記録の深刻化判定で使う固定基準（低流動判定軸・3か月）。
-REFERENCE_FLOW_SELECTION = FlowSelection(EvaluationPeriod(FLOW_AXIS_LOW_FLOW, DEFAULT_LOW_FLOW_VALUE))
+#: メニュー画面のアラート帯・深刻化による未確認化（A-201）で使う固定基準（既定の判定期間 1 年）。
+REFERENCE_FLOW_SELECTION = FlowSelection(DEFAULT_EVALUATION_PERIOD)
 
 
 # --- 流動区分（S-203） ---
 
-QUADRANT_SUPPLY_RISK = "供給リスク品"
+QUADRANT_LOW_FLOW_NO_INCOMING = "低流動品（入荷なし）"
 QUADRANT_DORMANT_STOCK = "在庫死蔵品"
-QUADRANT_EXCESS_STOCK_RISK = "在庫過剰リスク品"
+QUADRANT_LOW_FLOW_NO_SHIPMENT = "低流動品（出荷なし）"
 QUADRANT_NORMAL_FLOW = "通常流動品"
 
+#: CSS キー・URL 値・事前判定行列の値。
 FLOW_QUADRANT_KEYS = {
-    QUADRANT_SUPPLY_RISK: "supply-risk",
+    QUADRANT_LOW_FLOW_NO_INCOMING: "low-flow-no-incoming",
     QUADRANT_DORMANT_STOCK: "dormant-stock",
-    QUADRANT_EXCESS_STOCK_RISK: "excess-stock-risk",
+    QUADRANT_LOW_FLOW_NO_SHIPMENT: "low-flow-no-shipment",
     QUADRANT_NORMAL_FLOW: "normal-flow",
 }
 
 FLOW_QUADRANT_LABELS = {key: label for label, key in FLOW_QUADRANT_KEYS.items()}
 
+#: ランク（深刻度・並び順）。数値が小さいほど深刻（S-203）。
 FLOW_QUADRANT_SORT_RANK = {
-    QUADRANT_SUPPLY_RISK: 0,
+    QUADRANT_LOW_FLOW_NO_INCOMING: 0,
     QUADRANT_DORMANT_STOCK: 1,
-    QUADRANT_EXCESS_STOCK_RISK: 2,
+    QUADRANT_LOW_FLOW_NO_SHIPMENT: 2,
     QUADRANT_NORMAL_FLOW: 3,
 }
 
-#: 対応の緊急度順に並べた流動区分。
+#: ランク順に並べた流動区分。
 FLOW_QUADRANTS = (
-    QUADRANT_SUPPLY_RISK,
+    QUADRANT_LOW_FLOW_NO_INCOMING,
     QUADRANT_DORMANT_STOCK,
-    QUADRANT_EXCESS_STOCK_RISK,
+    QUADRANT_LOW_FLOW_NO_SHIPMENT,
     QUADRANT_NORMAL_FLOW,
 )
 
 #: 責任部署（R-201）を1セルに収めるときの区切り。
 RESPONSIBLE_DEPARTMENT_SEPARATOR = "・"
 
-#: 流動区分ごとの責任部署（R-201）。
-RESPONSIBLE_DEPARTMENTS = {
-    QUADRANT_SUPPLY_RISK: ("調達G", "営業G", "生産管理"),
-    QUADRANT_DORMANT_STOCK: ("調達G",),
-    QUADRANT_EXCESS_STOCK_RISK: ("営業G",),
-    QUADRANT_NORMAL_FLOW: ("生産管理",),
-}
-
-#: 旧アラートレベル（別名を含む）から流動区分への互換写像（design.md §5.2）。
+#: 旧称・旧キー・旧アラートレベルから流動区分への互換写像。
+#: 確認記録（confirmed_flow_quadrant）・URL（flow_quadrant）・旧スナップショットの読込に用いる。
 LEGACY_QUADRANT_ALIASES = {
-    "重点": QUADRANT_SUPPLY_RISK,
-    "警告（出荷なし）": QUADRANT_EXCESS_STOCK_RISK,
-    "警告（入荷）": QUADRANT_EXCESS_STOCK_RISK,
+    # 2026-09-15 までの旧称（S-203）
+    "供給リスク品": QUADRANT_LOW_FLOW_NO_INCOMING,
+    "在庫過剰リスク品": QUADRANT_LOW_FLOW_NO_SHIPMENT,
+    # 旧 CSS キー・URL 値
+    "supply-risk": QUADRANT_LOW_FLOW_NO_INCOMING,
+    "excess-stock-risk": QUADRANT_LOW_FLOW_NO_SHIPMENT,
+    # 旧アラートレベル（S-202）
+    "重点": QUADRANT_LOW_FLOW_NO_INCOMING,
+    "警告（出荷なし）": QUADRANT_LOW_FLOW_NO_SHIPMENT,
+    "警告（入荷）": QUADRANT_LOW_FLOW_NO_SHIPMENT,
     "警告（出荷あり）": QUADRANT_NORMAL_FLOW,
     "警告（出荷）": QUADRANT_NORMAL_FLOW,
     "アラート無し": QUADRANT_NORMAL_FLOW,
@@ -198,14 +174,14 @@ def resolve_flow_quadrant(
     as_of_date: date,
     selection: FlowSelection,
 ) -> str:
-    """期間内入荷（V-212）／期間内出荷（V-213）の有無から流動区分を決める。"""
+    """期間内入荷（V-212）／期間内出荷（V-213）の有無から流動区分を決める。在庫数は用いない。"""
 
     months = selection.period.months
     has_incoming = is_within_evaluation_period(last_incoming_date, as_of_date=as_of_date, months=months)
     has_shipment = is_within_evaluation_period(last_ship_date, as_of_date=as_of_date, months=months)
     if not has_incoming:
-        return QUADRANT_SUPPLY_RISK if has_shipment else QUADRANT_DORMANT_STOCK
-    return QUADRANT_NORMAL_FLOW if has_shipment else QUADRANT_EXCESS_STOCK_RISK
+        return QUADRANT_LOW_FLOW_NO_INCOMING if has_shipment else QUADRANT_DORMANT_STOCK
+    return QUADRANT_NORMAL_FLOW if has_shipment else QUADRANT_LOW_FLOW_NO_SHIPMENT
 
 
 def resolve_flow_quadrant_matrix(
@@ -214,7 +190,7 @@ def resolve_flow_quadrant_matrix(
     *,
     as_of_date: date,
 ) -> dict[str, str]:
-    """判定期間6値すべてで判定し、判定期間キー → 流動区分キーの辞書を返す。"""
+    """判定期間 3 値すべてで判定し、判定期間キー（Y1/Y3/Y5）→ 流動区分キーの辞書を返す。"""
 
     return {
         period.key: FLOW_QUADRANT_KEYS[
@@ -230,24 +206,36 @@ def resolve_flow_quadrant_matrix(
 
 
 def normalize_flow_quadrant(value: str | None) -> str:
-    """流動区分ラベルを正規化する。旧アラートレベル・未知の値は安全側の通常流動品に寄せる。"""
+    """流動区分の値（ラベル・キー・旧称・旧アラートレベル）をラベルに正規化する。
+
+    未知の値は安全側の通常流動品に寄せる。
+    """
 
     text = str(value or "").strip()
     if text in FLOW_QUADRANT_KEYS:
         return text
+    if text in FLOW_QUADRANT_LABELS:
+        return FLOW_QUADRANT_LABELS[text]
     return LEGACY_QUADRANT_ALIASES.get(text, QUADRANT_NORMAL_FLOW)
 
 
 def flow_quadrant_sort_rank(quadrant: str) -> int:
-    """流動区分の並び順（0 が最優先）。"""
+    """流動区分のランク（0 が最も深刻）。"""
 
     return FLOW_QUADRANT_SORT_RANK[normalize_flow_quadrant(quadrant)]
 
 
 def responsible_departments(quadrant: str) -> tuple[str, ...]:
-    """流動区分に対応する責任部署（R-201）。未知の値は空タプル。"""
+    """流動区分に対応する責任部署（R-201）。定義表は推奨アクション（T-207）に置く。未知の値は空タプル。"""
 
-    return RESPONSIBLE_DEPARTMENTS.get(quadrant, ())
+    # recommended_action は本モジュールの定数を import するため、循環を避けて関数内で読み込む。
+    from application.inventory_order_alert.domain.value_objects.recommended_action import (
+        DEFAULT_RECOMMENDED_ACTIONS,
+    )
+
+    if quadrant not in FLOW_QUADRANT_KEYS:
+        return ()
+    return DEFAULT_RECOMMENDED_ACTIONS.for_quadrant(quadrant).departments
 
 
 def format_responsible_departments(quadrant: str) -> str:
@@ -257,6 +245,6 @@ def format_responsible_departments(quadrant: str) -> str:
 
 
 def is_flow_escalated(previous: str, current: str) -> bool:
-    """流動区分が前回より深刻化したか。"""
+    """流動区分が前回より深刻化したか（ランクが小さくなる方向）。A-201 の判定に用いる。"""
 
     return flow_quadrant_sort_rank(current) < flow_quadrant_sort_rank(previous)

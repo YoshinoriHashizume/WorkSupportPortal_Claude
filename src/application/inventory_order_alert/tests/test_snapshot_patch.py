@@ -7,7 +7,7 @@ from django.utils import timezone
 
 from application.inventory_order_alert.domain.value_objects.flow_quadrant import (
     QUADRANT_DORMANT_STOCK,
-    QUADRANT_SUPPLY_RISK,
+    QUADRANT_LOW_FLOW_NO_INCOMING,
 )
 from application.inventory_order_alert.domain.value_objects.snapshot_patch import parse_patch_date
 from application.inventory_order_alert.infrastructure.persistence.summary_snapshot_repository import store_summary_snapshot
@@ -64,7 +64,7 @@ def test_patch_snapshot_row_applies_flow_quadrant_with_reference_selection(monke
     assert result.previous_last_ship_date == "2024/06/01"
     assert result.new_last_ship_date == "2026/06/19"
     assert result.previous_flow_quadrant == QUADRANT_DORMANT_STOCK
-    assert result.new_flow_quadrant == QUADRANT_SUPPLY_RISK
+    assert result.new_flow_quadrant == QUADRANT_LOW_FLOW_NO_INCOMING
 
 
 @pytest.mark.django_db

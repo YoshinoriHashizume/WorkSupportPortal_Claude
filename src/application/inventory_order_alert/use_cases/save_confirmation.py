@@ -22,9 +22,9 @@ from application.inventory_order_alert.domain.value_objects.summary import Summa
 
 def _counts_to_response(counts: RowCounts) -> dict[str, int]:
     return {
-        "supplyRisk": counts.supply_risk,
+        "lowFlowNoIncoming": counts.low_flow_no_incoming,
         "dormantStock": counts.dormant_stock,
-        "excessStockRisk": counts.excess_stock_risk,
+        "lowFlowNoShipment": counts.low_flow_no_shipment,
         "normalFlow": counts.normal_flow,
         "attention": counts.attention,
         "unconfirmed": counts.unconfirmed,

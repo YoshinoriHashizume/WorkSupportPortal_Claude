@@ -14,6 +14,8 @@ class StockImportInfo:
     summary_row_count: int = 0
     aggregation_error: str = ""
     confirmation_reset_count: int = 0
+    #: 取込は成功したが一部の取得に失敗したときの警告（例: 内示受注の取得失敗。05 design §6.6、REQ-SFV-F-018）
+    aggregation_warning: str = ""
 
     @property
     def has_data(self) -> bool:

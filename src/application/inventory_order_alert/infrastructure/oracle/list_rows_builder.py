@@ -19,6 +19,7 @@ def build_list_rows(
     stock_lines: list[SlimsStockLocationLine] | None = None,
     stock_as_of_date=None,
     confirmations: dict[tuple[str, str], object] | None = None,
+    warnings: list[str] | None = None,
 ) -> list[dict[str, object]]:
     if stock_lines is None and slims_csv_text:
         stock_lines = parse_slims_stock_csv(slims_csv_text)
@@ -27,6 +28,7 @@ def build_list_rows(
     rows = build_summary_rows(
         connection,
         query.as_of_date,
+        warnings=warnings,
     )
     enriched = enrich_summary_rows(
         rows,

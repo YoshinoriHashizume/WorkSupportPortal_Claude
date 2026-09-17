@@ -137,7 +137,48 @@ Red → Green → Refactor。各実装タスクの直前にテスト作成タス
 | # | テストケース | 入力 | 期待結果 | 対応REQ-ID | 優先度 |
 |---|---|---|---|---|---|
 | TC-SHC-X-019 | `renderAnchoredStockChart` がMARI系列を扱わない | list.js ソース | 関数内に `mariSeries`／`ioa-anchored-stock-trend-line--mari`／`ioa-anchored-stock-trend-point--mari`／`ioa-anchored-stock-trend-legend-item--mari`／`MARI起点` のいずれも存在しない | REQ-SHC-F-006（改訂） | P1 |
-| TC-SHC-X-020 | `fillDetailSections` がMARI起点系列を算出しない | list.js ソース | `mariAnchor`／`mariAnchoredTrend` が存在せず、`renderAnchoredStockChart(anchoredStockTrendSection, slimsAnchoredTrend)` （引数1つ）で呼ばれる | REQ-SHC-F-006（改訂） | P1 |
+| TC-SHC-X-020 | `fillDetailSections` がMARI起点系列を算出しない | list.js ソース | `mariAnchor`／`mariAnchoredTrend` が存在せず、`renderAnchoredStockChart(anchoredStockTrendSection, slimsAnchoredTrend, incomingTrend)` で呼ばれる（2026/09/11 改訂: 入荷の棒を描くため第3引数 `incomingTrend` を追加。MARI**起点系列**を持たないことの検証は `mariAnchor`／`mariAnchoredTrend` の不在で担保する） | REQ-SHC-F-006（改訂） | P1 |
+
+#### 入荷実績の棒グラフ追加・0起点化（2026/09/11、DECISIONS.md ステージ12参照）
+
+| # | テストケース | 入力 | 期待結果 | 対応REQ-ID | 優先度 |
+|---|---|---|---|---|---|
+| TC-SHC-X-021 | 推定在庫推移グラフに入荷実績の棒を描画する | list.js ソース | `renderAnchoredStockChart` 内に `incomingSeries` 引数と `ioa-anchored-stock-trend-bar--incoming` クラス、矩形生成（`createElementNS(svgNs, "rect")`）が存在する | REQ-SHC-F-006（改訂） | P1 |
+| TC-SHC-X-022 | Y軸の値域に入荷数量を算入する | list.js ソース | `maxQty` の算出に入荷系列の qty が含まれる（`Math.max` の引数に入荷系列が渡る） | REQ-SHC-F-006（改訂） | P1 |
+| TC-SHC-X-023 | 凡例に入荷(MARI)を表示する | list.js ソース | 凡例生成部に `ioa-anchored-stock-trend-legend-item--incoming` と `入荷(MARI)` が存在する | REQ-SHC-F-006（改訂） | P2 |
+| TC-SHC-X-024 | 在庫数が「該当なし」（空）の行は 0 を起点に算出する | list.js ソース（`parseAnchorQty`） | 空文字に対して `0` を返す分岐が存在する（`STOCK_NOT_FETCHED` の `－` と区別する） | REQ-SHC-F-006（改訂） | P1 |
+| TC-SHC-X-025 | 在庫数が「未取得」（`－`）の行はグラフを表示しない | list.js ソース（`parseAnchorQty`） | `－` を含む非数値に対して `null` を返し、`buildAnchoredStockTrend` が空配列を返す経路が維持されている | REQ-SHC-F-006（改訂） | P1 |
+| TC-SHC-X-026 | 棒が折れ線より背面に描画される | list.js ソース | 棒の描画（`drawIncomingBars` 相当）の呼び出しが `drawSeries(` の呼び出しより前にある | REQ-SHC-F-006（改訂） | P2 |
+
+#### 5年9組への遷移ボタン（2026/09/11、DECISIONS.md ステージ13参照）
+
+| # | テストケース | 入力 | 期待結果 | 対応REQ-ID | 優先度 |
+|---|---|---|---|---|---|
+| TC-SHC-X-027 | 遷移ボタンが推定在庫推移グラフの下にある | 一覧ページHTML | `ioa-detail-gonen-link` が `ioa-detail-anchored-stock-trend-empty` より後、`ioa-detail-memo-section` より前に存在する | §6.7 | P1 |
+| TC-SHC-X-028 | 別タブで開く | 一覧ページHTML | リンクに `target="_blank"` と `rel="noopener"` が付与されている | §6.7 | P1 |
+| TC-SHC-X-029 | 遷移先は5年9組の検索結果ページ | list.js ソース | `/app/production/five-year-nine/result` を定数として持ち、`href` に設定している | §6.7 | P1 |
+| TC-SHC-X-030 | 検索条件を4パラメータで渡す | list.js ソース | `custCode`／`custItem`／`yearMonth`／`asOfDate` を `URLSearchParams` で組み立て、`optionChange` は渡さない | §6.7 | P1 |
+| TC-SHC-X-031 | 年月は今月・対象日付は今日（ローカル時刻） | list.js ソース | `getFullYear()`／`getMonth()`／`getDate()` から組み立て、`toISOString()` を使わない（UTC変換による前日・前月ずれの防止） | §6.7 | P1 |
+| TC-SHC-X-032 | 得意先コード・得意先品番が空の行ではリンクを隠す | list.js ソース | `hidden` の切り替えが `custCode` と `itemCd` の有無で行われる | §6.7 | P2 |
+
+#### 推定在庫推移の算出単位を得意先品番に変更（2026/09/11、DECISIONS.md ステージ14参照）
+
+| # | テストケース | 入力 | 期待結果 | 対応REQ-ID | 優先度 |
+|---|---|---|---|---|---|
+| TC-SHC-X-033 | 品番単位の合算アクセサが存在する | list-client.js ソース | `getItemTrends(itemCd)` が定義され、`shipmentTrend` と `incomingTrend` を返す | §6.6 | P1 |
+| TC-SHC-X-034 | 出荷は同一得意先品番の全行を合算する | list-client.js ソース | `allRows` を `item_cd` で絞り込み、`shipment_trend` を月ごとに加算している | §6.6 | P1 |
+| TC-SHC-X-035 | 入荷は内作品番×仕入先の重複を除いて合算する | list-client.js ソース | `level1_item_cd` と `level1_vend_cd` を組にした重複除去（`Set` 等）を経て `incoming_trend` を加算している | §6.6 | P1 |
+| TC-SHC-X-036 | 合算はフィルタ状態に依存しない | list-client.js ソース | 合算関数が `allRows` を参照し、`applyListFilters` の結果を参照していない | §6.6 | P1 |
+| TC-SHC-X-037 | 詳細ダイアログが合算値で逆算・棒描画する | list.js ソース | `fillDetailSections` が `getItemTrends(` を呼び、その結果を `buildAnchoredStockTrend` と `renderAnchoredStockChart` に渡している（`getShipmentTrend(` / `getIncomingTrend(` を推定在庫推移の算出に使わない） | §6.6 | P1 |
+| TC-SHC-X-038 | 実データでの効果 | 2026-09-07 取込スナップショット（2,298行） | マイナスを含む行が 443 行（19.3%、行単位）→ 240 行（10.4%、得意先品番単位）→ **210 行（9.1%、照合単位）** と減少し、94223-80600 と 96160-00500 のマイナスが解消する（手動検証・DECISIONS.md ステージ14・15に記録） | §6.6 | P2 |
+
+#### 算出単位を照合単位（連結成分）へ再改訂（2026/09/11、DECISIONS.md ステージ15参照）
+
+| # | テストケース | 入力 | 期待結果 | 対応REQ-ID | 優先度 |
+|---|---|---|---|---|---|
+| TC-SHC-X-039 | 照合単位を二部グラフの連結成分として作る | list-client.js ソース | Union-Find で辺（得意先品番 ―― 内作品番×仕入先）をつなぎ、成分ごとに合算している | §6.6 | P1 |
+| TC-SHC-X-040 | 起点は照合単位の在庫合計。未取得の扱いを維持 | list.js ソース（`sumUnitAnchorQty`） | 各品番に `parseAnchorQty` を適用して合算し、全品番が未取得（`null`）なら `null` を返す（グラフ非表示） | §6.6 | P1 |
+| TC-SHC-X-041 | 起点の内訳は複数品番の単位でのみ表示 | list.js ソース（`renderAnchorBreakdown`） | 品番が 2 件未満なら `hidden`、多い場合は先頭 `ANCHOR_BREAKDOWN_MAX_ITEMS` 件＋「他N品番」に丸める | §6.6 | P2 |
 
 ---
 

@@ -11,13 +11,38 @@ import pytest
 
 SRC_ROOT = Path(__file__).resolve().parents[3]
 
-#: 走査対象（tasks.md タスク70）。
+#: 走査対象（02 tasks.md タスク70、05 タスク19）。
 SCAN_TARGETS = (
     ("application/inventory_order_alert", (".py",)),
     ("static/js", (".js",)),
+    ("static/css", (".css",)),
     ("templates/inventory_order_alert", (".html",)),
+    ("templates/portal", (".html",)),
     ("scripts", (".py",)),
 )
+
+#: 05_single-flow-view で廃止した旧称・旧キー・判定軸（TC-SFV-D-025、F-019）。
+#: `flow_quadrant.py` は互換写像 `LEGACY_QUADRANT_ALIASES` として旧称・旧キーを持つため除外する。
+LEGACY_QUADRANT_TERMS = (
+    "供給リスク品",
+    "在庫過剰リスク品",
+    "supply-risk",
+    "excess-stock-risk",
+    "supply_risk",
+    "excess_stock_risk",
+    "supplyRisk",
+    "excessStockRisk",
+)
+LEGACY_AXIS_TERMS = (
+    "FLOW_AXIS",
+    "flowAxis",
+    "flow_axis_",
+    "低流動判定軸",
+    "死蔵判定軸",
+    "for_axis",
+    "default_for_axis",
+)
+LEGACY_ALIAS_HOLDER = "domain/value_objects/flow_quadrant.py"
 
 LEGACY_IDENTIFIERS = (
     "alert_level",
@@ -61,6 +86,39 @@ def test_legacy_alert_identifier_is_absent(identifier):
     ]
 
     assert hits == []
+
+
+@pytest.mark.parametrize("term", LEGACY_QUADRANT_TERMS)
+def test_legacy_quadrant_term_is_absent(term):
+    hits = [
+        str(path.relative_to(SRC_ROOT))
+        for path in _scanned_files()
+        if not str(path).replace("\\", "/").endswith(LEGACY_ALIAS_HOLDER)
+        and term in path.read_text(encoding="utf-8")
+    ]
+
+    assert hits == []
+
+
+@pytest.mark.parametrize("term", LEGACY_AXIS_TERMS)
+def test_legacy_axis_term_is_absent(term):
+    hits = [
+        str(path.relative_to(SRC_ROOT))
+        for path in _scanned_files()
+        if term in path.read_text(encoding="utf-8")
+    ]
+
+    assert hits == []
+
+
+def test_flow_quadrant_module_mentions_legacy_names_only_in_alias_map():
+    text = (SRC_ROOT / "application/inventory_order_alert" / LEGACY_ALIAS_HOLDER).read_text(encoding="utf-8")
+    start = text.index("LEGACY_QUADRANT_ALIASES = {")
+    end = text.index("}", start)
+    outside = text[:start] + text[end:]
+
+    for term in ("供給リスク品", "在庫過剰リスク品", "supply-risk", "excess-stock-risk"):
+        assert term not in outside
 
 
 def test_save_alert_settings_use_case_module_does_not_exist():

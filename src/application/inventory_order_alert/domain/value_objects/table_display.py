@@ -37,8 +37,12 @@ from application.inventory_order_alert.domain.value_objects.flow_quadrant import
     flow_quadrant_sort_rank,
 )
 VALID_DIRECTIONS = {"asc", "desc"}
-SORTABLE_KEYS = {column for column, _label in SORTABLE_COLUMNS}
-COLUMN_LABELS = dict(SORTABLE_COLUMNS)
+#: 一覧の列には出さないがソートできる項目（05 design §6.1）。在庫月数（V-222）は流動区分セルの緊急度行に表示する。
+SORT_ONLY_COLUMNS: tuple[tuple[str, str], ...] = (("months_of_stock", "在庫月数"),)
+#: 空（None・キーなし）を昇順・降順とも末尾に置く列。
+NULLS_LAST_COLUMNS = {"months_of_stock"}
+SORTABLE_KEYS = {column for column, _label in SORTABLE_COLUMNS} | {column for column, _label in SORT_ONLY_COLUMNS}
+COLUMN_LABELS = dict(SORTABLE_COLUMNS) | dict(SORT_ONLY_COLUMNS)
 
 
 @dataclass(frozen=True)
@@ -219,7 +223,23 @@ def _sort_value(row: dict[str, object], column: str) -> object:
         return numeric_code_sort_key(str(value or ""))
     if column == "confirmation_status":
         return confirmation_status_sort_key(row)
+    if column == "months_of_stock":
+        try:
+            return None if value is None or value == "" else float(value)
+        except (TypeError, ValueError):
+            return None
     return str(value or "").lower()
+
+
+def _sort_key(row: dict[str, object], spec: SortSpec) -> object:
+    value = _sort_value(row, spec.column)
+    if spec.column not in NULLS_LAST_COLUMNS:
+        return value
+    # 空は昇順でも降順でも末尾（TC-SFV-D-059）。reverse の向きに合わせて空の順位を反転させる
+    is_none = value is None
+    if spec.direction == "desc":
+        return (0 if is_none else 1, 0.0 if is_none else value)
+    return (1 if is_none else 0, 0.0 if is_none else value)
 
 
 def sort_rows(rows: list[dict[str, object]], *, sort_specs: tuple[SortSpec, ...]) -> list[dict[str, object]]:
@@ -232,7 +252,7 @@ def sort_rows(rows: list[dict[str, object]], *, sort_specs: tuple[SortSpec, ...]
     full_specs = sort_specs + tuple(spec for spec in tiebreakers if spec.column not in active_columns)
     for spec in reversed(full_specs):
         reverse = spec.direction == "desc"
-        sorted_rows.sort(key=lambda row: _sort_value(row, spec.column), reverse=reverse)
+        sorted_rows.sort(key=lambda row, spec=spec: _sort_key(row, spec), reverse=reverse)
     return sorted_rows
 
 

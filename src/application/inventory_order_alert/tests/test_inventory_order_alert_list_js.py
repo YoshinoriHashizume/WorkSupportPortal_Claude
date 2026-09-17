@@ -125,12 +125,80 @@ def test_TC_SHC_X_019_render_anchored_stock_chart_no_longer_takes_mari_series():
 
 
 def test_TC_SHC_X_020_fill_detail_sections_does_not_build_mari_anchored_trend():
+    """MARI 起点の系列は算出しない（撤去済み）。入荷推移は棒グラフ用に第3引数で渡す。"""
     source = JS_PATH.read_text(encoding="utf-8")
     fill_block = source.split("function fillDetailSections", 1)[1].split("async function openLocationDialog", 1)[0]
 
     assert "mariAnchor" not in fill_block
     assert "mariAnchoredTrend" not in fill_block
-    assert "renderAnchoredStockChart(anchoredStockTrendSection, slimsAnchoredTrend)" in fill_block
+    assert (
+        "renderAnchoredStockChart(anchoredStockTrendSection, slimsAnchoredTrend, incomingTrend)"
+        in fill_block
+    )
+
+
+def test_TC_SHC_X_021_render_anchored_stock_chart_draws_incoming_bars():
+    """入荷実績(V-217)を棒グラフとして重ねて描く（design.md §6.6）。"""
+    source = JS_PATH.read_text(encoding="utf-8")
+    render_block = source.split("function renderAnchoredStockChart", 1)[1].split(
+        "\n    function fillDetailSections", 1
+    )[0]
+
+    assert "incomingSeries" in render_block
+    assert 'createElementNS(svgNs, "rect")' in render_block
+    assert "ioa-anchored-stock-trend-bar--incoming" in render_block
+
+
+def test_TC_SHC_X_022_chart_scale_includes_incoming_quantities():
+    """入荷が推定在庫を上回る月でも棒が切れないよう、値域に入荷数量を算入する。"""
+    source = JS_PATH.read_text(encoding="utf-8")
+    render_block = source.split("function renderAnchoredStockChart", 1)[1].split(
+        "\n    function fillDetailSections", 1
+    )[0]
+
+    assert "incomingQtys" in render_block
+    assert "Math.max(1, ...slims.map((point) => Number(point.qty) || 0), ...incomingQtys)" in render_block
+
+
+def test_TC_SHC_X_023_legend_shows_incoming_item():
+    source = JS_PATH.read_text(encoding="utf-8")
+    render_block = source.split("function renderAnchoredStockChart", 1)[1].split(
+        "\n    function fillDetailSections", 1
+    )[0]
+
+    assert "ioa-anchored-stock-trend-legend-item--incoming" in render_block
+    assert "入荷(MARI)" in render_block
+
+
+def test_TC_SHC_X_024_parse_anchor_qty_treats_empty_stock_as_zero():
+    """在庫数が「該当なし」（空）の行は 0 を起点に履歴を描く（ユビキタス言語 V-218）。"""
+    source = JS_PATH.read_text(encoding="utf-8")
+    func_block = source.split("function parseAnchorQty", 1)[1].split("\n  function ", 1)[0]
+
+    # 空文字は 0 を返す（未取得の "－" は Number() が NaN になり null を返す）。
+    assert "if (!trimmed) {\n        return 0;\n      }" in func_block
+
+
+def test_TC_SHC_X_025_parse_anchor_qty_returns_null_for_not_fetched_marker():
+    """未取得（"－"）は SLIMS 未参照なので 0 起点にせず、グラフを出さない。"""
+    source = JS_PATH.read_text(encoding="utf-8")
+    func_block = source.split("function parseAnchorQty", 1)[1].split("\n  function ", 1)[0]
+    build_block = source.split("function buildAnchoredStockTrend", 1)[1].split("\n  function ", 1)[0]
+
+    assert "Number.isFinite(number) ? number : null" in func_block
+    # null の場合は空配列を返し、呼び出し側が「算出できません」を表示する経路が残っている。
+    assert "anchorQty === null" in build_block
+    assert "return [];" in build_block
+
+
+def test_TC_SHC_X_026_incoming_bars_are_drawn_behind_the_line():
+    """棒は折れ線より先に描画し、折れ線・データ点を隠さない（design.md §6.6）。"""
+    source = JS_PATH.read_text(encoding="utf-8")
+    render_block = source.split("function renderAnchoredStockChart", 1)[1].split(
+        "\n    function fillDetailSections", 1
+    )[0]
+
+    assert render_block.index("drawIncomingBars(incoming)") < render_block.index("drawSeries(slims,")
 
 
 def test_TC_SHC_X_015_list_html_has_anchored_stock_trend_section():
@@ -151,19 +219,76 @@ def test_inventory_order_alert_list_client_js_renders_sort_headers_as_links():
     assert "function renderTableHeaders()" not in source
 
 
-def test_inventory_order_alert_list_client_js_selects_flow_period_option_by_axis_and_value():
-    """判定期間の value は軸をまたいで重複する（低流動1か月＝死蔵1年＝どちらも "1"）。
-
-    select.value への代入は DOM 順で最初に一致した option（隠れていても）を選んでしまうため、
-    軸と value の両方が一致する option を明示的に選択しなければならない
-    （死蔵判定軸を選ぶと「1年」ではなく「1か月」と表示される不具合の再発防止）。
-    """
+def test_x017_list_client_js_state_has_period_key_and_no_axis():
+    """TC-SFV-X-017: 状態に flowAxis がなく、evaluationPeriods / periodKey で判定期間を扱う。"""
     source = CLIENT_JS_PATH.read_text(encoding="utf-8")
-    sync_block = source.split("function syncFlowSelector()", 1)[1].split("flowAxisSelect?.addEventListener", 1)[0]
 
-    assert "flowPeriodSelect.value = String(state.flowPeriod)" not in sync_block
-    assert "option.dataset.axis === state.flowAxis" in sync_block
-    assert "matchedOption.selected = true" in sync_block
+    assert "flowAxis" not in source
+    assert "flowPeriods" not in source
+    assert "resolveFlowPeriod(" not in source
+    assert "state.periodKey" in source
+    assert "payload.evaluationPeriods" in source
+    assert "payload.defaultPeriodKey" in source
+    assert '"#ioa-evaluation-period"' in source
+    assert '"#ioa-flow-axis"' not in source
+    assert '"#ioa-flow-period"' not in source
+
+
+def test_x017_list_client_js_reads_year_matrix_keys():
+    source = CLIENT_JS_PATH.read_text(encoding="utf-8")
+
+    assert 'DEFAULT_PERIOD_KEY = "Y1"' in source
+    assert '"low-flow-no-incoming": 0' in source
+    assert '"low-flow-no-shipment": 2' in source
+    assert "supply-risk" not in source
+    assert "excess-stock-risk" not in source
+
+
+def test_x018_list_client_js_renders_status_by_template_replacement_only():
+    """TC-SFV-X-018: 状況は recommendedActions.statusTemplate の置換だけで描き、日付比較を JS に持たない。"""
+    source = CLIENT_JS_PATH.read_text(encoding="utf-8")
+    block = source.split("function renderStatusText(", 1)[1].split("\n  }\n", 1)[0]
+
+    assert '.replace("{period}"' in block
+    assert '.replace("{last_incoming}"' in block
+    assert '.replace("{last_ship}"' in block
+    assert "payload.recommendedActions" in source
+    assert "statusTemplate" in source
+    # 判定条件（暦月の遡り比較）を JS に持たない。日付の生成は並び替えキー（dateSortKey）だけ
+    assert "addCalendarMonths" not in source
+    assert "is_within_evaluation_period" not in source
+    assert "months" not in block
+    assert "new Date(" not in block
+    status_and_cell = source.split("function flowStatusOf(", 1)[1].split("function renderTableBody(", 1)[0]
+    assert "new Date(" not in status_and_cell
+    # セルは 区分 / 状況 / 推奨アクション / 責任部署 の構成（05 design §6.3）
+    cell = source.split("function renderFlowCell(", 1)[1].split("function renderTableBody(", 1)[0]
+    for class_name in ("ioa-flow-cell", "ioa-flow-cell-head", "ioa-flow-quadrant", "ioa-no-incoming-badge", "ioa-flow-status", "ioa-flow-action", "ioa-flow-departments"):
+        assert class_name in cell
+    assert 'quadrantKey === QUADRANT_NORMAL_FLOW_KEY' in cell
+
+
+def test_x019_list_client_js_syncs_only_period_to_url():
+    """TC-SFV-X-019: URL 同期は period のみ。axis は書かない。"""
+    source = CLIENT_JS_PATH.read_text(encoding="utf-8")
+    block = source.split("function updateUrl()", 1)[1].split("function renderConfirmationSelect", 1)[0]
+
+    assert 'params.set("period"' in block
+    assert 'params.set("axis"' not in block
+    assert 'params.set("axis"' not in source
+
+
+def test_list_client_js_counts_use_new_quadrant_names():
+    source = CLIENT_JS_PATH.read_text(encoding="utf-8")
+
+    assert "lowFlowNoIncoming" in source
+    assert "lowFlowNoShipment" in source
+    assert "supplyRisk" not in source
+    assert "excessStockRisk" not in source
+    assert "低流動品（入荷なし）" in source
+    assert "低流動品（出荷なし）" in source
+    assert "供給リスク品" not in source
+    assert "在庫過剰リスク品" not in source
 
 
 def test_inventory_order_alert_list_client_js_sorts_confirmation_status_by_key_rank():
@@ -248,10 +373,14 @@ def test_inventory_order_alert_list_js_updates_table_counts_label():
     source = JS_PATH.read_text(encoding="utf-8")
     assert "ioa-table-counts-left" in source
     assert "ioa-table-counts-right" in source
-    assert "供給リスク品" in source
+    assert "低流動品（入荷なし）" in source
     assert "在庫死蔵品" in source
-    assert "在庫過剰リスク品" in source
+    assert "低流動品（出荷なし）" in source
     assert "通常流動品" in source
+    assert "供給リスク品" not in source
+    assert "在庫過剰リスク品" not in source
+    assert "counts.lowFlowNoIncoming" in source
+    assert "supplyRisk" not in source
     assert "全件数:" not in source
     assert "確認済み" in source
     # 確認状態リセットは設定画面（SCR-02）へ移した。一覧の JS には持たない。
@@ -316,7 +445,15 @@ def test_inventory_order_alert_list_js_fills_detail_dialog_sections():
     assert "ioa-detail-item" in block
     assert "ioa-detail-flow" in block
     assert "ioa-detail-department" in block
-    assert "ioa-detail-condition" in block
+    assert "ioa-detail-condition" not in block
+    # 05 design §6.4: 状況 / 推奨アクション / 判定期間
+    assert "ioa-detail-flow-status" in block
+    assert "ioa-detail-recommended-action" in block
+    assert "ioa-detail-evaluation-period" in block
+    assert "getFlowStatus" in block
+    assert "getRecommendedAction" in block
+    assert "getEvaluationPeriodLabel" in block
+    assert "getFlowConditionLabel" not in block
     assert "ioa-detail-stock-slims" in block
     assert "ioa-detail-stock-mari" in block
 
@@ -329,7 +466,8 @@ def test_inventory_order_alert_list_js_import_overlay_has_spinner_css():
 
 
     css = (Path(__file__).resolve().parents[3] / "static" / "css" / "app.css").read_text(encoding="utf-8")
-    assert "body.inventory-order-alert-page .ioa-alert-rules-dialog {\n  width: min(480px" in css
+    assert "body.inventory-order-alert-page .ioa-alert-rules-dialog {\n" in css
+    assert "width: min(900px" in css
     assert "body.inventory-order-alert-page .ioa-location-dialog {\n  width: min(960px" in css
     assert "body.inventory-order-alert-page .ioa-detail-memo-col-at {\n  width: 140px" in css
     assert "body.inventory-order-alert-page .ioa-detail-memo-col-by {\n  width: 100px" in css
@@ -337,9 +475,9 @@ def test_inventory_order_alert_list_js_import_overlay_has_spinner_css():
     table_rule = css.split("body.inventory-order-alert-page .ioa-alert-rules-table,")[1].split("}")[0]
     assert "ioa-location-table" in table_rule
     assert "ioa-alert-rules-color-swatch" in css
-    assert "td:last-child" not in css.split("ioa-alert-rules-row--supply-risk")[1].split("ioa-alert-rules-actions", 1)[0]
+    assert "td:last-child" not in css.split("ioa-alert-rules-row--low-flow-no-incoming")[1].split("ioa-alert-rules-actions", 1)[0]
     shared_block = css.split("/* ポータル共通: 一覧・判定ルールダイアログの行背景色", 1)[1]
-    assert "body.inventory-order-alert-page .ioa-alert-rules-row--supply-risk" in shared_block
+    assert "body.inventory-order-alert-page .ioa-alert-rules-row--low-flow-no-incoming" in shared_block
     assert ".shipment-trend-page .st-row-decrease-strong," in shared_block
 
 
@@ -412,3 +550,175 @@ def test_inventory_order_alert_list_client_js_resets_cust_code_on_chrg_change():
     chrg_block = source.split("custChrgSelect?.addEventListener", 1)[1].split("custCodeSelect?.addEventListener", 1)[0]
     assert "state.custCode" not in chrg_block
     assert chrg_block.count('""') >= 3
+
+
+def test_TC_SHC_X_029_gonen_link_points_to_five_year_nine_result_page():
+    """5年9組の検索結果ページを遷移先とする（design.md §6.7）。"""
+    source = JS_PATH.read_text(encoding="utf-8")
+
+    assert 'const GONEN_RESULT_PATH = "/app/production/five-year-nine/result"' in source
+    assert "gonenLink.href = `${GONEN_RESULT_PATH}?${params.toString()}`" in source
+
+
+def test_TC_SHC_X_030_gonen_link_passes_four_search_params():
+    """得意先コード・得意先品番・年月・対象日付を渡し、設変値は5年9組側の既定に委ねる。"""
+    source = JS_PATH.read_text(encoding="utf-8")
+    func_block = source.split("function updateGonenLink", 1)[1].split("\n    function ", 1)[0]
+
+    assert "new URLSearchParams({" in func_block
+    assert "custCode," in func_block
+    assert "custItem: itemCd," in func_block
+    assert "yearMonth: currentYearMonth()," in func_block
+    assert "asOfDate: todayIsoDate()," in func_block
+    assert "optionChange" not in func_block
+
+
+def test_TC_SHC_X_031_gonen_link_builds_dates_from_local_time():
+    """年月は今月・対象日付は今日。UTC変換で前日・前月にずれる toISOString() は使わない。"""
+    source = JS_PATH.read_text(encoding="utf-8")
+    ym_block = source.split("function currentYearMonth", 1)[1].split("\n    function ", 1)[0]
+    today_block = source.split("function todayIsoDate", 1)[1].split("\n    function ", 1)[0]
+
+    assert "now.getFullYear()" in ym_block
+    assert "now.getMonth() + 1" in ym_block
+    assert "now.getFullYear()" in today_block
+    assert "now.getDate()" in today_block
+    assert "toISOString" not in ym_block
+    assert "toISOString" not in today_block
+
+
+def test_TC_SHC_X_032_gonen_link_hidden_when_search_keys_are_missing():
+    """得意先コード・得意先品番のどちらかが欠けている行ではリンクを隠す。"""
+    source = JS_PATH.read_text(encoding="utf-8")
+    func_block = source.split("function updateGonenLink", 1)[1].split("\n    function ", 1)[0]
+
+    assert "const canSearch = Boolean(custCode && itemCd)" in func_block
+    assert "gonenLinkRow.hidden = !canSearch" in func_block
+
+
+def test_gonen_link_is_wired_from_fill_detail_sections():
+    source = JS_PATH.read_text(encoding="utf-8")
+    fill_block = source.split("function fillDetailSections", 1)[1].split("async function openLocationDialog", 1)[0]
+
+    assert 'updateGonenLink(custCode, row.dataset.itemCd || "")' in fill_block
+
+
+def test_TC_SHC_X_033_client_js_exposes_reconciliation_unit_trends_getter():
+    """推定在庫推移は照合単位（内作品番×仕入先を共有する得意先品番の集合）で合算する（design.md §6.6）。"""
+    source = CLIENT_JS_PATH.read_text(encoding="utf-8")
+    getter_block = source.split("getItemTrends(itemCd)", 1)[1].split("},", 1)[0]
+
+    assert "itemTrendsOf(itemCd)" in getter_block
+
+
+def test_TC_SHC_X_034_units_sum_shipments_across_all_rows_in_the_unit():
+    """出荷は行が (得意先, 得意先品番) で一意なので、照合単位の全行をそのまま合算する。"""
+    source = CLIENT_JS_PATH.read_text(encoding="utf-8")
+    func_block = source.split("function buildReconciliationUnits", 1)[1].split("\n    function ", 1)[0]
+
+    assert "unitRows.forEach((row) => sumTrendInto(shipmentTrend, row.shipment_trend))" in func_block
+
+
+def test_TC_SHC_X_035_units_deduplicate_incoming_by_level1_pair():
+    """入荷は (内作品番, 仕入先) 単位のため、同じ組を共有する行での重複計上を除く。"""
+    source = CLIENT_JS_PATH.read_text(encoding="utf-8")
+    func_block = source.split("function buildReconciliationUnits", 1)[1].split("\n    function ", 1)[0]
+
+    assert "const countedPairs = new Set()" in func_block
+    assert "countedPairs.has(key)" in func_block
+    assert "sumTrendInto(incomingTrend, row.incoming_trend)" in func_block
+
+
+def test_TC_SHC_X_036_units_ignore_the_current_list_filter():
+    """物理的な在庫・入荷は画面の絞り込みと無関係なので、未フィルタの全行で合算する。"""
+    source = CLIENT_JS_PATH.read_text(encoding="utf-8")
+    func_block = source.split("function buildReconciliationUnits", 1)[1].split("\n    function ", 1)[0]
+
+    assert "allRows.forEach" in func_block
+    assert "applyListFilters" not in func_block
+
+
+def test_TC_SHC_X_037_fill_detail_sections_uses_unit_level_trends_and_anchor():
+    """詳細ダイアログは照合単位の合算値と合算した起点で逆算・棒描画する。"""
+    source = JS_PATH.read_text(encoding="utf-8")
+    fill_block = source.split("function fillDetailSections", 1)[1].split("async function openLocationDialog", 1)[0]
+
+    assert 'getItemTrends?.(row.dataset.itemCd || "")' in fill_block
+    assert "itemTrends.shipmentTrend || []" in fill_block
+    assert "itemTrends.incomingTrend || []" in fill_block
+    assert "sumUnitAnchorQty(itemTrends.stocks, row.dataset.stockQty)" in fill_block
+    assert "renderAnchorBreakdown(itemTrends.stocks, slimsAnchor)" in fill_block
+    # 行単位のアクセサは推定在庫推移の算出には使わない（重複計上の原因だったため）。
+    assert "getShipmentTrend?.(" not in fill_block
+    assert "getIncomingTrend?.(" not in fill_block
+
+
+def test_TC_SHC_X_039_reconciliation_units_are_built_as_connected_components():
+    """得意先品番と (内作品番, 仕入先) を節点とする二部グラフの連結成分を単位とする。"""
+    source = CLIENT_JS_PATH.read_text(encoding="utf-8")
+    func_block = source.split("function buildReconciliationUnits", 1)[1].split("\n    function ", 1)[0]
+
+    # Union-Find で辺 (得意先品番 ―― 内作品番×仕入先) をつなぐ。
+    assert "allRows.forEach((row) => union(itemKeyOf(row), pairKeyOf(row)))" in func_block
+    assert "const union = (a, b)" in func_block
+
+
+def test_TC_SHC_X_040_anchor_sums_unit_stocks_and_keeps_not_fetched_rule():
+    """起点は照合単位の在庫合計。全品番が未取得なら算出しない（従来の非表示動作を維持）。"""
+    source = JS_PATH.read_text(encoding="utf-8")
+    func_block = source.split("function sumUnitAnchorQty", 1)[1].split("\n    // 照合単位が複数", 1)[0]
+
+    assert "parseAnchorQty(entry.stockDisplay)" in func_block
+    assert "return hasKnown ? total : null" in func_block
+
+
+def test_TC_SHC_X_041_anchor_breakdown_shown_only_for_multi_item_units():
+    """起点の内訳は複数品番の照合単位のときだけ表示し、品番が多い場合は丸める。"""
+    source = JS_PATH.read_text(encoding="utf-8")
+    func_block = source.split("function renderAnchorBreakdown", 1)[1].split("\n    // 5年9組", 1)[0]
+
+    assert "entries.length < 2" in func_block
+    assert "anchorBreakdown.hidden = true" in func_block
+    assert "ANCHOR_BREAKDOWN_MAX_ITEMS" in func_block
+    assert "他${rest}品番" in func_block
+
+
+# --- 05_single-flow-view 第 2 段階: TC-SFV-X-020 ---
+
+
+def test_x020_list_client_js_sorts_months_of_stock_with_empty_last():
+    source = CLIENT_JS_PATH.read_text(encoding="utf-8")
+    block = source.split("function monthsOfStockSortValue(", 1)[1].split("function sortValue(", 1)[0]
+
+    assert "monthsOfStock" in block
+    assert 'sortDirectionOf(state, "months_of_stock") === "desc"' in block
+    # 空は昇順・降順とも末尾: desc では [0, …]、asc では [1, …] を空に割り当てる
+    assert "isEmpty ? [0, 0] : [1, number]" in block
+    assert "isEmpty ? [1, 0] : [0, number]" in block
+    assert 'column === "months_of_stock"' in source
+    assert "payload.sortOnlyColumns" in source
+    assert "sortableColumns.concat(sortOnlyColumns)" in source
+
+
+def test_stage2_list_client_js_renders_urgency_only_when_forecast_exists():
+    source = CLIENT_JS_PATH.read_text(encoding="utf-8")
+    block = source.split("function urgencyTextOf(", 1)[1].split("function renderFlowCell(", 1)[0]
+
+    assert 'forecast.basis === "なし"' in block
+    assert "十分" in block
+    assert "に在庫切れ" in block
+    cell = source.split("function renderFlowCell(", 1)[1].split("function renderTableBody(", 1)[0]
+    assert "ioa-flow-urgency" in cell
+    assert "urgency ? `<div class=\"ioa-flow-urgency\">" in cell
+
+
+def test_stage2_list_js_fills_demand_forecast_section():
+    source = JS_PATH.read_text(encoding="utf-8")
+    block = source.split("function renderDemandForecast(", 1)[1].split("function updateGonenLink(", 1)[0]
+
+    for class_name in ("ioa-detail-demand-basis", "ioa-detail-months-of-stock", "ioa-detail-stockout-month"):
+        assert class_name in source
+    assert "getDemandForecast" in block
+    assert "getUnconfirmedOrderTrend" in block
+    assert "parseAnchorQty" in block
+    assert "renderDemandForecast(custCode, row.dataset.itemCd" in source

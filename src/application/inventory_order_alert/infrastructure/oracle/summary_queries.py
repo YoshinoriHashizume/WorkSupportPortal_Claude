@@ -2,11 +2,18 @@ from __future__ import annotations
 
 from datetime import date
 
-from application.sales.infrastructure.oracle.client import rows_as_dicts
+from application.sales.infrastructure.oracle.client import OracleQueryError, rows_as_dicts
 
 from application.inventory_order_alert.domain.value_objects.dates import add_calendar_months, to_date
 from application.inventory_order_alert.domain.value_objects.internal_item import resolve_cust_code, resolve_internal_item_cd
 from application.inventory_order_alert.domain.value_objects.shipment_trend import build_monthly_shipment_trend
+from application.inventory_order_alert.domain.value_objects.unconfirmed_order_trend import (
+    build_unconfirmed_order_trend,
+    unconfirmed_order_window_end,
+)
+
+#: 内示受注の取得に失敗したときの警告文の接頭辞（取込は失敗させない。05 design §6.6、REQ-SFV-F-018）。
+UNCONFIRMED_ORDER_FETCH_ERROR_PREFIX = "内示受注の取得に失敗"
 
 
 def chunked(items: list[str], size: int = 900) -> list[list[str]]:
@@ -337,6 +344,41 @@ def fetch_all_shipments(connection: object) -> list[tuple[str, str, date, int]]:
     return shipments
 
 
+def fetch_unconfirmed_orders(connection: object, *, as_of_date: date) -> list[tuple[str, str, date, int]]:
+    """(cust_code, internal_item_cd, required_date, qty) の内示受注明細を、基準日〜翌々々月末に絞って取得する（05 design §6.6）。
+
+    得意先品番への写像は SQL では行わず、行の `internal_item_cd`（既存の `internal_for()` の解決結果）で引く。
+    """
+    sql = """
+        SELECT TRIM(CUST_CD) AS CUST_CD,
+               TRIM(ITEM_CD) AS ITEM_CD,
+               UNCNFM_REQUIRED_DATE,
+               NVL(UNCNFM_REQUIRED_QTY, 0) AS QTY
+          FROM T_UNCNFM_ODR
+         WHERE DEL_FLG = '0'
+           AND UNCNFM_REQUIRED_DATE >= :as_of_date
+           AND UNCNFM_REQUIRED_DATE < :window_end
+    """
+    cursor = connection.cursor()
+    cursor.execute(sql, {"as_of_date": as_of_date, "window_end": unconfirmed_order_window_end(as_of_date)})
+    orders: list[tuple[str, str, date, int]] = []
+    for row in rows_as_dicts(cursor):
+        cust_code = str(row.get("cust_cd") or "").strip()
+        item_cd = str(row.get("item_cd") or "").strip()
+        required_date = to_date(row.get("uncnfm_required_date"))
+        if cust_code and item_cd and required_date:
+            orders.append((cust_code, item_cd, required_date, int(row.get("qty") or 0)))
+    return orders
+
+
+def fetch_unconfirmed_orders_or_warn(connection: object, *, as_of_date: date) -> tuple[list[tuple[str, str, date, int]], str]:
+    """内示受注を取得する。Oracle の問い合わせ失敗は取込を止めず、空の明細と警告文を返す（REQ-SFV-F-018）。"""
+    try:
+        return fetch_unconfirmed_orders(connection, as_of_date=as_of_date), ""
+    except OracleQueryError as exc:
+        return [], f"{UNCONFIRMED_ORDER_FETCH_ERROR_PREFIX}: {exc}"
+
+
 def group_shipments_by_pair(
     shipments: list[tuple[str, str, date, int]],
 ) -> dict[tuple[str, str], list[tuple[date, int]]]:
@@ -356,10 +398,12 @@ def build_summary_rows(
     as_of_date: date,
     *,
     stock_item_cds: set[str] | None = None,
+    warnings: list[str] | None = None,
 ) -> list[dict[str, object]]:
     """Oracle 出荷ペアから一覧サマリ行を組み立てる。
 
     ``stock_item_cds`` は後方互換のため受け付けるが **無視** する（SLIMS のみ品番は非表示）。
+    ``warnings`` を渡すと、取込を止めない取得失敗（内示受注）の警告文を追記する。
     """
     _ = stock_item_cds
     customer_names = fetch_customer_names(connection)
@@ -397,6 +441,11 @@ def build_summary_rows(
     window_start = add_calendar_months(date(as_of_date.year, as_of_date.month, 1), -23)
     incoming_receipts = fetch_incoming_receipts(connection, window_start)
     incoming_by_pair = group_shipments_by_pair(incoming_receipts)
+    # 内示推移(V-219)は 得意先 x 内作品番 で突合する。取込ごとに 1 回だけ発行し、失敗しても取込は続行する(05 design §6.6)。
+    unconfirmed_orders, unconfirmed_warning = fetch_unconfirmed_orders_or_warn(connection, as_of_date=as_of_date)
+    if unconfirmed_warning and warnings is not None:
+        warnings.append(unconfirmed_warning)
+    unconfirmed_by_pair = group_shipments_by_pair(unconfirmed_orders)
 
     incoming_cache: dict[str, tuple[date | None, str, str, str]] = {}
     rows: list[dict[str, object]] = []
@@ -441,6 +490,10 @@ def build_summary_rows(
             incoming_by_pair.get((level1_item, level1_vend), []),
             as_of_date=as_of_date,
         )
+        unconfirmed_order_trend = build_unconfirmed_order_trend(
+            unconfirmed_by_pair.get((resolved_cust_code, internal), []) if internal else [],
+            as_of_date=as_of_date,
+        )
         rows.append(
             {
                 "cust_code": resolved_cust_code,
@@ -456,6 +509,9 @@ def build_summary_rows(
                 "post_shipment_total_qty": post_total_qty,
                 "shipment_trend": shipment_trend,
                 "incoming_trend": incoming_trend,
+                # 05 第 2 段階: 内作品番と内示推移(V-219)。需要予測の算出は use_case が domain を呼んで行う(design §6.7)
+                "internal_item_cd": internal,
+                "unconfirmed_order_trend": unconfirmed_order_trend,
                 # 該当在庫が無い場合は空。0(在庫なし)とは区別する(design.md §4.2)
                 "mari_stock_qty": mari_stock_by_item.get(internal, ""),
             }

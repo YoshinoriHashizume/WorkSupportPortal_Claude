@@ -54,9 +54,9 @@ def _counts_payload(counts: RowCounts) -> dict[str, int]:
     return {
         "total": counts.total,
         "attention": counts.attention,
-        "supplyRisk": counts.supply_risk,
+        "lowFlowNoIncoming": counts.low_flow_no_incoming,
         "dormantStock": counts.dormant_stock,
-        "excessStockRisk": counts.excess_stock_risk,
+        "lowFlowNoShipment": counts.low_flow_no_shipment,
         "normalFlow": counts.normal_flow,
         "unconfirmed": counts.unconfirmed,
     }
@@ -169,9 +169,9 @@ def dashboard_summary_payload(
     return {
         "ok": True,
         "counts": {
-            "supplyRisk": context.supply_risk,
+            "lowFlowNoIncoming": context.low_flow_no_incoming,
             "dormantStock": context.dormant_stock,
-            "excessStockRisk": context.excess_stock_risk,
+            "lowFlowNoShipment": context.low_flow_no_shipment,
             "attention": context.attention,
             "unconfirmed": context.unconfirmed,
         },

@@ -58,7 +58,7 @@ def test_store_and_load_latest_summary():
     assert summary is not None
     assert summary.total_count == 1
     assert summary.critical_count == 1
-    assert summary.rows[0]["flow_quadrant"] == "供給リスク品"
+    assert summary.rows[0]["flow_quadrant"] == "低流動品（入荷なし）"
     assert summary.rows[0]["item_cd"] == "43522-D1020-00"
     assert summary.stock_info is not None
     assert summary.stock_info.file_name == "sample.csv"

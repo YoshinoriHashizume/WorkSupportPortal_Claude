@@ -231,26 +231,62 @@ const incomingTrend = listClient?.getIncomingTrend?.(custCode, row.dataset.itemC
 
 ### 6.5 詳細ダイアログの構成
 
-03_mari-stock-visibility で確立した 4 区分（品目 / 流動区分 / 在庫 / メモ）に、**「推定在庫推移（参考値）」区分を「在庫」と「メモ」の間に追加**し、5 区分にする（§6.6）。入出荷推移の独立した区分は追加しない（§6.4）。
+03_mari-stock-visibility で確立した 4 区分（品目 / 流動区分 / 在庫 / メモ）に、**「推定在庫推移（参考値）と入荷実績」区分を「在庫」と「メモ」の間に追加**し、5 区分にする（§6.6）。入出荷推移の独立した区分は追加しない（§6.4）。**入荷推移（V-217）は独立した区分を作らず、推定在庫推移のグラフに棒グラフとして重ねる**（2026/09/11 追記）。
 
 ```
 ┌ 詳細 ────────────────────────────────────┐
 │ ■ 品目 / ■ 流動区分 / ■ 在庫  … 既存      │
 │                                            │
-│ ■ 推定在庫推移（参考値）                    │
-│   ● SLIMS起点  （凡例）                    │
-│   [SVG 折れ線グラフ 24か月・1系列・等間隔グリッド線]│
+│ ■ 推定在庫推移（参考値）と入荷実績          │
+│   ● 推定在庫(SLIMS起点) ■ 入荷(MARI)（凡例）│
+│   [SVG 24か月・折れ線1系列＋入荷の棒・等間隔グリッド線]│
 │   または「推定在庫推移を算出できません」     │
+│   [5年9組で開く]（別タブ・§6.7）            │
 │                                            │
 │ ■ メモ … 既存                              │
 └────────────────────────────────────────────┘
 ```
 
-### 6.6 推定在庫推移の算出とグラフ描画（REQ-SHC-F-006、V-218）
+### 6.6 推定在庫推移の算出とグラフ描画（REQ-SHC-F-006、V-218・V-217）
 
 > **［2026/09/03 改訂］** 当初は SLIMS起点・MARI起点の2系列を表示していたが、ユーザー指示「MARI視点のグラフは削除して」により**MARI起点の系列を撤去**した。以下は撤去後（SLIMS起点の1系列のみ）の仕様として記述する。撤去前の設計（2系列版）との差分は本節末尾の注記を参照。DECISIONS.md も参照。
 
 出荷推移・入荷推移・SLIMS在庫数はいずれも**既にクライアントへ配信済み**のため、推定在庫推移の算出には新規 Oracle 問い合わせも配信データの追加も不要である。算出は `static/js/inventory-order-alert-list.js` に純粋関数として実装し、`fillDetailSections()` から呼ぶ。
+
+**算出単位（2026/09/11 改訂）**: 照合単位（内作品番 × 仕入先の組を共有する得意先品番の集合）。
+
+3つのデータの粒度が異なることが、マイナスの根本原因だった。
+
+| データ | 粒度 |
+|---|---|
+| 在庫数(SLIMS)（起点） | 得意先品番 |
+| 出荷推移 | 得意先 × 得意先品番 |
+| 入荷推移 | 内作品番 × 仕入先 |
+
+`incoming_by_pair.get((level1_item, level1_vend))` により、入荷は同じ組を共有する**全行に同じ全量**が現れる。1つの内作品番を複数の得意先品番が共有する場合（実データ: 96160-00500 と 10523-X0A02）、得意先品番単位に合算しても**片方の在庫しか起点に入らないまま入荷の全量を引く**ため、依然としてマイナスになる。
+
+そこで、**得意先品番**と**(内作品番, 仕入先) の組**を節点とする二部グラフを作り、その**連結成分**を照合単位とする。この単位まで広げると、在庫・出荷・入荷がすべて閉じる。
+
+```js
+// static/js/inventory-order-alert-list-client.js
+// 全行から1度だけ Union-Find を構築してキャッシュする
+function buildReconciliationUnits() {
+  // 辺: ("I", item_cd) ―― ("P", level1_item_cd, level1_vend_cd)
+  // 各成分について:
+  //   shipmentTrend : 成分内の全行を月ごとに合算（行は (得意先, 得意先品番) で一意）
+  //   incomingTrend : (level1_item_cd, level1_vend_cd) ごとに1回だけ合算
+  //   stocks        : 成分内の得意先品番ごとの在庫表示値（品番の重複を除く）
+}
+getItemTrends(itemCd)  // → { shipmentTrend, incomingTrend, stocks, level1Pairs }
+```
+
+- **合算は未フィルタの全行（`allRows`）で行う**。`applyListFilters()` を通した絞り込み後の行を使ってはならない（物理的な在庫・入荷は画面の絞り込みと無関係で、フィルタを変えるとグラフが変わってしまうため）。
+- **起点の合算は呼び出し側（list.js）で行う**。在庫数の 3 状態の解釈は既存の `parseAnchorQty()` が持っているため、パーサを二重に持たないよう、クライアント側は `stocks`（得意先品番と在庫の表示文字列の組）を返すだけにする。
+  - 該当なし（空）→ 0 として加算。未取得（`－`）→ 0 として加算するが、**全品番が未取得なら `null`**（グラフ非表示）。
+- **同一の照合単位に属する行はすべて同じ系列になる**（意図した挙動）。
+- 棒グラフ（入荷）も同じ合算値を描く（折れ線と棒の集計範囲を揃える）。
+- 月の並びは合算元の `shipment_trend` の `month` をそのまま使う（全行が同じ 24 か月ウィンドウを持つ）。
+- **起点の内訳表示**: 照合単位が複数の得意先品番を含むときだけ、グラフ直下に「起点 31,970 = 96160-00500 12,970 ＋ 10523-X0A02 19,000」の形で内訳を出す。単一品番のときは出さない（実データでは 1,994 単位中 1,969 単位が単一品番でノイズになるため）。品番数が多い場合（実データ最大 37 品番）は先頭 5 件＋「他 N 品番」に丸める。
 
 **算出関数**:
 
@@ -275,15 +311,29 @@ function buildAnchoredStockTrend(shipmentTrend, incomingTrend, anchorQty) {
 ```
 
 - 直近月（配列末尾）を `anchorQty`（起点在庫数）とし、過去に向かって「当月末推定 = 翌月末推定 + 翌月出荷 − 翌月入荷」を適用する（§1.5）。
-- `anchorQty` の解析は `parseAnchorQty(text)`（新設）で行う。カンマを除去して `Number()` に変換し、空文字・NaN の場合は `null` を返す（未取得を区別する。「0」は有効な起点として扱う）。呼び出し元は `row.dataset.stockQty`（SLIMS）を渡す。
-- `anchorQty` が `null`（=在庫数が未取得）の場合、系列を算出せず空配列を返す。
+- `anchorQty` の解析は `parseAnchorQty(text)`（新設）で行う。カンマを除去して `Number()` に変換する。「0」は有効な起点として扱う。呼び出し元は `row.dataset.stockQty`（SLIMS）を渡す。
+  - **［2026/09/11 改訂］** 在庫数の 3 状態（design.md 03_mari-stock-visibility §4.2 / `stock_quantity.py`）に応じて戻り値を分ける。
+    | `row.dataset.stockQty` | 意味 | `parseAnchorQty` の戻り値 | グラフ |
+    |---|---|---|---|
+    | 数値（`0` を含む） | 値あり | その数値 | 表示 |
+    | **空文字** | **該当なし**（SLIMS 取込済みだが SLIMS に品番が無い） | **`0`** | **表示（0 起点）** |
+    | `－`（`STOCK_NOT_FETCHED`）・その他の非数値 | 未取得（SLIMS 未取込・旧スナップショット） | `null` | 非表示 |
+  - 改訂前は空文字も `null` を返していた（未取得と同じ扱い）。ユーザー指示「SLIMSに在庫がないものは0として履歴を作成して」により、**「該当なし」だけを 0 起点に切り替えた**。「未取得」を 0 起点にしない理由は、SLIMS を参照できていない状態を「在庫ゼロ」と描いてしまうため。
+- `anchorQty` が `null`（=在庫数が未取得）の場合、系列を算出せず空配列を返す。空配列のときはグラフを描画せず「推定在庫推移を算出できません。」を表示する（入荷の棒も描かない）。
 - 推定値は**クランプしない**。マイナスもそのまま返す（§1.5）。
 
-**描画関数**: `renderAnchoredStockChart(sectionEl, slimsSeries)`。
+**描画関数**: `renderAnchoredStockChart(sectionEl, slimsSeries, incomingSeries)`（2026/09/11、入荷の棒を描くため第3引数を追加）。
 
-- 縦軸のスケールは `[Math.min(0, ...slimsの全qty), Math.max(1, ...slimsの全qty)]`。**0 を必ず範囲に含める**ことで、ゼロ基準線を常に描画できるようにする（クランプはしないが、視覚的な危険水準を示す線として 0 を明示する）。
+- 縦軸のスケールは `[Math.min(0, ...slimsの全qty), Math.max(1, ...slimsの全qty, ...incomingの全qty)]`。**0 を必ず範囲に含める**ことで、ゼロ基準線を常に描画できるようにする（クランプはしないが、視覚的な危険水準を示す線として 0 を明示する）。上限に**入荷数量も算入**するのは、入荷が推定在庫を上回る月でも棒が切れないようにするため（2026/09/11 改訂）。
 - ゼロ基準線は破線（`stroke-dasharray`）で描画する（マイナス域がある場合のみ。後述）。
-- SLIMS起点を**インディゴ系**の折れ線で描く。凡例を上部に表示する。
+- SLIMS起点を**インディゴ系**の折れ線で描く。凡例をグラフ下部に表示する。
+- **入荷実績（V-217）の棒グラフ**（2026/09/11 追加）:
+  - 折れ線と**同一の月軸・同一のY軸**に描く。在庫数・入荷数量はいずれも**バラ数**で単位が同じため、第2Y軸は設けない（軸を2つ持つと誤読を招くため）。
+  - 棒はゼロ基準（`coordsOf(index, 0)` の y）から当該月の入荷数量まで上方向に描く。棒幅は `stepX * 0.5`（点が1つの場合は `plotWidth * 0.5` を上限とする固定値）で、月の座標を**中心**に置く。
+  - **描画順序は棒→グリッド線より後・折れ線より前**とし、棒が折れ線・データ点を隠さないようにする。色は**橙系**（`#f59e0b`）で、折れ線のインディゴと明確に区別する。
+  - 数量 0 の月は棒を描かない（高さ0の矩形を出さない）。マイナスの入荷数量は想定しないが、負値が来た場合もゼロ基準から下方向に描いて隠さない。
+  - 各棒に `<title>` を付け、`入荷(MARI) YYYY-MM: 数量` をツールチップで示す（折れ線のデータ点と同じ方式）。
+  - 凡例は `推定在庫(SLIMS起点)`（線）と `入荷(MARI)`（四角のスウォッチ）の2項目。
 - 空配列（SLIMS 在庫数が未取得、または出荷推移・入荷推移そのものが存在しない既存スナップショット）の場合は、グラフを描画せず「推定在庫推移を算出できません」を表示する。
 - `fillDetailSections()` 内で、出荷推移・入荷推移・在庫数（`row.dataset.stockQty`）から算出して描画する。
 
@@ -295,10 +345,45 @@ function buildAnchoredStockTrend(shipmentTrend, incomingTrend, anchorQty) {
 
 ```js
 // static/js/inventory-order-alert-list.js の fillDetailSections(row) 内に追加
-const slimsAnchor = parseAnchorQty(row.dataset.stockQty);
+// 2026/09/11 改訂: 行単位ではなく照合単位に合算した推移と起点を使う
+const itemTrends = listClient?.getItemTrends?.(row.dataset.itemCd || "") || {};
+const shipmentTrend = itemTrends.shipmentTrend || [];
+const incomingTrend = itemTrends.incomingTrend || [];
+const slimsAnchor = sumUnitAnchorQty(itemTrends.stocks, row.dataset.stockQty);
 const slimsAnchoredTrend = buildAnchoredStockTrend(shipmentTrend, incomingTrend, slimsAnchor);
-renderAnchoredStockChart(anchoredStockTrendSection, slimsAnchoredTrend);
+renderAnchoredStockChart(anchoredStockTrendSection, slimsAnchoredTrend, incomingTrend);
+renderAnchorBreakdown(itemTrends.stocks, slimsAnchor);
 ```
+
+### 6.7 5年9組への遷移ボタン（2026/09/11 追加）
+
+推定在庫推移グラフの**直下**（`ioa-detail-anchored-stock-trend-section` の末尾、「算出できません」メッセージより後）に、5年9組の検索結果を別タブで開くリンクを置く。テンプレートでは既存の `button-link` クラスを流用した `<a>` とし、`href` はクライアント側（`fillDetailSections()`）で行データから組み立てる。
+
+```html
+<!-- templates/inventory_order_alert/list.html -->
+<p class="ioa-detail-gonen-link-row">
+  <a class="button-link ioa-detail-gonen-link" href="#" target="_blank" rel="noopener"
+     title="5年9組の検索結果を別タブで開きます">5年9組で開く</a>
+</p>
+```
+
+```js
+// static/js/inventory-order-alert-list.js の fillDetailSections(row) 内
+const params = new URLSearchParams({
+  custCode,
+  custItem: row.dataset.itemCd || "",
+  yearMonth: currentYearMonth(),   // 今月（YYYY-MM）
+  asOfDate: todayIsoDate(),        // 今日（YYYY-MM-DD）
+});
+gonenLink.href = `${GONEN_RESULT_PATH}?${params.toString()}`;
+```
+
+- **日付はローカル時刻から組み立てる**。`toISOString()` は UTC 変換されるため、JST の深夜〜早朝に前日・前月の値になりうる。`getFullYear()` / `getMonth()` / `getDate()` をゼロ埋めして組み立てる（`year_month_nav.py` の `normalize_year_month` は `YYYY-MM` を受け付ける）。
+- `optionChange` は**渡さない**（5年9組側の既定 `*` に委ねる。在庫発注アラートは設変値を持たない）。
+- `asOfDate` は**今日**を明示的に渡す。省略すると 5年9組側の既定が「年月の1日」になり、5年9組の検索画面を手で操作した場合（既定は今日）と結果が食い違うため。
+- **得意先コードまたは得意先品番が空の行ではリンクを隠す**（`el.hidden = true`）。5年9組は両方を検索条件の必須項目として扱うため。
+- 権限判定は行わない（在庫発注アラートと 5年9組は同じアクセス権で運用する前提。DECISIONS.md ステージ13）。5年9組側のミドルウェア（menu_key `five-year-nine`）による制御はそのまま有効。
+- 5年9組のパス（`/app/production/five-year-nine/result`）は JS 側の定数として持つ。`{% url %}` ではなくハードコードにするのは、既存の API パス（`CONFIRMATION_MEMO_API` 等）と同じ流儀に揃えるため。
 
 ## 7. 既存コードへの変更点
 

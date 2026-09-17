@@ -5,7 +5,7 @@ from __future__ import annotations
 import json
 
 from application.inventory_order_alert.domain.value_objects.confirmation import STATUS_CHOICES
-from application.inventory_order_alert.domain.value_objects.flow_quadrant import QUADRANT_SUPPLY_RISK
+from application.inventory_order_alert.domain.value_objects.flow_quadrant import QUADRANT_LOW_FLOW_NO_INCOMING
 from application.inventory_order_alert.domain.value_objects.list_client_data import build_list_client_payload
 from application.inventory_order_alert.domain.value_objects.list_filter import build_filter_options
 from application.inventory_order_alert.domain.value_objects.shipment_trend import build_monthly_shipment_trend
@@ -29,9 +29,9 @@ BASE_ROW: dict[str, object] = {
     "mari_stock_qty": 95,
     "stock_location_detail": "2D0-03-5=100",
     "stock_as_of_label": "2026年6月17日時点の在庫",
-    "flow_quadrant": QUADRANT_SUPPLY_RISK,
-    "flow_quadrant_key": "supply-risk",
-    "flow_quadrants": {key: "supply-risk" for key in ("L1", "L3", "L6", "D1", "D2", "D5")},
+    "flow_quadrant": QUADRANT_LOW_FLOW_NO_INCOMING,
+    "flow_quadrant_key": "low-flow-no-incoming",
+    "flow_quadrants": {key: "low-flow-no-incoming" for key in ("Y1", "Y3", "Y5")},
     "no_incoming_record": False,
     "responsible_department": "調達G・営業G・生産管理",
     "confirmation_status": "未確認",

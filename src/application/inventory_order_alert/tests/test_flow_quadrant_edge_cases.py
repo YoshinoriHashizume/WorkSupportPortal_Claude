@@ -15,15 +15,12 @@ from application.inventory_order_alert.domain.value_objects.confirmation import 
 from application.inventory_order_alert.domain.value_objects.flow_quadrant import (
     EVALUATION_PERIODS,
     EvaluationPeriod,
-    FLOW_AXIS_DORMANT,
-    FLOW_AXIS_HELP_TEXTS,
-    FLOW_AXIS_LOW_FLOW,
     FLOW_QUADRANT_KEYS,
     FlowSelection,
     QUADRANT_DORMANT_STOCK,
-    QUADRANT_EXCESS_STOCK_RISK,
+    QUADRANT_LOW_FLOW_NO_INCOMING,
+    QUADRANT_LOW_FLOW_NO_SHIPMENT,
     QUADRANT_NORMAL_FLOW,
-    QUADRANT_SUPPLY_RISK,
     resolve_flow_quadrant,
     resolve_flow_quadrant_matrix,
 )
@@ -37,15 +34,15 @@ from application.inventory_order_alert.domain.value_objects.list_rows import (
 from application.inventory_order_alert.domain.value_objects.row_counts import count_rows
 
 AS_OF = date(2026, 8, 27)
-SELECTION_L1 = FlowSelection(EvaluationPeriod(FLOW_AXIS_LOW_FLOW, 1))
-SELECTION_L3 = FlowSelection(EvaluationPeriod(FLOW_AXIS_LOW_FLOW, 3))
-SELECTION_D5 = FlowSelection(EvaluationPeriod(FLOW_AXIS_DORMANT, 5))
+SELECTION_Y1 = FlowSelection(EvaluationPeriod(1))
+SELECTION_Y3 = FlowSelection(EvaluationPeriod(3))
+SELECTION_Y5 = FlowSelection(EvaluationPeriod(5))
 
 #: 基準日 2026/8/27 から各判定期間で境界がどう動くかを見るための代表日付。
-DATES_SUPPLY_RISK = ("", "2026/08/20")
-#: 死蔵判定軸5年（境界 2021/8/27）では期間内、低流動判定軸では期間外になる日付。
+DATES_LOW_FLOW_NO_INCOMING = ("", "2026/08/20")
+#: 判定期間 5 年（境界 2021/8/27）では期間内、1 年・3 年では期間外になる日付。
 DATES_DORMANT_STOCK = ("2023/01/10", "2023/02/10")
-DATES_EXCESS_STOCK_RISK = ("2026/08/20", "2019/02/10")
+DATES_LOW_FLOW_NO_SHIPMENT = ("2026/08/20", "2019/02/10")
 DATES_NORMAL_FLOW = ("2026/08/20", "2026/08/21")
 
 #: 実測 222 バイト（test-design.md E-001。当初の 100 バイトは設計書の見積り誤りだった）。
@@ -91,15 +88,15 @@ def _payload(rows: list[dict[str, object]]) -> dict[str, object]:
 
 def _mixed_rows() -> list[dict[str, object]]:
     return [
-        _row(DATES_SUPPLY_RISK, item_cd="ITEM-A", confirmation_status="確認済み"),
+        _row(DATES_LOW_FLOW_NO_INCOMING, item_cd="ITEM-A", confirmation_status="確認済み"),
         _row(DATES_DORMANT_STOCK, item_cd="ITEM-B", confirmation_status="確認中"),
-        _row(DATES_EXCESS_STOCK_RISK, item_cd="ITEM-C"),
+        _row(DATES_LOW_FLOW_NO_SHIPMENT, item_cd="ITEM-C"),
         _row(DATES_NORMAL_FLOW, item_cd="ITEM-D"),
     ]
 
 
 def test_e001_client_payload_increment_per_row_is_within_budget():
-    payload = _payload(_enriched([_row(DATES_SUPPLY_RISK, item_cd="ITEM-A")], SELECTION_L3))
+    payload = _payload(_enriched([_row(DATES_LOW_FLOW_NO_INCOMING, item_cd="ITEM-A")], SELECTION_Y1))
     client_row = payload["rows"][0]
 
     added = {
@@ -114,8 +111,8 @@ def test_e001_client_payload_increment_per_row_is_within_budget():
 
 def test_e002_payload_generation_keeps_row_count_for_large_input():
     rows = _enriched(
-        [_row(DATES_SUPPLY_RISK, item_cd=f"ITEM-{index:05d}") for index in range(LARGE_ROW_COUNT)],
-        SELECTION_L3,
+        [_row(DATES_LOW_FLOW_NO_INCOMING, item_cd=f"ITEM-{index:05d}") for index in range(LARGE_ROW_COUNT)],
+        SELECTION_Y1,
     )
 
     started = time.perf_counter()
@@ -140,21 +137,24 @@ def test_e003_resolving_all_periods_for_large_input_completes():
     assert elapsed < 30
 
 
-def test_e004_switching_axis_keeps_same_row_set():
+def test_e004_switching_evaluation_period_keeps_same_row_set():
     rows = _mixed_rows()
 
-    low_flow = _enriched(rows, SELECTION_L1)
-    dormant = _enriched(rows, SELECTION_D5)
+    one_year = _enriched(rows, SELECTION_Y1)
+    five_years = _enriched(rows, SELECTION_Y5)
 
-    assert [row["item_cd"] for row in low_flow] == [row["item_cd"] for row in dormant]
-    assert {row["flow_quadrant"] for row in low_flow} != {row["flow_quadrant"] for row in dormant}
+    assert [row["item_cd"] for row in one_year] == [row["item_cd"] for row in five_years]
+    assert {row["flow_quadrant"] for row in one_year} != {row["flow_quadrant"] for row in five_years}
 
 
 def test_e005_counts_left_and_right_totals_match():
-    counts = count_rows(_enriched(_mixed_rows(), SELECTION_L3))
+    counts = count_rows(_enriched(_mixed_rows(), SELECTION_Y1))
 
     quadrant_total = (
-        counts.supply_risk + counts.dormant_stock + counts.excess_stock_risk + counts.normal_flow
+        counts.low_flow_no_incoming
+        + counts.dormant_stock
+        + counts.low_flow_no_shipment
+        + counts.normal_flow
     )
     confirmation_total = counts.confirmed + counts.in_progress + counts.unconfirmed
     assert quadrant_total == counts.total
@@ -164,23 +164,12 @@ def test_e005_counts_left_and_right_totals_match():
 def test_e006_banner_counts_are_fixed_regardless_of_list_selection():
     rows = _mixed_rows()
 
-    banner_counts = count_rows(_enriched(rows, SELECTION_L3))
-    list_counts = count_rows(_enriched(rows, SELECTION_D5))
+    banner_counts = count_rows(_enriched(rows, SELECTION_Y1))
+    list_counts = count_rows(_enriched(rows, SELECTION_Y5))
 
-    # 帯は基準判定条件で固定するため、一覧側の選択を変えても帯の件数は動かない（§9 R-4）。
-    assert banner_counts.supply_risk == 1
+    # 帯は既定の判定期間（1 年）で固定するため、一覧側の選択を変えても帯の件数は動かない。
+    assert banner_counts.low_flow_no_incoming == 1
     assert banner_counts.attention != list_counts.attention
-
-
-def test_e009_axis_help_text_uses_context_specific_wording():
-    low_flow_help = FLOW_AXIS_HELP_TEXTS[FLOW_AXIS_LOW_FLOW]
-    dormant_help = FLOW_AXIS_HELP_TEXTS[FLOW_AXIS_DORMANT]
-
-    assert "低流動品" in low_flow_help
-    assert "在庫死蔵品" in dormant_help
-    for term in FORBIDDEN_TERMS:
-        assert term not in low_flow_help
-        assert term not in dormant_help
 
 
 @pytest.mark.parametrize(
@@ -191,12 +180,12 @@ def test_e009_axis_help_text_uses_context_specific_wording():
 @pytest.mark.parametrize(
     ("dates", "expected_by_short_period"),
     [
-        (DATES_SUPPLY_RISK, QUADRANT_SUPPLY_RISK),
+        (DATES_LOW_FLOW_NO_INCOMING, QUADRANT_LOW_FLOW_NO_INCOMING),
         (DATES_DORMANT_STOCK, QUADRANT_DORMANT_STOCK),
-        (DATES_EXCESS_STOCK_RISK, QUADRANT_EXCESS_STOCK_RISK),
+        (DATES_LOW_FLOW_NO_SHIPMENT, QUADRANT_LOW_FLOW_NO_SHIPMENT),
         (DATES_NORMAL_FLOW, QUADRANT_NORMAL_FLOW),
     ],
-    ids=["supply-risk", "dormant-stock", "excess-stock-risk", "normal-flow"],
+    ids=["low-flow-no-incoming", "dormant-stock", "low-flow-no-shipment", "normal-flow"],
 )
 def test_e010_all_period_and_quadrant_combinations_return_a_valid_quadrant(
     selection, dates, expected_by_short_period
@@ -205,19 +194,19 @@ def test_e010_all_period_and_quadrant_combinations_return_a_valid_quadrant(
     enriched = _enriched([_row(dates, item_cd="ITEM-A")], selection)
     quadrant = enriched[0]["flow_quadrant"]
 
-    # 6 判定条件 × 4 象限 = 24 通り。いずれも例外なく 4 ラベルのいずれかを返す。
+    # 3 判定期間 × 4 区分 = 12 通り。いずれも例外なく 4 ラベルのいずれかを返す。
     assert quadrant in FLOW_QUADRANT_KEYS
     assert enriched[0]["flow_quadrant_key"] == FLOW_QUADRANT_KEYS[quadrant]
     _ = (last_incoming_raw, last_ship_raw, expected_by_short_period)
 
 
 def test_e010_representative_rows_match_expected_quadrants_for_reference_selection():
-    enriched = _enriched(_mixed_rows(), SELECTION_L3)
+    enriched = _enriched(_mixed_rows(), SELECTION_Y1)
 
     assert [row["flow_quadrant"] for row in enriched] == [
-        QUADRANT_SUPPLY_RISK,
+        QUADRANT_LOW_FLOW_NO_INCOMING,
         QUADRANT_DORMANT_STOCK,
-        QUADRANT_EXCESS_STOCK_RISK,
+        QUADRANT_LOW_FLOW_NO_SHIPMENT,
         QUADRANT_NORMAL_FLOW,
     ]
 
@@ -232,7 +221,7 @@ def test_resolve_flow_quadrant_never_raises_for_missing_dates():
 
 def test_filter_summary_rows_attention_only_excludes_normal_flow_for_every_selection():
     rows = _mixed_rows()
-    for selection in (SELECTION_L1, SELECTION_L3, SELECTION_D5):
+    for selection in (SELECTION_Y1, SELECTION_Y3, SELECTION_Y5):
         enriched = _enriched(rows, selection)
         filtered = filter_summary_rows(
             enriched,

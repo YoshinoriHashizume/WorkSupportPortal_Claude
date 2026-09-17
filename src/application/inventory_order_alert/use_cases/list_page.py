@@ -19,10 +19,7 @@ from application.inventory_order_alert.domain.repositories.ports import (
 )
 from application.inventory_order_alert.domain.value_objects.flow_quadrant import (
     EVALUATION_PERIODS,
-    FLOW_AXIS_DORMANT,
-    FLOW_AXIS_HELP_TEXTS,
-    FLOW_AXIS_LABELS,
-    FLOW_AXIS_LOW_FLOW,
+    EvaluationPeriod,
     FlowSelection,
 )
 from application.inventory_order_alert.domain.value_objects.list_query import parse_list_query
@@ -42,21 +39,11 @@ from application.inventory_order_alert.domain.value_objects.flow_quadrant_rules 
     build_flow_quadrant_rule_rows,
 )
 from application.inventory_order_alert.domain.value_objects.dev_data_guard import looks_like_test_import
+from application.inventory_order_alert.domain.value_objects.recommended_action import (
+    DEFAULT_RECOMMENDED_ACTIONS,
+    RecommendedActions,
+)
 from application.inventory_order_alert.domain.value_objects.row_display import row_alert_class
-
-
-@dataclass(frozen=True)
-class FlowAxisOption:
-    value: str
-    label: str
-    help_text: str
-
-
-@dataclass(frozen=True)
-class FlowPeriodOption:
-    value: int
-    key: str
-    label: str
 
 
 @dataclass(frozen=True)
@@ -95,10 +82,12 @@ class ListPageContext:
     stock_stale: bool
     confirmation_status_choices: list[tuple[str, str]]
     flow_selection: FlowSelection
-    flow_axis_options: list[FlowAxisOption]
-    flow_period_options: dict[str, list[FlowPeriodOption]]
+    #: 判定期間セレクタの選択肢（1/3/5 年）。05 design §6.3
+    evaluation_periods: list[EvaluationPeriod]
     flow_quadrant_filter: str
     flow_quadrant_rule_rows: list[FlowQuadrantRuleRow]
+    #: 一覧ペイロード（`build_list_client_payload`）に渡す推奨アクション定義（上書き適用済み）
+    recommended_actions: RecommendedActions
     test_data_warning: bool
 
 
@@ -112,37 +101,18 @@ def _rows_for_template(rows: list[dict[str, object]]) -> list[dict[str, object]]
     return enriched
 
 
-def _flow_axis_options() -> list[FlowAxisOption]:
-    return [
-        FlowAxisOption(
-            value=axis,
-            label=FLOW_AXIS_LABELS[axis],
-            help_text=FLOW_AXIS_HELP_TEXTS[axis],
-        )
-        for axis in (FLOW_AXIS_LOW_FLOW, FLOW_AXIS_DORMANT)
-    ]
-
-
-def _flow_period_options() -> dict[str, list[FlowPeriodOption]]:
-    return {
-        axis: [
-            FlowPeriodOption(value=period.value, key=period.key, label=period.label)
-            for period in EVALUATION_PERIODS.for_axis(axis)
-        ]
-        for axis in (FLOW_AXIS_LOW_FLOW, FLOW_AXIS_DORMANT)
-    }
-
-
 class ListPage:
     def __init__(
         self,
         import_stock_usecase: ImportStock,
         load_summary: LoadSummary,
         load_app_settings: LoadAppSettings,
+        recommended_actions: RecommendedActions = DEFAULT_RECOMMENDED_ACTIONS,
     ) -> None:
         self._import_stock = import_stock_usecase
         self._load_summary = load_summary
         self._load_app_settings = load_app_settings
+        self._recommended_actions = recommended_actions
 
     def execute(
         self,
@@ -176,6 +146,9 @@ class ListPage:
                             f" {stock_info.confirmation_reset_count} 件の確認状態を未確認に戻しました"
                             f"（アラート悪化）。"
                         )
+                    if stock_info.aggregation_warning:
+                        # 内示受注の取得失敗などは取込を止めず、結果メッセージで知らせる（REQ-SFV-F-018）
+                        import_message += f" {stock_info.aggregation_warning}"
             except ImportInProgressError as exc:
                 # 排他ロックを取得できなかった場合は取込を行わず、既存スナップショットを保持する
                 error_message = str(exc)
@@ -186,7 +159,7 @@ class ListPage:
         if summary and summary.aggregation_error and not import_message:
             error_message = error_message or f"集計に失敗しました: {summary.aggregation_error}"
 
-        # 判定軸・判定期間は利用者の選択で決まるため、読込時の基準判定条件から引き直す（design.md §3.1）。
+        # 判定期間は利用者の選択で決まるため、読込時の既定判定条件から引き直す（05 design §3.1）。
         list_query = parse_list_query(query_params)
         if all_rows:
             as_of_date = (summary.as_of_date if summary else None) or list_query.as_of_date
@@ -194,6 +167,7 @@ class ListPage:
                 all_rows,
                 as_of_date=as_of_date,
                 query=list_query,
+                recommended_actions=self._recommended_actions,
             )
 
         summary_total = len(all_rows)
@@ -273,10 +247,10 @@ class ListPage:
             ),
             confirmation_status_choices=list(STATUS_CHOICES),
             flow_selection=list_query.flow_selection,
-            flow_axis_options=_flow_axis_options(),
-            flow_period_options=_flow_period_options(),
+            evaluation_periods=list(EVALUATION_PERIODS),
             flow_quadrant_filter=list_query.flow_quadrant,
-            flow_quadrant_rule_rows=build_flow_quadrant_rule_rows(),
+            flow_quadrant_rule_rows=build_flow_quadrant_rule_rows(self._recommended_actions),
+            recommended_actions=self._recommended_actions,
             test_data_warning=looks_like_test_import(
                 stock_info.file_name if stock_info else "",
                 all_rows,

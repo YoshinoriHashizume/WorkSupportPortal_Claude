@@ -46,6 +46,7 @@ def list_page(request: HttpRequest) -> HttpResponse:
             all_rows=context.all_rows,
             filter_options=context.filter_options,
             confirmation_status_choices=context.confirmation_status_choices,
+            recommended_actions=context.recommended_actions,
         )
         if context.has_list_data
         else None
@@ -83,8 +84,7 @@ def list_page(request: HttpRequest) -> HttpResponse:
             "is_admin": is_portal_admin(request.user),
             "confirmation_status_choices": context.confirmation_status_choices,
             "flow_selection": context.flow_selection,
-            "flow_axis_options": context.flow_axis_options,
-            "flow_period_options": context.flow_period_options,
+            "evaluation_periods": context.evaluation_periods,
             "flow_quadrant_filter": context.flow_quadrant_filter,
             "flow_quadrant_rule_rows": context.flow_quadrant_rule_rows,
             "test_data_warning": context.test_data_warning,

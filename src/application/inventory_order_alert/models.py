@@ -22,7 +22,7 @@ class InventoryOrderAlertSettings(models.Model):
     # 旧アラートレベル方式の残置カラム（未使用）。流動区分の判定には用いない（design.md §5.3）。
     warning_incoming_months = models.PositiveIntegerField(default=12)
     incoming_grace_days = models.PositiveIntegerField(default=30)
-    # 旧アラートレベル方式の残置カラム（未使用）。重点は供給リスク品に置き換わった（design.md §5.3）。
+    # 旧アラートレベル方式の残置カラム（未使用）。重点は低流動品（入荷なし）に置き換わった（02 design §5.3、05 で改称）。
     critical_enabled = models.BooleanField(default=True)
     stock_stale_days = models.PositiveIntegerField(default=7)
     updated_at = models.DateTimeField(auto_now=True)

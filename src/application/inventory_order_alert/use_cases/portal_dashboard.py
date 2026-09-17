@@ -11,18 +11,16 @@ from application.inventory_order_alert.domain.value_objects.row_counts import co
 
 _BANNER_ERROR_MESSAGE = "アラート件数を取得できませんでした。在庫発注アラート画面で再確認してください。"
 
-#: 帯の件数はこの判定条件で固定する。利用者が一覧で選んだ条件には従わない（design.md §6.4）。
+#: 帯の件数は既定の判定期間（1 年）で固定する。利用者が一覧で選んだ判定期間には従わない（05 design §6.5）。
 BANNER_FLOW_SELECTION = REFERENCE_FLOW_SELECTION
-BANNER_FLOW_CONDITION_LABEL = (
-    f"{BANNER_FLOW_SELECTION.axis_label}・{BANNER_FLOW_SELECTION.period_label}"
-)
+BANNER_FLOW_CONDITION_LABEL = f"判定期間 {BANNER_FLOW_SELECTION.period_label}"
 
 
 @dataclass(frozen=True)
 class DashboardBannerContext:
-    supply_risk: int
+    low_flow_no_incoming: int
     dormant_stock: int
-    excess_stock_risk: int
+    low_flow_no_shipment: int
     unconfirmed: int
     stock_as_of_label: str
     has_stock_data: bool
@@ -31,7 +29,7 @@ class DashboardBannerContext:
 
     @property
     def attention(self) -> int:
-        return self.supply_risk + self.dormant_stock + self.excess_stock_risk
+        return self.low_flow_no_incoming + self.dormant_stock + self.low_flow_no_shipment
 
     @property
     def has_alerts(self) -> bool:
@@ -45,18 +43,18 @@ class DashboardBannerContext:
     def tone(self) -> str:
         if self.error_message:
             return "neutral"
-        if self.supply_risk > 0:
+        if self.low_flow_no_incoming > 0:
             return "critical"
-        if self.dormant_stock > 0 or self.excess_stock_risk > 0:
+        if self.dormant_stock > 0 or self.low_flow_no_shipment > 0:
             return "warning"
         return "ok"
 
 
 def _empty_context(*, stock_as_of_label: str, has_stock_data: bool, error_message: str = "") -> DashboardBannerContext:
     return DashboardBannerContext(
-        supply_risk=0,
+        low_flow_no_incoming=0,
         dormant_stock=0,
-        excess_stock_risk=0,
+        low_flow_no_shipment=0,
         unconfirmed=0,
         stock_as_of_label=stock_as_of_label,
         has_stock_data=has_stock_data,
@@ -96,9 +94,9 @@ class PortalDashboard:
         stock_stale = is_stock_stale(stock_info.stock_as_of_date, app_settings.stock_stale_days)
 
         return DashboardBannerContext(
-            supply_risk=counts.supply_risk,
+            low_flow_no_incoming=counts.low_flow_no_incoming,
             dormant_stock=counts.dormant_stock,
-            excess_stock_risk=counts.excess_stock_risk,
+            low_flow_no_shipment=counts.low_flow_no_shipment,
             unconfirmed=counts.unconfirmed,
             stock_as_of_label=stock_info.stock_as_of_label,
             has_stock_data=True,

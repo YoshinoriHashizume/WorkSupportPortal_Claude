@@ -2,6 +2,8 @@
   const ROW_SELECTOR = ".inventory-order-alert-page .ioa-table tbody tr.ioa-data-row";
   const CONFIRMATION_API = "/api/inventory-order-alert/confirmation";
   const CONFIRMATION_MEMO_API = "/api/inventory-order-alert/confirmation/memos";
+  // 5年9組（five-year-nine）の検索結果ページ。既存の API パスと同じ流儀で定数として持つ（design.md §6.7）。
+  const GONEN_RESULT_PATH = "/app/production/five-year-nine/result";
   const MAX_MEMO_LENGTH = 500;
 
   function getCsrfToken() {
@@ -126,7 +128,7 @@
     const right = countsElement.querySelector(".ioa-table-counts-right");
     if (left) {
       left.textContent =
-        `供給リスク品 ${counts.supplyRisk} 件 / 在庫死蔵品 ${counts.dormantStock} 件 / 在庫過剰リスク品 ${counts.excessStockRisk} 件 / 通常流動品 ${counts.normalFlow} 件`;
+        `低流動品（入荷なし） ${counts.lowFlowNoIncoming} 件 / 在庫死蔵品 ${counts.dormantStock} 件 / 低流動品（出荷なし） ${counts.lowFlowNoShipment} 件 / 通常流動品 ${counts.normalFlow} 件`;
     }
     if (right) {
       right.textContent =
@@ -224,12 +226,28 @@
         lastIncoming: dialog.querySelector(".ioa-detail-item-last-incoming"),
         lastShip: dialog.querySelector(".ioa-detail-item-last-ship"),
         flowQuadrant: dialog.querySelector(".ioa-detail-flow-quadrant"),
+        flowStatus: dialog.querySelector(".ioa-detail-flow-status"),
+        recommendedAction: dialog.querySelector(".ioa-detail-recommended-action"),
         department: dialog.querySelector(".ioa-detail-department"),
-        condition: dialog.querySelector(".ioa-detail-condition"),
+        evaluationPeriod: dialog.querySelector(".ioa-detail-evaluation-period"),
         stockSlims: dialog.querySelector(".ioa-detail-stock-slims"),
         stockMari: dialog.querySelector(".ioa-detail-stock-mari"),
     };
     const anchoredStockTrendSection = dialog.querySelector(".ioa-detail-anchored-stock-trend-section");
+    const anchorBreakdown = dialog.querySelector(".ioa-detail-anchor-breakdown");
+    // 需要予測（V-220〜V-222）区分（05 design §6.4）。
+    const demandFields = {
+      basis: dialog.querySelector(".ioa-detail-demand-basis"),
+      monthly: dialog.querySelector(".ioa-detail-demand-monthly"),
+      average: dialog.querySelector(".ioa-detail-demand-average"),
+      monthsOfStock: dialog.querySelector(".ioa-detail-months-of-stock"),
+      stockoutMonth: dialog.querySelector(".ioa-detail-stockout-month"),
+      unitBreakdown: dialog.querySelector(".ioa-detail-demand-unit-breakdown"),
+      empty: dialog.querySelector(".ioa-detail-demand-empty"),
+      fields: dialog.querySelector(".ioa-detail-demand-forecast-fields"),
+    };
+    const gonenLinkRow = dialog.querySelector(".ioa-detail-gonen-link-row");
+    const gonenLink = dialog.querySelector(".ioa-detail-gonen-link");
     const locationTableBody = dialog.querySelector(".ioa-location-table-body");
     const tableWrap = dialog.querySelector(".ioa-location-table-wrap");
     const emptyMessage = dialog.querySelector(".ioa-location-empty");
@@ -353,10 +371,143 @@
       }
     }
 
+    // 日付はローカル時刻から組み立てる。toISOString() は UTC 変換され、JST の深夜〜早朝に
+    // 前日・前月へずれるため使わない（design.md §6.7）。
+    function pad2(value) {
+      return String(value).padStart(2, "0");
+    }
+
+    function currentYearMonth(now = new Date()) {
+      return `${now.getFullYear()}-${pad2(now.getMonth() + 1)}`;
+    }
+
+    function todayIsoDate(now = new Date()) {
+      return `${now.getFullYear()}-${pad2(now.getMonth() + 1)}-${pad2(now.getDate())}`;
+    }
+
+    // 照合単位の在庫を合算して起点を作る（design.md §6.6）。
+    // 該当なし（空）・未取得（－）はいずれも 0 として足すが、全品番が未取得なら算出しない。
+    function sumUnitAnchorQty(stocks, fallbackDisplay) {
+      const entries = Array.isArray(stocks) && stocks.length
+        ? stocks
+        : [{ itemCd: "", stockDisplay: String(fallbackDisplay || "") }];
+      let total = 0;
+      let hasKnown = false;
+      entries.forEach((entry) => {
+        const qty = parseAnchorQty(entry.stockDisplay);
+        if (qty === null) {
+          return;
+        }
+        hasKnown = true;
+        total += qty;
+      });
+      return hasKnown ? total : null;
+    }
+
+    // 照合単位が複数の得意先品番を含むときだけ、起点の内訳を出す（単一品番では冗長なため）。
+    const ANCHOR_BREAKDOWN_MAX_ITEMS = 5;
+
+    function renderAnchorBreakdown(stocks, anchorQty) {
+      if (!anchorBreakdown) {
+        return;
+      }
+      const entries = (Array.isArray(stocks) ? stocks : []).filter(
+        (entry) => parseAnchorQty(entry.stockDisplay) !== null,
+      );
+      if (anchorQty === null || entries.length < 2) {
+        anchorBreakdown.hidden = true;
+        anchorBreakdown.textContent = "";
+        return;
+      }
+      const shown = entries.slice(0, ANCHOR_BREAKDOWN_MAX_ITEMS);
+      const parts = shown.map(
+        (entry) => `${entry.itemCd} ${(parseAnchorQty(entry.stockDisplay) || 0).toLocaleString("ja-JP")}`,
+      );
+      const rest = entries.length - shown.length;
+      const restLabel = rest > 0 ? ` ＋ 他${rest}品番` : "";
+      anchorBreakdown.textContent =
+        `グラフの起点 ${anchorQty.toLocaleString("ja-JP")} = ${parts.join(" ＋ ")}${restLabel}` +
+        `（同じ仕入先品番を共有する ${entries.length} 品番の在庫を合算しています）`;
+      anchorBreakdown.hidden = false;
+    }
+
+    function formatQty(value) {
+      const number = Number(value);
+      return Number.isFinite(number) ? number.toLocaleString("ja-JP") : String(value ?? "");
+    }
+
+    // 需要予測区分。算出できない行（basis なし・旧スナップショット）は項目を隠して案内文だけ出す（REQ-SFV-F-017）。
+    function renderDemandForecast(custCode, itemCd, row, stocks) {
+      if (!demandFields.fields || !demandFields.empty) {
+        return;
+      }
+      const forecast = listClient?.getDemandForecast?.(custCode, itemCd) || null;
+      const trend = listClient?.getUnconfirmedOrderTrend?.(custCode, itemCd) || [];
+      const basis = forecast?.basis || row.dataset.demandForecastBasis || "";
+      const hasForecast = Boolean(basis) && basis !== "なし";
+      demandFields.fields.hidden = !hasForecast;
+      demandFields.empty.hidden = hasForecast;
+      if (demandFields.unitBreakdown) {
+        demandFields.unitBreakdown.hidden = true;
+        demandFields.unitBreakdown.textContent = "";
+      }
+      if (!hasForecast) {
+        return;
+      }
+      const monthly = Array.isArray(trend) && trend.length
+        ? trend.map((point) => `${String(point.month || "").replace("-", "/")}: ${formatQty(point.qty)}`).join(" / ")
+        : (forecast?.monthly || []).map((qty) => formatQty(qty)).join(" / ");
+      setDetailText(demandFields.basis, basis);
+      setDetailText(demandFields.monthly, basis === "内示" && monthly ? `${monthly}（先頭は当月残。得意先×内作品番）` : "-");
+      setDetailText(demandFields.average, forecast?.monthlyAverage ? `${formatQty(Math.round(forecast.monthlyAverage * 10) / 10)} / 月` : "-");
+      const months = forecast?.monthsOfStock ?? row.dataset.monthsOfStock;
+      setDetailText(demandFields.monthsOfStock, months === null || months === undefined || months === "" ? "-" : `約 ${months} か月分`);
+      const stockout = forecast?.stockoutForecastMonth || row.dataset.stockoutForecastMonth || "";
+      setDetailText(demandFields.stockoutMonth, stockout ? stockout : "十分（120 か月以内に尽きません）");
+      // 照合単位の在庫内訳（04 §6.6 の renderAnchorBreakdown と同じ規則: 複数品番のときだけ）
+      const entries = (Array.isArray(stocks) ? stocks : []).filter((entry) => parseAnchorQty(entry.stockDisplay) !== null);
+      if (demandFields.unitBreakdown && entries.length >= 2 && forecast?.stockTotal !== null && forecast?.stockTotal !== undefined) {
+        const shown = entries.slice(0, ANCHOR_BREAKDOWN_MAX_ITEMS);
+        const parts = shown.map((entry) => `${entry.itemCd} ${(parseAnchorQty(entry.stockDisplay) || 0).toLocaleString("ja-JP")}`);
+        const rest = entries.length - shown.length;
+        demandFields.unitBreakdown.textContent =
+          `在庫月数の分子（照合単位の在庫合計） ${formatQty(forecast.stockTotal)} = ${parts.join(" ＋ ")}${rest > 0 ? ` ＋ 他${rest}品番` : ""}`;
+        demandFields.unitBreakdown.hidden = false;
+      }
+    }
+
+    // 5年9組の検索結果ページへのリンクを組み立てる。設変値（optionChange）は渡さず、
+    // 5年9組側の既定「*」に委ねる（在庫発注アラートは設変値を持たない）。
+    function updateGonenLink(custCode, itemCd) {
+      if (!gonenLink) {
+        return;
+      }
+      // 5年9組は得意先コード・得意先品番の両方を検索条件に要するため、欠けていたら隠す。
+      const canSearch = Boolean(custCode && itemCd);
+      if (gonenLinkRow) {
+        gonenLinkRow.hidden = !canSearch;
+      }
+      if (!canSearch) {
+        gonenLink.removeAttribute("href");
+        return;
+      }
+      const params = new URLSearchParams({
+        custCode,
+        custItem: itemCd,
+        yearMonth: currentYearMonth(),
+        asOfDate: todayIsoDate(),
+      });
+      gonenLink.href = `${GONEN_RESULT_PATH}?${params.toString()}`;
+    }
+
+    // 在庫数の 3 状態（値あり / 該当なし / 未取得）で起点を分ける（design.md §6.6）。
+    // 該当なし（空文字。SLIMS 取込済みだが SLIMS に品番が無い）は 0 を起点として履歴を描く。
+    // 未取得（"－"。SLIMS 未取込・旧スナップショット）は SLIMS を見られていない状態なので、
+    // 在庫ゼロと描いてはならず null を返してグラフを出さない。
     function parseAnchorQty(text) {
       const trimmed = String(text || "").trim();
       if (!trimmed) {
-        return null;
+        return 0;
       }
       const normalized = trimmed.replace(/,/g, "");
       const number = Number(normalized);
@@ -381,7 +532,7 @@
       return result;
     }
 
-    function renderAnchoredStockChart(sectionEl, slimsSeries) {
+    function renderAnchoredStockChart(sectionEl, slimsSeries, incomingSeries) {
       if (!sectionEl) {
         return;
       }
@@ -392,6 +543,7 @@
       }
 
       const slims = Array.isArray(slimsSeries) ? slimsSeries : [];
+      const incoming = Array.isArray(incomingSeries) ? incomingSeries : [];
       container.innerHTML = "";
       if (!slims.length) {
         container.hidden = true;
@@ -414,8 +566,10 @@
       const plotWidth = width - paddingLeft - 8;
       const plotHeight = height - paddingTop - paddingBottom;
       // マイナスもそのまま表示するため、0 を必ず範囲に含めてゼロ基準線を描けるようにする（design.md §6.6）。
-      const minQty = Math.min(0, ...slims.map((point) => Number(point.qty) || 0));
-      const maxQty = Math.max(1, ...slims.map((point) => Number(point.qty) || 0));
+      // 入荷の棒が切れないよう、値域には入荷数量も算入する（design.md §6.6）。
+      const incomingQtys = incoming.slice(0, slims.length).map((point) => Number(point?.qty) || 0);
+      const minQty = Math.min(0, ...slims.map((point) => Number(point.qty) || 0), ...incomingQtys);
+      const maxQty = Math.max(1, ...slims.map((point) => Number(point.qty) || 0), ...incomingQtys);
       const valueRange = maxQty - minQty || 1;
       const stepX = points.length > 1 ? plotWidth / (points.length - 1) : 0;
 
@@ -430,7 +584,7 @@
       svg.setAttribute("viewBox", `0 0 ${width} ${height}`);
       svg.setAttribute("class", "ioa-anchored-stock-trend-svg");
       svg.setAttribute("role", "img");
-      svg.setAttribute("aria-label", "推定在庫推移（参考値）");
+      svg.setAttribute("aria-label", "推定在庫推移（参考値）と入荷実績");
 
       // Excel風に、等間隔の目盛り線を GRID_LINE_COUNT 分割（=GRID_LINE_COUNT+1本）描画する。
       const GRID_LINE_COUNT = 4;
@@ -468,6 +622,36 @@
         svg.append(zeroLine);
       }
 
+      // 入荷実績（V-217）の棒。推定在庫の折れ線と同一のY軸に、ゼロ基準から上方向に描く。
+      // 折れ線を隠さないよう drawSeries より先に（=背面に）描画する（design.md §6.6）。
+      function drawIncomingBars(seriesPoints) {
+        if (!seriesPoints.length) {
+          return;
+        }
+        const barWidth = stepX > 0 ? stepX * 0.5 : plotWidth * 0.5;
+        const [, zeroY] = coordsOf(0, 0);
+        seriesPoints.forEach((point, index) => {
+          if (index >= points.length) {
+            return;
+          }
+          const qty = Number(point?.qty) || 0;
+          if (qty === 0) {
+            return;
+          }
+          const [centerX, valueY] = coordsOf(index, qty);
+          const rect = document.createElementNS(svgNs, "rect");
+          rect.setAttribute("x", String(centerX - barWidth / 2));
+          rect.setAttribute("y", String(Math.min(zeroY, valueY)));
+          rect.setAttribute("width", String(barWidth));
+          rect.setAttribute("height", String(Math.abs(zeroY - valueY)));
+          rect.setAttribute("class", "ioa-anchored-stock-trend-bar ioa-anchored-stock-trend-bar--incoming");
+          const title = document.createElementNS(svgNs, "title");
+          title.textContent = `入荷(MARI) ${point.month}: ${qty}`;
+          rect.append(title);
+          svg.append(rect);
+        });
+      }
+
       function drawSeries(seriesPoints, lineClass, pointClass, label) {
         if (!seriesPoints.length) {
           return;
@@ -492,6 +676,7 @@
         });
       }
 
+      drawIncomingBars(incoming);
       drawSeries(slims, "ioa-anchored-stock-trend-line ioa-anchored-stock-trend-line--slims", "ioa-anchored-stock-trend-point ioa-anchored-stock-trend-point--slims", "SLIMS起点");
 
       points.forEach((point, index) => {
@@ -518,7 +703,8 @@
       const legend = document.createElement("div");
       legend.className = "ioa-anchored-stock-trend-legend";
       legend.innerHTML =
-        '<span class="ioa-anchored-stock-trend-legend-item ioa-anchored-stock-trend-legend-item--slims">SLIMS起点</span>';
+        '<span class="ioa-anchored-stock-trend-legend-item ioa-anchored-stock-trend-legend-item--slims">推定在庫(SLIMS起点)</span>' +
+        '<span class="ioa-anchored-stock-trend-legend-item ioa-anchored-stock-trend-legend-item--incoming">入荷(MARI)</span>';
       container.append(legend);
     }
 
@@ -540,19 +726,37 @@
         detailFields.flowQuadrant,
         row.dataset.noIncomingRecord ? `${quadrantLabel}（入荷実績なし）` : quadrantLabel || "-",
       );
-      setDetailText(detailFields.department, listClient?.getResponsibleDepartment?.(quadrantKey) || "-");
-      setDetailText(detailFields.condition, listClient?.getFlowConditionLabel?.() || "-");
+      // 状況・推奨アクションは選択中の判定期間で描いた値。listClient がなければ行の data-* を使う（05 design §6.4）。
+      const flowStatus =
+        listClient?.getFlowStatus?.(custCode, row.dataset.itemCd || "", quadrantKey) ?? row.dataset.flowStatus ?? "";
+      const recommendedAction =
+        listClient?.getRecommendedAction?.(quadrantKey) ?? row.dataset.recommendedAction ?? "";
+      setDetailText(detailFields.flowStatus, flowStatus || "-");
+      setDetailText(detailFields.recommendedAction, recommendedAction || "-");
+      setDetailText(
+        detailFields.department,
+        listClient?.getResponsibleDepartment?.(quadrantKey) || row.dataset.responsibleDepartment || "-",
+      );
+      setDetailText(detailFields.evaluationPeriod, listClient?.getEvaluationPeriodLabel?.() || "-");
       // 在庫数は一覧と同じ表示文字列をそのまま出す（未取得の「－」と 0 を取り違えないため）。
       setDetailText(detailFields.stockSlims, row.dataset.stockQty || "-");
       setDetailText(detailFields.stockMari, row.dataset.mariStockQty || "-");
-      // 出荷推移(V-216)・入荷推移(V-217)は独立したグラフとしては表示しない。
-      // 推定在庫推移(V-218)の算出のみに用いる（DECISIONS.md参照）。
-      const shipmentTrend = listClient?.getShipmentTrend?.(custCode, row.dataset.itemCd || "") || [];
-      const incomingTrend = listClient?.getIncomingTrend?.(custCode, row.dataset.itemCd || "") || [];
+      // 出荷推移(V-216)は独立したグラフとしては表示せず、推定在庫推移(V-218)の算出のみに用いる。
+      // 入荷推移(V-217)は算出材料に加えて、推定在庫推移グラフに棒として重ねて表示する
+      // （2026-09-11、DECISIONS.md ステージ12参照）。
+      // 推定在庫推移は「照合単位」（内作品番×仕入先を共有する得意先品番の集合）で逆算する。
+      // 在庫・出荷・入荷の粒度が異なるため、この単位まで広げないと数量が閉じない
+      // （DECISIONS.md ステージ14・15参照）。
+      const itemTrends = listClient?.getItemTrends?.(row.dataset.itemCd || "") || {};
+      const shipmentTrend = itemTrends.shipmentTrend || [];
+      const incomingTrend = itemTrends.incomingTrend || [];
 
-      const slimsAnchor = parseAnchorQty(row.dataset.stockQty);
+      const slimsAnchor = sumUnitAnchorQty(itemTrends.stocks, row.dataset.stockQty);
       const slimsAnchoredTrend = buildAnchoredStockTrend(shipmentTrend, incomingTrend, slimsAnchor);
-      renderAnchoredStockChart(anchoredStockTrendSection, slimsAnchoredTrend);
+      renderAnchoredStockChart(anchoredStockTrendSection, slimsAnchoredTrend, incomingTrend);
+      renderAnchorBreakdown(itemTrends.stocks, slimsAnchor);
+      renderDemandForecast(custCode, row.dataset.itemCd || "", row, itemTrends.stocks);
+      updateGonenLink(custCode, row.dataset.itemCd || "");
     }
 
     async function openLocationDialog(row) {

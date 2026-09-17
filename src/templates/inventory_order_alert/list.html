@@ -40,6 +40,15 @@
     </div>
     <div class="ioa-table-actions">
       {% if has_list_data %}
+        {# 判定期間（V-211）セレクタはアクション行の先頭に置く（05 design §6.3、REQ-SFV-F-001）。判定軸は廃止。 #}
+        <label class="ioa-evaluation-period-field" data-evaluation-period="{{ flow_selection.key }}">
+          <span class="ioa-evaluation-period-label">判定期間</span>
+          <select id="ioa-evaluation-period" name="period" class="ioa-filter-select ioa-filter-control ioa-evaluation-period-select" aria-label="判定期間">
+            {% for period in evaluation_periods %}
+              <option value="{{ period.years }}" data-period-key="{{ period.key }}" {% if flow_selection.key == period.key %}selected{% endif %}>{{ period.label }}</option>
+            {% endfor %}
+          </select>
+        </label>
         <button type="button" class="button-link ioa-alert-rules-open" aria-haspopup="dialog" aria-controls="ioa-alert-rules-dialog">
           判定ルール
         </button>
@@ -68,42 +77,6 @@
   {% endif %}
 
   {% if has_list_data %}
-  {# 判定条件セレクタはフィルタパネルの上に置く（design.md §6.6.1）。 #}
-  <div class="ioa-flow-selector" data-flow-axis="{{ flow_selection.axis }}" data-flow-period="{{ flow_selection.period.value }}">
-    <div class="ioa-filter-panel-fields">
-      <label class="ioa-filter-field">
-        <span class="ioa-filter-field-label">判定軸</span>
-        <select id="ioa-flow-axis" name="axis" class="ioa-filter-select ioa-filter-control">
-          {% for option in flow_axis_options %}
-            <option value="{{ option.value }}" {% if flow_selection.axis == option.value %}selected{% endif %}>{{ option.label }}</option>
-          {% endfor %}
-        </select>
-      </label>
-      <label class="ioa-filter-field">
-        <span class="ioa-filter-field-label">判定期間</span>
-        <select id="ioa-flow-period" name="period" class="ioa-filter-select ioa-filter-control">
-          {% comment %}軸別の選択肢をすべて描画し、選択中の軸以外は隠す。切り替えは JS が行う（design.md §6.6.1）。{% endcomment %}
-          {% for axis, options in flow_period_options.items %}
-            {% for option in options %}
-              <option value="{{ option.value }}" data-axis="{{ axis }}"
-                      {% if flow_selection.axis != axis %}hidden{% endif %}
-                      {% if flow_selection.axis == axis and flow_selection.period.value == option.value %}selected{% endif %}>{{ option.label }}</option>
-            {% endfor %}
-          {% endfor %}
-        </select>
-      </label>
-      <label class="ioa-filter-field">
-        <span class="ioa-filter-field-label">流動区分</span>
-        <select id="ioa-flow-quadrant" name="flow_quadrant" class="ioa-filter-select ioa-filter-control">
-          <option value="">全て</option>
-          {% for rule in flow_quadrant_rule_rows %}
-            <option value="{{ rule.quadrant_key }}" {% if flow_quadrant_filter == rule.quadrant_key %}selected{% endif %}>{{ rule.quadrant }}</option>
-          {% endfor %}
-        </select>
-      </label>
-    </div>
-  </div>
-
   {# フィルタパネルの枠を横いっぱいに広げる。並び替えはフィルタ項目の直後に置く。 #}
   <div class="ioa-table-toolbar">
     <div class="ioa-filter-panel">
@@ -128,6 +101,15 @@
         </label>
         {% include "includes/portal_prefix_filter_field.html" with label="得意先品番" name="item_cd" value=list_filter.item_cd datalist_id="ioa-item-cd-options" placeholder="得意先品番" field_class="ioa-filter-field" label_class="ioa-filter-field-label" input_class="ioa-filter-control ioa-filter-item-cd" options=filter_options.item_cd_options %}
         {% include "includes/portal_prefix_filter_field.html" with label="仕入先品番" name="level1_item_cd" value=list_filter.level1_item_cd datalist_id="ioa-level1-item-cd-options" placeholder="仕入先品番" field_class="ioa-filter-field" label_class="ioa-filter-field-label" input_class="ioa-filter-control ioa-filter-level1-item-cd" options=filter_options.level1_item_cd_options %}
+        <label class="ioa-filter-field">
+          <span class="ioa-filter-field-label">流動区分</span>
+          <select id="ioa-flow-quadrant" name="flow_quadrant" class="ioa-filter-select ioa-filter-control">
+            <option value="">すべて</option>
+            {% for rule in flow_quadrant_rule_rows %}
+              <option value="{{ rule.quadrant_key }}" {% if flow_quadrant_filter == rule.quadrant_key %}selected{% endif %}>{{ rule.quadrant }}</option>
+            {% endfor %}
+          </select>
+        </label>
         <div class="ioa-filter-field ioa-filter-panel-sort">
           <span class="ioa-filter-field-label" aria-hidden="true">&nbsp;</span>
           <button type="button" class="button-link ioa-sort-open" aria-haspopup="dialog" aria-controls="ioa-sort-dialog">
@@ -166,6 +148,12 @@
             data-last-incoming-date="{{ row|ioa_display:'last_incoming_date' }}"
             data-last-ship-date="{{ row|ioa_display:'last_ship_date' }}"
             data-flow-quadrant="{{ row.flow_quadrant_key|default:'' }}"
+            data-flow-status="{{ row.flow_status|default:'' }}"
+            data-recommended-action="{{ row.recommended_action|default:'' }}"
+            data-responsible-department="{{ row.responsible_department|default:'' }}"
+            data-demand-forecast-basis="{{ row.demand_forecast_basis|default:'' }}"
+            data-months-of-stock="{{ row.months_of_stock|default_if_none:'' }}"
+            data-stockout-forecast-month="{{ row.stockout_forecast_month|default_if_none:'' }}"
             data-no-incoming-record="{% if row.no_incoming_record %}1{% endif %}"
             data-stock-qty="{{ row|ioa_display:'stock_qty' }}"
             data-mari-stock-qty="{{ row|ioa_display:'mari_stock_qty' }}"
@@ -173,6 +161,24 @@
             data-stock-as-of-label="{{ row.stock_as_of_label|default:'' }}"
             data-confirmation-status="{{ row.confirmation_status_key }}">
           {% for header in table_headers %}
+          {% if header.key == "flow_quadrant" %}
+          {# 流動区分セル: 区分 / 状況 / 推奨アクション / 責任部署（05 design §6.3、REQ-SFV-F-004）。通常流動品は空。 #}
+          <td class="ioa-flow-cell">
+            {% if row.flow_quadrant_key != "normal-flow" %}
+            <div class="ioa-flow-cell-head">
+              <span class="ioa-flow-quadrant">{{ row.flow_quadrant }}</span>
+              {% if row.no_incoming_record %}<span class="ioa-no-incoming-badge">入荷実績なし</span>{% endif %}
+            </div>
+            <div class="ioa-flow-status muted">{{ row.flow_status }}</div>
+            {# 緊急度（V-223）: 需要予測が算出できる行のみ。文言は JS の描画と対で維持する（05 design §6.3）。 #}
+            {% if row.months_of_stock is not None and row.demand_forecast_basis and row.demand_forecast_basis != "なし" %}
+            <div class="ioa-flow-urgency">約 {{ row.months_of_stock }} か月分 → {% if row.stockout_forecast_month %}{{ row.stockout_forecast_month }} に在庫切れ{% else %}十分{% endif %}（{{ row.demand_forecast_basis }}）</div>
+            {% endif %}
+            <div class="ioa-flow-action">→ {{ row.recommended_action }}</div>
+            <div class="ioa-flow-departments muted">責任: {{ row.responsible_department }}</div>
+            {% endif %}
+          </td>
+          {% else %}
           <td>
             {% if header.key == "confirmation_status" %}
               <select class="ioa-confirmation-status" aria-label="確認状態"
@@ -187,6 +193,7 @@
               {{ row|ioa_display:header.key }}
             {% endif %}
           </td>
+          {% endif %}
           {% endfor %}
         </tr>
         {% empty %}
@@ -216,10 +223,10 @@
         {% endif %}
       </div>
     </form>
-    {# 件数サマリは常時表示する（0件時も絞り込み状況が分かるように）。判定条件は判定軸・判定期間セレクトで分かるため表示しない。 #}
+    {# 件数サマリは常時表示する（0件時も絞り込み状況が分かるように）。判定条件は判定期間セレクトで分かるため表示しない。 #}
     <div class="ioa-table-footer-right">
       <div class="ioa-table-counts">
-        <p class="ioa-table-counts-left">供給リスク品 {{ counts.supply_risk }} 件 / 在庫死蔵品 {{ counts.dormant_stock }} 件 / 在庫過剰リスク品 {{ counts.excess_stock_risk }} 件 / 通常流動品 {{ counts.normal_flow }} 件</p>
+        <p class="ioa-table-counts-left">低流動品（入荷なし） {{ counts.low_flow_no_incoming }} 件 / 在庫死蔵品 {{ counts.dormant_stock }} 件 / 低流動品（出荷なし） {{ counts.low_flow_no_shipment }} 件 / 通常流動品 {{ counts.normal_flow }} 件</p>
         <p class="ioa-table-counts-right">確認済み {{ counts.confirmed }} 件 / 確認中 {{ counts.in_progress }} 件 / 未確認 {{ counts.unconfirmed }} 件</p>
       </div>
     </div>
@@ -285,9 +292,9 @@
 <dialog id="ioa-alert-rules-dialog" class="ioa-alert-rules-dialog">
   <div class="ioa-alert-rules-content">
     <h3 class="ioa-alert-rules-title">判定ルール</h3>
-    <p class="ioa-alert-rules-condition">現在の判定条件: {{ flow_selection.axis_label }}・{{ flow_selection.period_label }}</p>
+    <p class="ioa-alert-rules-condition">現在の判定期間: <span class="ioa-alert-rules-period">{{ flow_selection.period_label }}</span></p>
     <p class="ioa-alert-rules-help muted">
-      期間内入荷／期間内出荷は、BOM 基準日から遡った判定期間内に最終入荷日／最終出荷日があることを指します。
+      期間内入荷／期間内出荷は、BOM 基準日から遡った判定期間（1年 / 3年 / 5年）内に最終入荷日／最終出荷日があることを指します。
     </p>
     <div class="ioa-alert-rules-table-wrap">
     <table class="ioa-alert-rules-table">
@@ -295,6 +302,8 @@
         <col class="ioa-alert-rules-col-incoming">
         <col class="ioa-alert-rules-col-shipment">
         <col class="ioa-alert-rules-col-level">
+        <col class="ioa-alert-rules-col-status">
+        <col class="ioa-alert-rules-col-action">
         <col class="ioa-alert-rules-col-department">
       </colgroup>
       <thead>
@@ -302,6 +311,8 @@
           <th scope="col">期間内入荷</th>
           <th scope="col">期間内出荷</th>
           <th scope="col">流動区分</th>
+          <th scope="col">状況</th>
+          <th scope="col">推奨アクション</th>
           <th scope="col">責任部署</th>
         </tr>
       </thead>
@@ -316,6 +327,9 @@
               {{ rule.quadrant }}
             </span>
           </td>
+          {# 状況テンプレートの {period} は JS が選択中の判定期間ラベルに置換する（data-status-template）。 #}
+          <td class="ioa-alert-rules-status" data-status-template="{{ rule.status_template }}">{{ rule.status_template }}</td>
+          <td class="ioa-alert-rules-action">{{ rule.action }}</td>
           <td>{{ rule.departments|join:"・" }}</td>
         </tr>
         {% endfor %}
@@ -331,25 +345,29 @@
 <dialog id="ioa-location-dialog" class="ioa-location-dialog">
   <div class="ioa-location-content">
     <h3 class="ioa-location-title">詳細</h3>
-    <section class="ioa-detail-item-section">
-      <h4 class="ioa-detail-section-title">品目</h4>
-      <dl class="ioa-detail-fields">
-        <dt>得意先</dt><dd class="ioa-detail-item-cust"></dd>
-        <dt>得意先品番</dt><dd class="ioa-detail-item-cd mono"></dd>
-        <dt>仕入先</dt><dd class="ioa-detail-item-vend"></dd>
-        <dt>仕入先品番</dt><dd class="ioa-detail-item-level1-cd mono"></dd>
-        <dt>最終入荷日</dt><dd class="ioa-detail-item-last-incoming"></dd>
-        <dt>最終出荷日</dt><dd class="ioa-detail-item-last-ship"></dd>
-      </dl>
-    </section>
-    <section class="ioa-detail-flow-section">
-      <h4 class="ioa-detail-section-title">流動区分</h4>
-      <p class="ioa-detail-flow-quadrant"></p>
-      <dl class="ioa-detail-fields">
-        <dt>責任部署</dt><dd class="ioa-detail-department"></dd>
-        <dt>判定条件</dt><dd class="ioa-detail-condition"></dd>
-      </dl>
-    </section>
+    <div class="ioa-detail-columns">
+      <section class="ioa-detail-item-section">
+        <h4 class="ioa-detail-section-title">品目</h4>
+        <dl class="ioa-detail-fields">
+          <dt>得意先</dt><dd class="ioa-detail-item-cust"></dd>
+          <dt>得意先品番</dt><dd class="ioa-detail-item-cd mono"></dd>
+          <dt>仕入先</dt><dd class="ioa-detail-item-vend"></dd>
+          <dt>仕入先品番</dt><dd class="ioa-detail-item-level1-cd mono"></dd>
+          <dt>最終入荷日</dt><dd class="ioa-detail-item-last-incoming"></dd>
+          <dt>最終出荷日</dt><dd class="ioa-detail-item-last-ship"></dd>
+        </dl>
+      </section>
+      <section class="ioa-detail-flow-section">
+        <h4 class="ioa-detail-section-title">流動区分</h4>
+        <p class="ioa-detail-flow-quadrant"></p>
+        <dl class="ioa-detail-fields">
+          <dt>状況</dt><dd class="ioa-detail-flow-status"></dd>
+          <dt>推奨アクション</dt><dd class="ioa-detail-recommended-action"></dd>
+          <dt>責任部署</dt><dd class="ioa-detail-department"></dd>
+          <dt>判定期間</dt><dd class="ioa-detail-evaluation-period"></dd>
+        </dl>
+      </section>
+    </div>
     <section class="ioa-detail-stock-section">
       <h4 class="ioa-detail-section-title">在庫</h4>
       <dl class="ioa-detail-fields ioa-detail-stock-fields">
@@ -378,10 +396,30 @@
     <p class="ioa-location-as-of muted"></p>
     </section>
     <section class="ioa-detail-anchored-stock-trend-section">
-      <h4 class="ioa-detail-section-title">推定在庫推移（参考値）</h4>
-      <p class="ioa-detail-section-note muted">出荷・入荷の実績から逆算した参考値です。実測の在庫履歴ではありません。</p>
+      <h4 class="ioa-detail-section-title">推定在庫推移（参考値）と入荷実績</h4>
+      <p class="ioa-detail-section-note muted">折れ線は出荷・入荷の実績から逆算した参考値です（実測の在庫履歴ではありません）。棒は MARI の月次入荷実績（検収数量）です。在庫数(SLIMS)が空の品番は 0 を起点に逆算しています。<strong>在庫・出荷・入荷は、同じ仕入先品番を共有する得意先品番をまとめた単位で合算</strong>しています（入荷が仕入先品番に対して発生するため）。同じ単位に属する行では同じグラフになります。マイナスは、入荷が「在庫＋出荷」を上回っている（棚卸差異・生産消費など出荷以外の在庫変動がある）ことを示します。</p>
       <div class="ioa-detail-anchored-stock-trend-chart"></div>
       <p class="ioa-detail-anchored-stock-trend-empty muted" hidden>推定在庫推移を算出できません。</p>
+      {# 照合単位が複数の得意先品番を含むときだけ、起点の内訳を JS が描画する（design.md §6.6）。 #}
+      <p class="ioa-detail-section-note ioa-detail-anchor-breakdown muted" hidden></p>
+      {# 5年9組の検索結果を別タブで開く。href は JS が行データから組み立てる（design.md §6.7）。 #}
+      <p class="ioa-detail-gonen-link-row">
+        <a class="button-link ioa-detail-gonen-link" href="#" target="_blank" rel="noopener"
+           title="5年9組の検索結果を別タブで開きます">5年9組で開く</a>
+      </p>
+    </section>
+    {# 需要予測（V-220〜V-222）区分。推定在庫推移とメモの間（05 design §6.4、REQ-SFV-F-014）。値は JS が行データから流し込む。 #}
+    <section class="ioa-detail-demand-forecast-section">
+      <h4 class="ioa-detail-section-title">需要予測</h4>
+      <dl class="ioa-detail-fields ioa-detail-demand-forecast-fields">
+        <dt>算出根拠</dt><dd class="ioa-detail-demand-basis"></dd>
+        <dt>月別内示受注数量</dt><dd class="ioa-detail-demand-monthly"></dd>
+        <dt>月平均需要</dt><dd class="ioa-detail-demand-average"></dd>
+        <dt>在庫月数</dt><dd class="ioa-detail-months-of-stock"></dd>
+        <dt>在庫切れ予測月</dt><dd class="ioa-detail-stockout-month"></dd>
+      </dl>
+      <p class="ioa-detail-section-note ioa-detail-demand-unit-breakdown muted" hidden></p>
+      <p class="ioa-detail-demand-empty muted" hidden>需要予測を算出できません（内示受注・出荷実績のいずれもありません）。</p>
     </section>
     <section class="ioa-detail-memo-section">
       <h4 class="ioa-detail-section-title">メモ</h4>
@@ -422,6 +460,6 @@
 <script src="/static/js/portal-list-prefix-filter.js?v=20260629-dependent-cust" defer></script>
 <script src="/static/js/portal-list-dependent-cust-filter.js?v=20260629-dependent-cust" defer></script>
 <script src="/static/js/portal-list-sort-dialog.js?v=20260629-dependent-cust" defer></script>
-<script src="/static/js/inventory-order-alert-list-client.js?v=20260903-anchored-chart-slims-only" defer></script>
-<script src="/static/js/inventory-order-alert-list.js?v=20260903-anchored-chart-slims-only" defer></script>
+<script src="/static/js/inventory-order-alert-list-client.js?v=20260917-demand-forecast" defer></script>
+<script src="/static/js/inventory-order-alert-list.js?v=20260917-demand-forecast" defer></script>
 {% endblock %}

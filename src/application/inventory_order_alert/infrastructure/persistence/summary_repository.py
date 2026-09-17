@@ -59,8 +59,8 @@ def load_latest_summary() -> SummaryLoadResult | None:
         aggregation_error=snapshot.aggregation_error,
         total_count=counts.total,
         # 残置カラムへの詰め替え規則（design.md §5.1）。カラム名は据え置く。
-        critical_count=counts.supply_risk,
-        warning_count=counts.dormant_stock + counts.excess_stock_risk,
+        critical_count=counts.low_flow_no_incoming,
+        warning_count=counts.dormant_stock + counts.low_flow_no_shipment,
     )
 
 

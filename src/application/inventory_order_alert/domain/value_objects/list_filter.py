@@ -179,10 +179,8 @@ def build_display_query_string(
         "dir": ",".join(spec.direction for spec in specs),
         "page": page if page is not None else table_params.page,
         "page_size": page_size if page_size is not None else table_params.page_size,
-        # 判定条件はソート・ページング・フィルタのどのリンクにも引き継ぐ（design.md §6.1）。
-        # 既定値でも必ず出力し、axis と period が対で欠けないようにする。
-        "axis": flow_selection.axis,
-        "period": flow_selection.period.value,
+        # 判定期間はソート・ページング・フィルタのどのリンクにも引き継ぐ（05 design.md §6.1）。
+        "period": flow_selection.period.years,
     }
     if flow_quadrant in FLOW_QUADRANT_LABELS:
         query["flow_quadrant"] = flow_quadrant
