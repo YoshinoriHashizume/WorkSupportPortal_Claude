@@ -681,24 +681,13 @@
       return `約 ${months} か月分 → ${stockout}（${forecast.basis}）`;
     }
 
-    // 流動区分セル: 区分 / 状況 / 緊急度 / 推奨アクション / 責任部署（05 design §6.3、REQ-SFV-F-004）。通常流動品は空。
+    // 流動区分セルは区分名のみ（05 design §6.3、REQ-SFV-F-004。2026-09-17 改訂）。通常流動品は空。
+    // 状況・緊急度・推奨アクション・責任部署は詳細ダイアログが getFlowStatus() 等で引く。
     function renderFlowCell(row, quadrantKey) {
       if (quadrantKey === QUADRANT_NORMAL_FLOW_KEY) {
         return `<td class="ioa-flow-cell"></td>`;
       }
-      const badge = row.noIncomingRecord
-        ? `<span class="ioa-no-incoming-badge">${NO_INCOMING_RECORD_TEXT}</span>`
-        : "";
-      const urgency = urgencyTextOf(row);
-      const urgencyHtml = urgency ? `<div class="ioa-flow-urgency">${Core.escapeHtml(urgency)}</div>` : "";
-      return `<td class="ioa-flow-cell">
-        <div class="ioa-flow-cell-head">
-          <span class="ioa-flow-quadrant">${Core.escapeHtml(flowQuadrantLabels[quadrantKey] || "")}</span>${badge}
-        </div>
-        <div class="ioa-flow-status muted">${Core.escapeHtml(flowStatusOf(row, quadrantKey))}</div>${urgencyHtml}
-        <div class="ioa-flow-action">→ ${Core.escapeHtml(recommendedActionOf(quadrantKey))}</div>
-        <div class="ioa-flow-departments muted">責任: ${Core.escapeHtml(responsibleDepartmentOf(quadrantKey))}</div>
-      </td>`;
+      return `<td class="ioa-flow-cell"><span class="ioa-flow-quadrant">${Core.escapeHtml(flowQuadrantLabels[quadrantKey] || "")}</span></td>`;
     }
 
     function renderTableBody(pageRows) {

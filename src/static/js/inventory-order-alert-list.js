@@ -722,10 +722,8 @@
       setDetailText(detailFields.level1ItemCd, row.dataset.level1ItemCd || "-");
       setDetailText(detailFields.lastIncoming, row.dataset.lastIncomingDate || "-");
       setDetailText(detailFields.lastShip, row.dataset.lastShipDate || "-");
-      setDetailText(
-        detailFields.flowQuadrant,
-        row.dataset.noIncomingRecord ? `${quadrantLabel}（入荷実績なし）` : quadrantLabel || "-",
-      );
+      // 入荷実績なしの注記は出さない（最終入荷日が空欄で分かる。状況の文言には「入荷実績なし」が入る）。
+      setDetailText(detailFields.flowQuadrant, quadrantLabel || "-");
       // 状況・推奨アクションは選択中の判定期間で描いた値。listClient がなければ行の data-* を使う（05 design §6.4）。
       const flowStatus =
         listClient?.getFlowStatus?.(custCode, row.dataset.itemCd || "", quadrantKey) ?? row.dataset.flowStatus ?? "";

@@ -261,11 +261,13 @@ def test_x018_list_client_js_renders_status_by_template_replacement_only():
     assert "new Date(" not in block
     status_and_cell = source.split("function flowStatusOf(", 1)[1].split("function renderTableBody(", 1)[0]
     assert "new Date(" not in status_and_cell
-    # セルは 区分 / 状況 / 推奨アクション / 責任部署 の構成（05 design §6.3）
+    # セルは区分名のみ（05 design §6.3、2026/09/17 改訂）。状況等は詳細ダイアログ用の API で引く
     cell = source.split("function renderFlowCell(", 1)[1].split("function renderTableBody(", 1)[0]
-    for class_name in ("ioa-flow-cell", "ioa-flow-cell-head", "ioa-flow-quadrant", "ioa-no-incoming-badge", "ioa-flow-status", "ioa-flow-action", "ioa-flow-departments"):
-        assert class_name in cell
+    assert "ioa-flow-cell" in cell and "ioa-flow-quadrant" in cell
+    for removed in ("ioa-flow-cell-head", "ioa-no-incoming-badge", "ioa-flow-status", "ioa-flow-action", "ioa-flow-departments", "ioa-flow-urgency"):
+        assert removed not in cell
     assert 'quadrantKey === QUADRANT_NORMAL_FLOW_KEY' in cell
+    assert "getFlowStatus(custCode, itemCd, quadrantKey)" in source
 
 
 def test_x019_list_client_js_syncs_only_period_to_url():
@@ -700,16 +702,16 @@ def test_x020_list_client_js_sorts_months_of_stock_with_empty_last():
     assert "sortableColumns.concat(sortOnlyColumns)" in source
 
 
-def test_stage2_list_client_js_renders_urgency_only_when_forecast_exists():
+def test_stage2_list_client_js_keeps_urgency_text_for_detail_dialog_only():
     source = CLIENT_JS_PATH.read_text(encoding="utf-8")
-    block = source.split("function urgencyTextOf(", 1)[1].split("function renderFlowCell(", 1)[0]
+    block = source.split("function urgencyTextOf(", 1)[1].split("// 流動区分セルは区分名のみ", 1)[0]
 
     assert 'forecast.basis === "なし"' in block
     assert "十分" in block
     assert "に在庫切れ" in block
+    assert "getUrgencyText(custCode, itemCd)" in source
     cell = source.split("function renderFlowCell(", 1)[1].split("function renderTableBody(", 1)[0]
-    assert "ioa-flow-urgency" in cell
-    assert "urgency ? `<div class=\"ioa-flow-urgency\">" in cell
+    assert "ioa-flow-urgency" not in cell
 
 
 def test_stage2_list_js_fills_demand_forecast_section():

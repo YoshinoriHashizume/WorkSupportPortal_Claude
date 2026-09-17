@@ -210,9 +210,9 @@ ID 規約: `TC-SFV-{D|A|I|X}-nnn`（D=Domain, A=Application, I=Infrastructure, X
 | TC-SFV-X-001 | 判定軸セレクタがなく判定期間セレクタがアクション行にある | 一覧 HTML | `id="ioa-flow-axis"` なし、`id="ioa-evaluation-period"` が `ioa-table-actions` 内で `ioa-alert-rules-open` より前 | F-001, F-002, 受入#1 | P0 | 1 |
 | TC-SFV-X-002 | 判定期間の選択肢は 1/3/5 年のみ | 同上 | `option` が `1年/3年/5年` の 3 件、既定選択 1 年 | F-001 | P0 | 1 |
 | TC-SFV-X-003 | 画面に旧称・判定軸が出ない | 4 区分の行を投入した一覧 HTML | 「供給リスク品」「在庫過剰リスク品」「判定軸」「低流動判定軸」「死蔵判定軸」を含まない | F-019 | P0 | 1 |
-| TC-SFV-X-004 | セルに区分・状況・推奨アクション・責任部署が出る | 入荷なしの行 | `ioa-flow-quadrant` に「低流動品（入荷なし）」、`ioa-flow-status` に最終入荷日、`ioa-flow-action`、`ioa-flow-departments` | F-004, 受入#3 | P0 | 1 |
+| TC-SFV-X-004 | セルは区分名のみ（2026/09/17 改訂） | 入荷なしの行 | `ioa-flow-quadrant` に「低流動品（入荷なし）」。セル内に `ioa-flow-status` / `ioa-flow-action` / `ioa-flow-departments` / `ioa-flow-urgency` がない。行の `data-flow-status` 等は残る | F-004, 受入#3 | P0 | 1 |
 | TC-SFV-X-005 | 通常流動品のセルは空 | 通常の行 | `<td class="ioa-flow-cell">` 内に区分・アクションのテキストがない | F-004 | P0 | 1 |
-| TC-SFV-X-006 | 入荷実績なしバッジが併記される | 最終入荷日空の行 | `ioa-no-incoming-badge` あり、状況に「入荷実績なし」 | F-004, F-005 | P1 | 1 |
+| TC-SFV-X-006 | 入荷実績なしバッジは出ない（2026/09/17 改訂） | 最終入荷日空の行 | `ioa-no-incoming-badge` なし。行の `data-flow-status` に「入荷実績なし」（詳細ダイアログ用） | F-004, F-005 | P1 | 1 |
 | TC-SFV-X-007 | 旧 URL（axis・月単位 period）でエラーにならない | `?axis=low_flow&period=3` | 200、判定期間 1 年で表示 | F-002, 受入#10 | P0 | 1 |
 | TC-SFV-X-008 | 旧キーの絞り込みは新区分で絞れる | `?flow_quadrant=supply-risk` | 200、絞り込み値が `low-flow-no-incoming` | F-010 | P1 | 1 |
 | TC-SFV-X-009 | 件数サマリが新区分名 | 一覧 HTML | 「低流動品（入荷なし） N 件 / 在庫死蔵品 N 件 / 低流動品（出荷なし） N 件 / 通常流動品 N 件」 | F-011 | P0 | 1 |
@@ -221,10 +221,10 @@ ID 規約: `TC-SFV-{D|A|I|X}-nnn`（D=Domain, A=Application, I=Infrastructure, X
 | TC-SFV-X-012 | メニュー画面のアラート帯が新区分名・1 年 | ダッシュボード HTML | 4 区分名、「判定期間 1年」、「3か月」なし | F-015, 受入#6 | P0 | 1 |
 | TC-SFV-X-013 | CSV 出力の列と値 | `export.csv?period=1` | ヘッダに `流動区分`、値は新区分名、`判定軸` 列は空、第 2 段階で末尾 4 列 | F-013, 受入#7 | P0 | 1/2 |
 | TC-SFV-X-014 | 旧スナップショット（内示なし）で一覧が表示できる | `unconfirmed_order_trend` のない行を投入 | 200、緊急度要素は非表示、需要予測「なし」 | F-017, 受入#9 | P0 | 2 |
-| TC-SFV-X-015 | 緊急度の表示（内示ベース） | 需要予測つきの行 | `ioa-flow-urgency` に在庫月数・在庫切れ予測月・「内示」 | F-004, F-009 | P0 | 2 |
+| TC-SFV-X-015 | 緊急度は詳細ダイアログのみ（2026/09/17 改訂） | 需要予測つきの行 | セルに `ioa-flow-urgency` がなく、行の `data-months-of-stock` / `data-stockout-forecast-month` と詳細ダイアログの `ioa-detail-months-of-stock` / `ioa-detail-stockout-month` がある | F-004, F-009 | P0 | 2 |
 | TC-SFV-X-016 | 詳細ダイアログの需要予測区分 | テンプレート | `ioa-detail-demand-forecast-section` が推定在庫推移とメモの間にある | F-014 | P1 | 2 |
 | TC-SFV-X-017 | JS: 状態に `flowAxis` がなく `evaluationPeriod` がある | list-client.js ソース | `flowAxis` を含まない、`state.periodKey`（または相当）と `evaluationPeriods` を参照 | F-002 | P1 | 1 |
-| TC-SFV-X-018 | JS: セル描画は `recommendedActions` のテンプレートに置換するだけ | 同上 | `statusTemplate` の `{period}` / `{last_incoming}` / `{last_ship}` を `replace` している。判定条件（日付比較）を JS に持たない | F-004, NF-005 | P1 | 1 |
+| TC-SFV-X-018 | JS: 状況の描画は `recommendedActions` のテンプレートに置換するだけ（詳細ダイアログ用） | 同上 | `statusTemplate` の `{period}` / `{last_incoming}` / `{last_ship}` を `replace` している。判定条件（日付比較）を JS に持たない。セル描画（`renderFlowCell`）は区分名のみ | F-004, NF-005 | P1 | 1 |
 | TC-SFV-X-019 | JS: URL 同期に `period` のみ | 同上 | `params.set("period", …)` あり、`params.set("axis"` なし | F-016 | P1 | 1 |
 | TC-SFV-X-020 | JS: 在庫月数ソートのキー | 同上 | `months_of_stock` のソート分岐（空は末尾） | F-010 | P2 | 2 |
 | TC-SFV-X-021 | 設定画面の確認状態リセットが従来どおり動く（移行措置の手段） | 管理者で `POST /api/inventory-order-alert/confirmation/reset` | 全件未確認、メモ履歴は残る（既存テストで担保。本書からは受入#11 として参照） | F-020, 受入#11 | P0 | 1 |

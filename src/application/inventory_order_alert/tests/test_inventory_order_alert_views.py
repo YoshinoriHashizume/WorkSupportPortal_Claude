@@ -248,11 +248,11 @@ def test_app_css_has_flow_cell_and_period_selector_styles_without_flow_selector(
 
     # 「判定条件」パネルのスタイルは撤去済み（05 design §6.3）。
     assert "ioa-flow-selector" not in css
-    # 流動区分セルと判定期間セレクタのスタイルがある。
-    assert ".inventory-order-alert-page .ioa-table td.ioa-flow-cell {" in css
-    assert "min-width: 22em;" in css
+    # 区分名と判定期間セレクタのスタイルがある。セルを積み上げる旧スタイル・バッジは撤去済み（2026/09/17 改訂）。
+    assert ".inventory-order-alert-page .ioa-flow-quadrant {" in css
     assert ".inventory-order-alert-page .ioa-evaluation-period-select {" in css
-    assert ".inventory-order-alert-page .ioa-no-incoming-badge {" in css
+    for removed in ("ioa-no-incoming-badge", "ioa-flow-cell-head", "ioa-flow-status", "ioa-flow-urgency", "min-width: 22em"):
+        assert removed not in css
     # 行の背景色クラスは新キーに追随し、旧キーは残っていない。
     assert ".alert-row--low-flow-no-incoming" in css
     assert ".alert-row--low-flow-no-shipment" in css
@@ -919,7 +919,8 @@ def test_x003_page_has_no_legacy_names_or_axis(client, production_user):
 
 
 @pytest.mark.django_db
-def test_x004_flow_cell_shows_quadrant_status_action_and_departments(client, production_user):
+def test_x004_flow_cell_shows_quadrant_name_only(client, production_user):
+    """セルは区分名のみ。説明（状況・対処方法）は詳細ダイアログ（2026/09/17 改訂）。"""
     import_record = SlimsStockImport.objects.create(file_name="sample.csv", row_count=1)
     store_summary_snapshot(
         import_record,
@@ -932,15 +933,13 @@ def test_x004_flow_cell_shows_quadrant_status_action_and_departments(client, pro
 
     cell_start = html.index('<td class="ioa-flow-cell">')
     cell = html[cell_start : html.index("</td>", cell_start)]
-    assert '<span class="ioa-flow-quadrant">低流動品（入荷なし）</span>' in cell
-    assert 'class="ioa-flow-status muted"' in cell
-    assert "最終入荷 2025/04/02" in cell
-    assert "1年" in cell
-    assert 'class="ioa-flow-action"' in cell
-    assert "仕入先へ生産継続可否" in cell
-    assert 'class="ioa-flow-departments muted"' in cell
-    assert "調達G・営業G・生産管理" in cell
-    assert "ioa-no-incoming-badge" not in cell
+    assert cell == '<td class="ioa-flow-cell"><span class="ioa-flow-quadrant">低流動品（入荷なし）</span>'
+    for removed in ("ioa-flow-status", "ioa-flow-action", "ioa-flow-departments", "ioa-flow-urgency", "ioa-flow-cell-head"):
+        assert removed not in html
+    # 詳細ダイアログ用の属性は残す
+    assert 'data-flow-status="出荷は継続、最終入荷 2025/04/02（1年以上入荷なし）"' in html
+    assert 'data-recommended-action="仕入先へ' in html
+    assert 'data-responsible-department="調達G・営業G・生産管理"' in html
 
 
 @pytest.mark.django_db
@@ -960,19 +959,21 @@ def test_x005_normal_flow_cell_is_empty(client, production_user):
 
 
 @pytest.mark.django_db
-def test_x006_no_incoming_record_badge_and_status_wording(client, production_user):
+def test_x006_no_incoming_record_has_no_badge(client, production_user):
+    """入荷実績なしバッジは出さない（最終入荷日が空欄で分かる。2026/09/17 改訂）。"""
     import_record = SlimsStockImport.objects.create(file_name="sample.csv", row_count=1)
     store_summary_snapshot(import_record, [_sample_export_row()], as_of_date=date(2026, 6, 17))
 
     client.force_login(production_user)
     html = client.get("/app/production/inventory-order-alert").content.decode("utf-8")
 
+    assert "ioa-no-incoming-badge" not in html
     cell_start = html.index('<td class="ioa-flow-cell">')
     cell = html[cell_start : html.index("</td>", cell_start)]
-    assert '<span class="ioa-no-incoming-badge">入荷実績なし</span>' in cell
-    status_start = cell.index('class="ioa-flow-status muted"')
-    assert "入荷実績なし" in cell[status_start:]
-    assert "{last_incoming}" not in cell
+    assert "入荷実績なし" not in cell
+    # 状況（詳細ダイアログ用）には「入荷実績なし」が入る
+    assert 'data-no-incoming-record="1"' in html
+    assert "最終入荷 入荷実績なし" in html
 
 
 @pytest.mark.django_db
@@ -1124,26 +1125,24 @@ def test_x014_legacy_snapshot_without_unconfirmed_orders_renders(client, product
 
 
 @pytest.mark.django_db
-def test_x015_urgency_line_shows_months_of_stock_and_stockout_month(client, production_user):
+def test_x015_urgency_is_only_in_row_data_and_detail_dialog(client, production_user):
+    """緊急度は一覧セルに出さず、行の data-* と詳細ダイアログで示す（2026/09/17 改訂）。"""
     import_record = SlimsStockImport.objects.create(file_name="sample.csv", row_count=1)
     store_summary_snapshot(import_record, [_forecast_row()], as_of_date=date(2026, 6, 17))
 
     client.force_login(production_user)
     html = client.get("/app/production/inventory-order-alert").content.decode("utf-8")
 
-    cell_start = html.index('<td class="ioa-flow-cell">')
-    cell = html[cell_start : html.index("</td>", cell_start)]
-    urgency_start = cell.index('class="ioa-flow-urgency"')
-    urgency = cell[urgency_start : cell.index("</div>", urgency_start)]
-    assert "約 0.5 か月分" in urgency
-    assert "2026-07 に在庫切れ" in urgency
-    assert "（内示）" in urgency
-    # 状況 → 緊急度 → 推奨アクション の順
-    assert cell.index('class="ioa-flow-status muted"') < urgency_start < cell.index('class="ioa-flow-action"')
+    assert "ioa-flow-urgency" not in html
+    assert 'data-months-of-stock="0.5"' in html
+    assert 'data-stockout-forecast-month="2026-07"' in html
+    assert 'data-demand-forecast-basis="内示"' in html
+    assert "ioa-detail-months-of-stock" in html
+    assert "ioa-detail-stockout-month" in html
 
 
 @pytest.mark.django_db
-def test_x015_urgency_line_says_enough_when_stockout_month_is_empty(client, production_user):
+def test_x015_row_data_carries_empty_stockout_month_when_stock_is_enough(client, production_user):
     import_record = SlimsStockImport.objects.create(file_name="sample.csv", row_count=1)
     store_summary_snapshot(
         import_record,
@@ -1154,9 +1153,8 @@ def test_x015_urgency_line_says_enough_when_stockout_month_is_empty(client, prod
     client.force_login(production_user)
     html = client.get("/app/production/inventory-order-alert").content.decode("utf-8")
 
-    cell_start = html.index('<td class="ioa-flow-cell">')
-    cell = html[cell_start : html.index("</td>", cell_start)]
-    assert "約 150.6 か月分 → 十分（内示）" in cell
+    assert 'data-months-of-stock="150.6"' in html
+    assert 'data-stockout-forecast-month=""' in html
 
 
 @pytest.mark.django_db

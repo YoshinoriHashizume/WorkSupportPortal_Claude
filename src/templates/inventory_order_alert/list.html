@@ -162,22 +162,8 @@
             data-confirmation-status="{{ row.confirmation_status_key }}">
           {% for header in table_headers %}
           {% if header.key == "flow_quadrant" %}
-          {# 流動区分セル: 区分 / 状況 / 推奨アクション / 責任部署（05 design §6.3、REQ-SFV-F-004）。通常流動品は空。 #}
-          <td class="ioa-flow-cell">
-            {% if row.flow_quadrant_key != "normal-flow" %}
-            <div class="ioa-flow-cell-head">
-              <span class="ioa-flow-quadrant">{{ row.flow_quadrant }}</span>
-              {% if row.no_incoming_record %}<span class="ioa-no-incoming-badge">入荷実績なし</span>{% endif %}
-            </div>
-            <div class="ioa-flow-status muted">{{ row.flow_status }}</div>
-            {# 緊急度（V-223）: 需要予測が算出できる行のみ。文言は JS の描画と対で維持する（05 design §6.3）。 #}
-            {% if row.months_of_stock is not None and row.demand_forecast_basis and row.demand_forecast_basis != "なし" %}
-            <div class="ioa-flow-urgency">約 {{ row.months_of_stock }} か月分 → {% if row.stockout_forecast_month %}{{ row.stockout_forecast_month }} に在庫切れ{% else %}十分{% endif %}（{{ row.demand_forecast_basis }}）</div>
-            {% endif %}
-            <div class="ioa-flow-action">→ {{ row.recommended_action }}</div>
-            <div class="ioa-flow-departments muted">責任: {{ row.responsible_department }}</div>
-            {% endif %}
-          </td>
+          {# 流動区分セルは区分名のみ（05 design §6.3、REQ-SFV-F-004。2026-09-17 改訂）。説明は詳細ダイアログ。通常流動品は空。 #}
+          <td class="ioa-flow-cell">{% if row.flow_quadrant_key != "normal-flow" %}<span class="ioa-flow-quadrant">{{ row.flow_quadrant }}</span>{% endif %}</td>
           {% else %}
           <td>
             {% if header.key == "confirmation_status" %}
@@ -460,6 +446,6 @@
 <script src="/static/js/portal-list-prefix-filter.js?v=20260629-dependent-cust" defer></script>
 <script src="/static/js/portal-list-dependent-cust-filter.js?v=20260629-dependent-cust" defer></script>
 <script src="/static/js/portal-list-sort-dialog.js?v=20260629-dependent-cust" defer></script>
-<script src="/static/js/inventory-order-alert-list-client.js?v=20260917-demand-forecast" defer></script>
-<script src="/static/js/inventory-order-alert-list.js?v=20260917-demand-forecast" defer></script>
+<script src="/static/js/inventory-order-alert-list-client.js?v=20260917-flow-cell-compact" defer></script>
+<script src="/static/js/inventory-order-alert-list.js?v=20260917-flow-cell-compact" defer></script>
 {% endblock %}

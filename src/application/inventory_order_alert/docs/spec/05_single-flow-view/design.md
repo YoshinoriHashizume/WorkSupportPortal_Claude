@@ -298,25 +298,19 @@ def months_of_stock(stock_total, forecast) -> float | None   # 小数 1 桁
 - `#ioa-flow-axis` と旧 `#ioa-flow-period`・「判定条件」パネルを撤去。判定期間セレクタ `#ioa-evaluation-period` をアクション行の先頭に置く
 - 流動区分フィルタ `#ioa-flow-quadrant` はフィルタパネルに残し、選択肢を新区分にする（REQ-SFV-F-010）
 
-**流動区分列のセル**（REQ-SFV-F-004）:
+**流動区分列のセル**（REQ-SFV-F-004、2026/09/17 改訂）:
 
 ```html
-<td class="ioa-flow-cell">
-  <div class="ioa-flow-cell-head">
-    <span class="ioa-flow-quadrant">低流動品（入荷なし）</span>
-    <span class="ioa-no-incoming-badge">入荷実績なし</span>   <!-- 該当時のみ -->
-  </div>
-  <div class="ioa-flow-status muted">出荷は継続、最終入荷 2025/04/02（1年以上入荷なし）</div>
-  <div class="ioa-flow-urgency">在庫 12,970・約 27.0 か月分 → 2028/12 に在庫切れ（内示）</div>   <!-- 第 2 段階、算出できる行のみ -->
-  <div class="ioa-flow-action">→ 仕入先へ生産継続可否・設備/金型の有無を確認</div>
-  <div class="ioa-flow-departments muted">責任: 調達G・営業G・生産管理</div>
-</td>
+<td class="ioa-flow-cell"><span class="ioa-flow-quadrant">低流動品（入荷なし）</span></td>
 ```
 
 - 通常流動品は `<td>` を空にする
-- 状況は JS が `statusTemplate` に選択中の判定期間ラベルと行の日付を埋めて描く（テンプレートは domain 由来、JS は文字列置換のみ）
-- 列幅: 流動区分列を `min-width: 22em` にし、他列は現状維持。狭幅では状況・責任部署を `hidden`（`@media (max-width: 1100px)`）
+- 状況・緊急度・推奨アクション・責任部署は **詳細ダイアログ（§6.4）にのみ表示**する。状況は JS が `statusTemplate` に選択中の判定期間ラベルと行の日付を埋めて描く（テンプレートは domain 由来、JS は文字列置換のみ）。行の `data-flow-status` / `data-recommended-action` / `data-responsible-department` / `data-months-of-stock` / `data-stockout-forecast-month` は詳細ダイアログのフォールバック用に残す
+- 入荷実績なし（V-214）のバッジは出さない（最終入荷日列が空欄で分かる）
+- 列幅は他列と同じ扱い（`min-width` の指定なし）
 - 行の背景色クラス `alert-row--{key}` はキー名の変更に追随（`supply-risk` → `low-flow-no-incoming` 等）。色は旧区分のものを引き継ぐ
+
+> **［2026/09/17 改訂前］** セルに `ioa-flow-cell-head`（区分＋バッジ）/ `ioa-flow-status` / `ioa-flow-urgency` / `ioa-flow-action` / `ioa-flow-departments` を積み、`min-width: 22em`・狭幅で状況と責任部署を隠す構成だった。
 
 **件数サマリ**（REQ-SFV-F-011）: `counts` の 4 キーを新区分名に。
 

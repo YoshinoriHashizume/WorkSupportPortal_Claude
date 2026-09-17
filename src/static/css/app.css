@@ -1267,45 +1267,10 @@ body.portal-app-page .portal-alert-rules-select {
   width: auto;
   min-width: 5.5em;
 }
-/* 流動区分セル: 区分 / 状況 / 推奨アクション / 責任部署（05 design §6.3、REQ-SFV-F-004）。 */
-.inventory-order-alert-page .ioa-table td.ioa-flow-cell {
-  min-width: 22em;
-  white-space: normal;
-  line-height: 1.35;
-  vertical-align: top;
-}
-.inventory-order-alert-page .ioa-flow-cell-head {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 6px;
-}
+/* 流動区分セルは区分名のみ（05 design §6.3、REQ-SFV-F-004。2026-09-17 改訂）。 */
 .inventory-order-alert-page .ioa-flow-quadrant {
   font-weight: 600;
-}
-.inventory-order-alert-page .ioa-no-incoming-badge {
-  display: inline-block;
-  padding: 0 6px;
-  border: 1px solid #b91c1c;
-  border-radius: 999px;
-  color: #b91c1c;
-  font-size: 11px;
-  line-height: 1.5;
   white-space: nowrap;
-}
-.inventory-order-alert-page .ioa-flow-status,
-.inventory-order-alert-page .ioa-flow-departments {
-  font-size: 12px;
-}
-.inventory-order-alert-page .ioa-flow-action {
-  font-size: 12px;
-  color: #1e293b;
-}
-/* 緊急度（V-223）: 在庫月数と在庫切れ予測月（05 design §6.3）。 */
-.inventory-order-alert-page .ioa-flow-urgency {
-  font-size: 12px;
-  font-weight: 600;
-  color: #9a3412;
 }
 /* 詳細ダイアログの需要予測区分（05 design §6.4）。 */
 body.inventory-order-alert-page .ioa-detail-demand-forecast-fields {
@@ -1313,16 +1278,6 @@ body.inventory-order-alert-page .ioa-detail-demand-forecast-fields {
 }
 body.inventory-order-alert-page .ioa-detail-demand-empty {
   margin: 0;
-}
-@media (max-width: 1100px) {
-  /* 狭幅では状況・責任部署を隠し、区分と推奨アクションだけ残す（05 design §6.3）。 */
-  .inventory-order-alert-page .ioa-flow-status,
-  .inventory-order-alert-page .ioa-flow-departments {
-    display: none;
-  }
-  .inventory-order-alert-page .ioa-table td.ioa-flow-cell {
-    min-width: 14em;
-  }
 }
 .inventory-order-alert-page .ioa-import-form {
   margin: 0;
