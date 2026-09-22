@@ -22,6 +22,10 @@ from application.inventory_order_alert.domain.value_objects.summary import Summa
 
 def _counts_to_response(counts: RowCounts) -> dict[str, int]:
     return {
+        # 07 在庫なしの 3 区分（design §3.2）
+        "stockoutNoIncoming": counts.stockout_no_incoming,
+        "stockout": counts.stockout,
+        "discontinuationCandidate": counts.discontinuation_candidate,
         "lowFlowNoIncoming": counts.low_flow_no_incoming,
         "dormantStock": counts.dormant_stock,
         "lowFlowNoShipment": counts.low_flow_no_shipment,

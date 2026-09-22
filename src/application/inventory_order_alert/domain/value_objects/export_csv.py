@@ -38,6 +38,18 @@ EXPORT_COLUMNS: list[tuple[str, str]] = [
     ("stockout_forecast_month", "在庫切れ予測月"),
     ("demand_forecast_basis", "需要予測の算出根拠"),
     ("recommended_action", "推奨アクション"),
+    # 06 在庫切れリスク（REQ-SOR-F-012）: 末尾に追加
+    ("stockout_risk", "在庫切れリスク"),
+    ("stockout_risk_reasons", "在庫切れリスクの理由"),
+    ("days_until_stockout", "猶予日数"),
+    ("replenishment_qty", "補充見込み"),
+    ("replenishment_earliest_due", "補充見込みの最早納期"),
+    ("replenishment_has_overdue", "納期超過"),
+    ("shortage_qty", "不足数量"),
+    ("lead_time_days", "リードタイム"),
+    ("ordering_method", "発注方式"),
+    ("upstream_order_qty", "上流工程の発注残"),
+    ("upstream_order_overdue", "上流工程の納期超過"),
 ]
 
 EXPORT_FIELDNAMES = [column for column, _label in EXPORT_COLUMNS]
@@ -54,6 +66,12 @@ def render_export_cell(row: dict[str, object], column: str) -> object:
     if column == "flow_quadrant":
         # 旧称が行に残っていても新区分名で出す（TC-SFV-D-062）
         return normalize_flow_quadrant(str(row.get(column) or ""))
+    if column == "stockout_risk":
+        return str(row.get(column) or "")
+    if column == "stockout_risk_reasons":
+        return "・".join(str(reason) for reason in (row.get(column) or []))
+    if column in ("replenishment_has_overdue", "upstream_order_overdue"):
+        return "あり" if row.get(column) else ""
     return format_cell_display(row.get(column, ""), column)
 
 

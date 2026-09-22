@@ -73,8 +73,10 @@ def _params(**kwargs) -> TableDisplayParams:
     return TableDisplayParams(**defaults)
 
 
-def test_sortable_columns_first_entry_is_flow_quadrant():
-    assert SORTABLE_COLUMNS[0] == ("flow_quadrant", "流動区分")
+def test_sortable_columns_first_entries_are_stockout_risk_then_flow_quadrant():
+    # 06: 在庫切れリスク列を先頭に置き、流動区分はその次（06 design §6.4）
+    assert SORTABLE_COLUMNS[0] == ("stockout_risk", "在庫切れリスク")
+    assert SORTABLE_COLUMNS[1] == ("flow_quadrant", "流動区分")
 
 
 def test_sortable_columns_label_slims_stock_quantity():
@@ -139,8 +141,9 @@ def test_sortable_columns_do_not_include_alert_level():
     assert "alert_level" not in columns
 
 
-def test_default_sort_is_flow_quadrant_ascending():
-    assert DEFAULT_SORT == "flow_quadrant"
+def test_default_sort_is_stockout_risk_ascending():
+    # 06: 既定ソートは在庫切れリスク（危険 → 注意 → 監視 → 対象外）
+    assert DEFAULT_SORT == "stockout_risk"
     assert DEFAULT_DIRECTION == "asc"
 
 
@@ -373,7 +376,7 @@ def test_d059_months_of_stock_missing_key_is_treated_as_none():
 
 
 def test_d059_months_of_stock_is_sortable_but_not_a_table_column():
-    assert SORT_ONLY_COLUMNS == (("months_of_stock", "在庫月数"),)
+    assert SORT_ONLY_COLUMNS == (("months_of_stock", "在庫月数"), ("days_until_stockout", "猶予日数"))
     assert "months_of_stock" in SORTABLE_KEYS
     assert "months_of_stock" not in [column for column, _label in SORTABLE_COLUMNS]
     assert parse_sort_specs({"sort": "months_of_stock", "dir": "asc"}) == (SortSpec("months_of_stock", "asc"),)

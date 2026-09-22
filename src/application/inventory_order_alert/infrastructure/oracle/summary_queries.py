@@ -6,6 +6,10 @@ from application.sales.infrastructure.oracle.client import OracleQueryError, row
 
 from application.inventory_order_alert.domain.value_objects.dates import add_calendar_months, to_date
 from application.inventory_order_alert.domain.value_objects.internal_item import resolve_cust_code, resolve_internal_item_cd
+from application.inventory_order_alert.domain.value_objects.ordering_profile import (
+    ordering_method_from_code,
+    resolve_lead_time_days,
+)
 from application.inventory_order_alert.domain.value_objects.shipment_trend import build_monthly_shipment_trend
 from application.inventory_order_alert.domain.value_objects.unconfirmed_order_trend import (
     build_unconfirmed_order_trend,
@@ -14,10 +18,19 @@ from application.inventory_order_alert.domain.value_objects.unconfirmed_order_tr
 
 #: 内示受注の取得に失敗したときの警告文の接頭辞（取込は失敗させない。05 design §6.6、REQ-SFV-F-018）。
 UNCONFIRMED_ORDER_FETCH_ERROR_PREFIX = "内示受注の取得に失敗"
+#: 発注残・品目マスタの取得失敗（06 design §8）。
+OPEN_PURCHASE_ORDER_FETCH_ERROR_PREFIX = "発注残の取得に失敗"
+ITEM_MASTER_FETCH_ERROR_PREFIX = "品目マスタの取得に失敗"
+#: 適用終了日の取得失敗（07 design §4.1）。
+PHASE_OUT_DATE_FETCH_ERROR_PREFIX = "適用終了日の取得に失敗"
 
 
 def chunked(items: list[str], size: int = 900) -> list[list[str]]:
     return [items[index : index + size] for index in range(0, len(items), size)]
+
+
+def _phase_out_text(phase_out: date | None) -> str:
+    return phase_out.strftime("%Y/%m/%d") if phase_out else ""
 
 
 def fetch_customer_names(connection: object) -> dict[str, str]:
@@ -93,6 +106,39 @@ def fetch_internal_items_from_m_cust_item(
     return by_pair, by_cust_item
 
 
+def fetch_cust_item_phase_out_dates(connection: object) -> dict[tuple[str, str], date]:
+    """得意先品目マスタの適用終了日（07 design §4.1）。
+
+    得意先 × 得意先品番ごとに `EFF_PHASE_OUT_DATE` の最大値を返す。打ち切り候補（T-210）の理由に使う。
+    """
+    sql = """
+        SELECT TRIM(CUST_CD) AS CUST_CD,
+               TRIM(CUST_ITEM_CD) AS CUST_ITEM_CD,
+               MAX(EFF_PHASE_OUT_DATE) AS PHASE_OUT_DATE
+          FROM M_CUST_ITEM
+         WHERE DLV_LOC_CD = '*'
+         GROUP BY TRIM(CUST_CD), TRIM(CUST_ITEM_CD)
+    """
+    cursor = connection.cursor()
+    cursor.execute(sql)
+    result: dict[tuple[str, str], date] = {}
+    for row in rows_as_dicts(cursor):
+        cust_code = str(row.get("cust_cd") or "").strip()
+        cust_item_cd = str(row.get("cust_item_cd") or "").strip()
+        phase_out = to_date(row.get("phase_out_date"))
+        if cust_code and cust_item_cd and phase_out:
+            result[(cust_code, cust_item_cd)] = phase_out
+    return result
+
+
+def fetch_cust_item_phase_out_dates_or_warn(connection: object) -> tuple[dict[tuple[str, str], date], str]:
+    """適用終了日を取得する。Oracle の問い合わせ失敗は取込を止めず、空と警告文を返す（TC-FQR-I-002）。"""
+    try:
+        return fetch_cust_item_phase_out_dates(connection), ""
+    except OracleQueryError as exc:
+        return {}, f"{PHASE_OUT_DATE_FETCH_ERROR_PREFIX}: {exc}"
+
+
 def fetch_finished_roots(connection: object, finished_items: set[str]) -> dict[str, set[str]]:
     if not finished_items:
         return {}
@@ -156,6 +202,50 @@ def fetch_bom_level1_by_root(connection: object, roots: set[str], as_of_date: da
             if l1_item not in level1_by_root[root_item]:
                 level1_by_root[root_item].append(l1_item)
     return level1_by_root
+
+
+def fetch_bom_chain_by_root(connection: object, roots: set[str], as_of_date: date) -> dict[str, list[str]]:
+    """完成品（root）から BOM を末端まで辿った外注工程（OUTSIDE_TYP = '2'）の列を、階層順（直下 → 上流）で返す（06 design §4.1a）。
+
+    `fetch_bom_level1_by_root()` と同じ条件で `LEVEL` の制限だけを外したもの。取込ごとに 1 回（900 件ずつ）発行する。
+    """
+    if not roots:
+        return {}
+    chain_by_root: dict[str, list[tuple[int, str]]] = {}
+    for batch in chunked(sorted(roots)):
+        placeholders = ", ".join(f":root_{index}" for index, _ in enumerate(batch))
+        params = {f"root_{index}": root for index, root in enumerate(batch)}
+        params["as_of_date"] = as_of_date
+        sql = f"""
+            SELECT CONNECT_BY_ROOT ps.PARENT_ITEM_CD AS ROOT_ITEM,
+                   TRIM(ps.COMP_ITEM_CD) AS COMP_ITEM_CD,
+                   LEVEL AS LVL
+              FROM M_PS ps
+              JOIN M_ITEM item
+                ON item.ITEM_CD = ps.COMP_ITEM_CD
+             WHERE item.OUTSIDE_TYP = '2'
+               AND ps.EFF_PHASE_IN_DATE <= :as_of_date
+               AND ps.EFF_PHASE_OUT_DATE >= :as_of_date
+             START WITH ps.PARENT_ITEM_CD IN ({placeholders})
+           CONNECT BY NOCYCLE PRIOR ps.COMP_ITEM_CD = ps.PARENT_ITEM_CD
+               AND ps.EFF_PHASE_IN_DATE <= :as_of_date
+               AND ps.EFF_PHASE_OUT_DATE >= :as_of_date
+        """
+        cursor = connection.cursor()
+        cursor.execute(sql, params)
+        for row in rows_as_dicts(cursor):
+            root_item = str(row["root_item"]).strip()
+            comp = str(row["comp_item_cd"]).strip()
+            if not root_item or not comp:
+                continue
+            try:
+                level = int(row.get("lvl") or 0)
+            except (TypeError, ValueError):
+                level = 0
+            entries = chain_by_root.setdefault(root_item, [])
+            if all(existing != comp for _, existing in entries):
+                entries.append((level, comp))
+    return {root: [(level, comp) for level, comp in sorted(entries, key=lambda entry: entry[0])] for root, entries in chain_by_root.items()}
 
 
 def fetch_mari_stock_totals(connection: object, internal_item_cds: list[str]) -> dict[str, object]:
@@ -379,6 +469,82 @@ def fetch_unconfirmed_orders_or_warn(connection: object, *, as_of_date: date) ->
         return [], f"{UNCONFIRMED_ORDER_FETCH_ERROR_PREFIX}: {exc}"
 
 
+def fetch_open_purchase_orders(connection: object) -> list[tuple[str, str, str, date | None, int]]:
+    """発注残（V-224）: (発注コード, 仕入先品番, 仕入先, 納期, 残数)。状態 2・取消なし・残数 > 0。5年9組の残数算出と同じ条件（06 design §6.1）。
+
+    残数は発注数量 − 当該発注の検収数量合計。回答納期（CONFIRM_DLV_DATE）があればそれを納期とする。
+    発注コード（PUCH_ODR_CD）は明細の識別子で、照合単位内の重複除去に使う（値の組で除くと
+    同品番・同納期・同数量の別明細が潰れる。2026/09/18 改訂）。取込ごとに 1 回だけ発行する。
+    """
+    sql = """
+        SELECT TRIM(p.PUCH_ODR_CD) AS ORDER_CD,
+               TRIM(p.ITEM_CD) AS ITEM_CD,
+               TRIM(p.VEND_CD) AS VEND_CD,
+               p.PUCH_ODR_DLV_DATE,
+               p.CONFIRM_DLV_DATE,
+               p.PUCH_ODR_QTY - NVL((SELECT SUM(a.ACPT_QTY) FROM T_PAST_INSPC_ACPT a WHERE a.PUCH_ODR_CD = p.PUCH_ODR_CD), 0) AS ZAN
+          FROM T_RLSD_PUCH_ODR p
+         WHERE p.PUCH_ODR_STS_TYP = '2'
+           AND NVL(p.ODR_CANCEL_SLIP_ISS_FLG, '0') = '0'
+    """
+    cursor = connection.cursor()
+    cursor.execute(sql)
+    orders: list[tuple[str, str, str, date | None, int]] = []
+    for row in rows_as_dicts(cursor):
+        order_cd = str(row.get("order_cd") or "").strip()
+        item_cd = str(row.get("item_cd") or "").strip()
+        vend_cd = str(row.get("vend_cd") or "").strip()
+        if not item_cd or not vend_cd:
+            continue
+        due = to_date(row.get("confirm_dlv_date")) or to_date(row.get("puch_odr_dlv_date"))
+        try:
+            remaining = int(float(row.get("zan") or 0))
+        except (TypeError, ValueError):
+            remaining = 0
+        if remaining <= 0:
+            continue
+        orders.append((order_cd, item_cd, vend_cd, due, remaining))
+    return orders
+
+
+def fetch_open_purchase_orders_or_warn(connection: object) -> tuple[list[tuple[str, str, str, date | None, int]], str]:
+    """発注残を取得する。Oracle の問い合わせ失敗は取込を止めず、空と警告文を返す。"""
+    try:
+        return fetch_open_purchase_orders(connection), ""
+    except OracleQueryError as exc:
+        return [], f"{OPEN_PURCHASE_ORDER_FETCH_ERROR_PREFIX}: {exc}"
+
+
+def fetch_item_ordering_profiles(connection: object, item_cds: list[str]) -> dict[str, tuple[object, object]]:
+    """品目マスタからリードタイム（V-225、日）と発注方式コード（V-227）を引く。900 件ずつ IN で分割。"""
+    targets = sorted({str(item).strip() for item in item_cds if str(item or "").strip()})
+    if not targets:
+        return {}
+    profiles: dict[str, tuple[object, object]] = {}
+    for batch in chunked(targets):
+        placeholders = ", ".join(f":item_{index}" for index, _ in enumerate(batch))
+        params = {f"item_{index}": item_cd for index, item_cd in enumerate(batch)}
+        sql = f"""
+            SELECT TRIM(ITEM_CD) AS ITEM_CD, FIXED_LT, MRP_ODR_TYP
+              FROM M_ITEM
+             WHERE TRIM(ITEM_CD) IN ({placeholders})
+        """
+        cursor = connection.cursor()
+        cursor.execute(sql, params)
+        for row in rows_as_dicts(cursor):
+            item_cd = str(row.get("item_cd") or "").strip()
+            if item_cd:
+                profiles[item_cd] = (row.get("fixed_lt"), row.get("mrp_odr_typ"))
+    return profiles
+
+
+def fetch_item_ordering_profiles_or_warn(connection: object, item_cds: list[str]) -> tuple[dict[str, tuple[object, object]], str]:
+    try:
+        return fetch_item_ordering_profiles(connection, item_cds), ""
+    except OracleQueryError as exc:
+        return {}, f"{ITEM_MASTER_FETCH_ERROR_PREFIX}: {exc}"
+
+
 def group_shipments_by_pair(
     shipments: list[tuple[str, str, date, int]],
 ) -> dict[tuple[str, str], list[tuple[date, int]]]:
@@ -446,6 +612,26 @@ def build_summary_rows(
     if unconfirmed_warning and warnings is not None:
         warnings.append(unconfirmed_warning)
     unconfirmed_by_pair = group_shipments_by_pair(unconfirmed_orders)
+    # 適用終了日は 07 で追加。打ち切り候補(T-210)の理由に使う。失敗しても取込は続行する(07 design §4.1)。
+    phase_out_by_pair, phase_out_warning = fetch_cust_item_phase_out_dates_or_warn(connection)
+    if phase_out_warning and warnings is not None:
+        warnings.append(phase_out_warning)
+    # 発注残(V-224)と品目マスタ(V-225/V-227)は 06 で追加。取込ごとに 1 回ずつ発行し、失敗しても取込は続行する(06 design §6.1)。
+    open_orders, open_orders_warning = fetch_open_purchase_orders_or_warn(connection)
+    open_orders_unknown = bool(open_orders_warning)
+    if open_orders_warning and warnings is not None:
+        warnings.append(open_orders_warning)
+    open_orders_by_pair: dict[tuple[str, str], list[dict[str, object]]] = {}
+    for order_cd, item_cd, vend_cd, due, remaining in open_orders:
+        open_orders_by_pair.setdefault((item_cd, vend_cd), []).append(
+            {
+                "order_cd": order_cd,
+                "item_cd": item_cd,
+                "vend_cd": vend_cd,
+                "due_date": due.strftime("%Y/%m/%d") if due else "",
+                "remaining_qty": remaining,
+            }
+        )
 
     incoming_cache: dict[str, tuple[date | None, str, str, str]] = {}
     rows: list[dict[str, object]] = []
@@ -463,6 +649,49 @@ def build_summary_rows(
         if resolved and resolved in customer_names:
             return resolved
         return ""
+
+    # 品目マスタは仕入先品番(level1)で引く。先に全ペアの level1 を解決してから 1 回で取得する。
+    level1_items: set[str] = set()
+    for cust_code, cust_item_cd, _, internal_from_ship in ship_pairs:
+        internal_pre = internal_for(cust_code, cust_item_cd, internal_from_ship)
+        if internal_pre not in incoming_cache:
+            incoming_cache[internal_pre] = resolve_last_incoming_for_finished(
+                internal_pre,
+                roots_by_finished,
+                level1_by_root,
+                vendor_by_component,
+                incoming_by_item_vend,
+            )
+        if incoming_cache[internal_pre][1]:
+            level1_items.add(incoming_cache[internal_pre][1])
+    # 工程の連鎖（BOM 全段の外注工程）。上流工程の発注残・リードタイムの合計に使う（06 design §4.1a）
+    chain_by_root = fetch_bom_chain_by_root(connection, all_roots, as_of_date)
+    chain_items: set[str] = set(level1_items)
+    for comps in chain_by_root.values():
+        chain_items.update(comp for _, comp in comps)
+    profiles, profiles_warning = fetch_item_ordering_profiles_or_warn(connection, sorted(chain_items))
+    if profiles_warning and warnings is not None:
+        warnings.append(profiles_warning)
+
+    def process_chain_for(internal_item: str, level1_item: str, level1_vend: str, level1_vend_name: str) -> list[dict[str, object]]:
+        """直下の工程を先頭に、BOM を辿った上流の外注工程を並べる。直下の工程が解決できなければ空。"""
+        if not level1_item:
+            return []
+        ordered: list[tuple[int, str]] = [(1, level1_item)]
+        for root in roots_by_finished.get(internal_item, {internal_item}):
+            for level, comp in chain_by_root.get(root, []):
+                if all(existing != comp for _, existing in ordered):
+                    ordered.append((level, comp))
+        stages: list[dict[str, object]] = []
+        for level, comp in ordered:
+            vend_cd, vend_name = (level1_vend, level1_vend_name) if comp == level1_item else vendor_by_component.get(comp, ("", ""))
+            if not vend_cd or vend_cd == "?":
+                continue
+            master_lt, _ = profiles.get(comp, (None, None))
+            days, source = resolve_lead_time_days(master_lt, default_days=0)
+            # level は BOM の階層（1 = 完成品直下）。並列の工程は同じ階層に並ぶため、リードタイムは階層ごとの最大値を足す
+            stages.append({"level": level, "item_cd": comp, "vend_cd": vend_cd, "vend_name": vend_name, "lead_time_days": days, "lead_time_source": source})
+        return stages
 
     for cust_code, cust_item_cd, cust_chrg_psn_cd, internal_from_ship in ship_pairs:
         resolved_cust_code = cust_code_for(cust_code)
@@ -494,6 +723,13 @@ def build_summary_rows(
             unconfirmed_by_pair.get((resolved_cust_code, internal), []) if internal else [],
             as_of_date=as_of_date,
         )
+        master_lt, master_method = profiles.get(level1_item, (None, None)) if level1_item else (None, None)
+        # 既定リードタイムの具体値は取込時の設定で決まるため、ここでは「未設定」を 0 で表す（domain 側で既定値に置換）
+        lead_time_days, lead_time_source = resolve_lead_time_days(master_lt, default_days=0)
+        process_chain = process_chain_for(internal, level1_item, level1_vend, level1_vend_name)
+        chain_orders: list[dict[str, object]] = []
+        for stage in process_chain:
+            chain_orders.extend(open_orders_by_pair.get((str(stage["item_cd"]), str(stage["vend_cd"])), []))
         rows.append(
             {
                 "cust_code": resolved_cust_code,
@@ -512,6 +748,15 @@ def build_summary_rows(
                 # 05 第 2 段階: 内作品番と内示推移(V-219)。需要予測の算出は use_case が domain を呼んで行う(design §6.7)
                 "internal_item_cd": internal,
                 "unconfirmed_order_trend": unconfirmed_order_trend,
+                # 07: 適用終了日。打ち切り候補(T-210)の理由に使う(07 design §4.1)
+                "phase_out_date": _phase_out_text(phase_out_by_pair.get((resolved_cust_code, cust_item_cd))),
+                # 06: 発注残(生データ)・リードタイム・発注方式。在庫切れリスクの判定は use_case が domain を呼んで行う
+                "open_purchase_orders": chain_orders,
+                "open_purchase_orders_unknown": open_orders_unknown,
+                "process_chain": process_chain,
+                "lead_time_days": lead_time_days,
+                "lead_time_source": lead_time_source,
+                "ordering_method": ordering_method_from_code(master_method),
                 # 該当在庫が無い場合は空。0(在庫なし)とは区別する(design.md §4.2)
                 "mari_stock_qty": mari_stock_by_item.get(internal, ""),
             }

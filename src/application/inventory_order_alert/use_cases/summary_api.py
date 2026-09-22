@@ -54,11 +54,20 @@ def _counts_payload(counts: RowCounts) -> dict[str, int]:
     return {
         "total": counts.total,
         "attention": counts.attention,
+        # 07 在庫なしの 3 区分（design §3.2）
+        "stockoutNoIncoming": counts.stockout_no_incoming,
+        "stockout": counts.stockout,
+        "discontinuationCandidate": counts.discontinuation_candidate,
         "lowFlowNoIncoming": counts.low_flow_no_incoming,
         "dormantStock": counts.dormant_stock,
         "lowFlowNoShipment": counts.low_flow_no_shipment,
         "normalFlow": counts.normal_flow,
         "unconfirmed": counts.unconfirmed,
+        # 06 在庫切れリスク
+        "danger": counts.danger,
+        "caution": counts.caution,
+        "watch": counts.watch,
+        "noneRisk": counts.none_risk,
     }
 
 
@@ -169,11 +178,17 @@ def dashboard_summary_payload(
     return {
         "ok": True,
         "counts": {
+            "stockoutNoIncoming": context.stockout_no_incoming,
+            "stockout": context.stockout,
             "lowFlowNoIncoming": context.low_flow_no_incoming,
             "dormantStock": context.dormant_stock,
             "lowFlowNoShipment": context.low_flow_no_shipment,
+            "discontinuationCandidate": context.discontinuation_candidate,
             "attention": context.attention,
             "unconfirmed": context.unconfirmed,
+            "danger": context.danger,
+            "caution": context.caution,
+            "watch": context.watch,
         },
         "stockImport": {
             "importedAt": _jsonable(imported_at) if imported_at is not None else None,

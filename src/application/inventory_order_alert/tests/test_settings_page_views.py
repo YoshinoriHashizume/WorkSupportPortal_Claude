@@ -50,6 +50,52 @@ def test_settings_page_shows_current_values_for_admin(client, admin_user):
     assert 'value="14"' in html
 
 
+# --- 07 第 2 段階: 直近入荷の日数（REQ-FQR-F-008） ---------------------------
+
+
+@pytest.mark.django_db
+def test_fqr_f008_settings_page_shows_recent_incoming_days(client, admin_user):
+    InventoryOrderAlertSettings.objects.update_or_create(pk=1, defaults={"recent_incoming_days": 45})
+    client.force_login(admin_user)
+
+    html = client.get(SETTINGS_PAGE_URL).content.decode("utf-8")
+
+    assert 'id="ioa-setting-recent-incoming-days"' in html
+    assert 'name="recentIncomingDays"' in html
+    assert 'value="45"' in html
+    assert 'min="1" max="90"' in html
+    # 判定期間（一覧で切り替え）と混同しないよう用途を書く
+    assert "一覧で切り替える判定期間とは別の設定です" in html
+
+
+@pytest.mark.django_db
+def test_fqr_f008_api_settings_put_updates_recent_incoming_days(client, admin_user):
+    client.force_login(admin_user)
+
+    response = client.put(
+        SETTINGS_API_URL,
+        data=json.dumps({"recentIncomingDays": 60}),
+        content_type="application/json",
+    )
+
+    assert response.json()["settings"]["recentIncomingDays"] == 60
+    assert InventoryOrderAlertSettings.objects.get(pk=1).recent_incoming_days == 60
+
+
+@pytest.mark.django_db
+def test_fqr_f008_api_settings_rejects_out_of_range_recent_incoming_days(client, admin_user):
+    client.force_login(admin_user)
+
+    response = client.put(
+        SETTINGS_API_URL,
+        data=json.dumps({"recentIncomingDays": 91}),
+        content_type="application/json",
+    )
+
+    assert response.status_code == 400
+    assert InventoryOrderAlertSettings.objects.get(pk=1).recent_incoming_days == 30
+
+
 @pytest.mark.django_db
 def test_settings_page_shows_confirmation_reset_button(client, admin_user):
     """確認状態リセットは一覧画面から設定画面（SCR-02）へ移した。"""
@@ -127,7 +173,14 @@ def test_api_settings_get_returns_current_settings(client, admin_user):
     payload = client.get(SETTINGS_API_URL).json()
 
     assert payload["ok"] is True
-    assert set(payload["settings"]) == {"warningDays", "stockStaleDays"}
+    assert set(payload["settings"]) == {
+        "warningDays",
+        "stockStaleDays",
+        "safetyDays",
+        "defaultLeadTimeDays",
+        "watchMonths",
+        "recentIncomingDays",
+    }
 
 
 @pytest.mark.django_db

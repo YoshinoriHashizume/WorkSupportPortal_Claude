@@ -5,6 +5,8 @@ from datetime import date
 
 from application.inventory_order_alert.domain.value_objects.app_settings import AppSettings
 from application.inventory_order_alert.domain.value_objects.dates import parse_optional_ymd
+from application.inventory_order_alert.domain.value_objects.ordering_profile import ORDERING_METHOD_KEYS
+from application.inventory_order_alert.domain.value_objects.stockout_risk import STOCKOUT_RISK_KEYS, STOCKOUT_RISK_LABELS
 from application.inventory_order_alert.domain.value_objects.flow_quadrant import (
     DEFAULT_EVALUATION_PERIOD,
     EVALUATION_PERIODS,
@@ -25,6 +27,10 @@ class ListQuery:
     flow_selection: FlowSelection = REFERENCE_FLOW_SELECTION
     flow_quadrant: str = ""
     attention_only: bool = False
+    #: 在庫切れリスク（S-204）のキー（danger / caution / watch / none）。空は絞り込みなし
+    stockout_risk: str = ""
+    #: 発注方式（V-227）のキー（manual / mrp / unknown）。空は絞り込みなし
+    ordering_method: str = ""
 
 
 def parse_flow_selection(params: dict[str, str]) -> FlowSelection:
@@ -56,6 +62,25 @@ def parse_flow_quadrant(params: dict[str, str]) -> str:
     return ""
 
 
+def parse_stockout_risk(params: dict[str, str]) -> str:
+    """在庫切れリスクの絞り込みキー。ラベル（危険 等）も受け付ける。未知は空。"""
+    value = params.get("stockout_risk", "").strip()
+    if value in STOCKOUT_RISK_LABELS:
+        return value
+    if value in STOCKOUT_RISK_KEYS:
+        return STOCKOUT_RISK_KEYS[value]
+    return ""
+
+
+def parse_ordering_method(params: dict[str, str]) -> str:
+    value = params.get("ordering_method", "").strip()
+    if value in ORDERING_METHOD_KEYS.values():
+        return value
+    if value in ORDERING_METHOD_KEYS:
+        return ORDERING_METHOD_KEYS[value]
+    return ""
+
+
 def parse_list_query(params: dict[str, str], *, today: date | None = None) -> ListQuery:
     return ListQuery(
         as_of_date=parse_optional_ymd(params.get("asOfDate", ""), today=today),
@@ -65,6 +90,8 @@ def parse_list_query(params: dict[str, str], *, today: date | None = None) -> Li
         flow_selection=parse_flow_selection(params),
         flow_quadrant=parse_flow_quadrant(params),
         attention_only=params.get("attentionOnly", "false").lower() in {"true", "1", "on"},
+        stockout_risk=parse_stockout_risk(params),
+        ordering_method=parse_ordering_method(params),
     )
 
 

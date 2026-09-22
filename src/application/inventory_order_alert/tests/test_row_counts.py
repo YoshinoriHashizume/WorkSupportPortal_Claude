@@ -3,6 +3,7 @@ from __future__ import annotations
 """件数サマリのテスト（TC-SFV-D-057）。項目名は新区分（低流動品（入荷なし）/（出荷なし））に追随する。"""
 
 from application.inventory_order_alert.domain.value_objects.flow_quadrant import (
+    FLOW_QUADRANTS,
     QUADRANT_DORMANT_STOCK,
     QUADRANT_LOW_FLOW_NO_INCOMING,
     QUADRANT_LOW_FLOW_NO_SHIPMENT,
@@ -29,16 +30,7 @@ def _row(quadrant: str, confirmation_status: str = "未確認") -> dict[str, obj
 
 
 def _two_of_each_quadrant() -> list[dict[str, object]]:
-    return [
-        _row(QUADRANT_LOW_FLOW_NO_INCOMING),
-        _row(QUADRANT_LOW_FLOW_NO_INCOMING),
-        _row(QUADRANT_DORMANT_STOCK),
-        _row(QUADRANT_DORMANT_STOCK),
-        _row(QUADRANT_LOW_FLOW_NO_SHIPMENT),
-        _row(QUADRANT_LOW_FLOW_NO_SHIPMENT),
-        _row(QUADRANT_NORMAL_FLOW),
-        _row(QUADRANT_NORMAL_FLOW),
-    ]
+    return [_row(quadrant) for quadrant in FLOW_QUADRANTS for _ in range(2)]
 
 
 def test_count_rows_counts_each_flow_quadrant_separately():
@@ -46,18 +38,20 @@ def test_count_rows_counts_each_flow_quadrant_separately():
 
     counts = count_rows(rows)
 
+    assert counts.stockout_no_incoming == 2
+    assert counts.stockout == 2
     assert counts.low_flow_no_incoming == 2
     assert counts.dormant_stock == 2
     assert counts.low_flow_no_shipment == 2
+    assert counts.discontinuation_candidate == 2
     assert counts.normal_flow == 2
 
 
-def test_count_rows_attention_equals_sum_of_three_risk_quadrants():
-    rows = _two_of_each_quadrant()
+def test_fqr_c001_attention_is_every_quadrant_but_normal_flow():
+    """要対応は推奨アクションが空でない区分＝通常流動品以外（07 design §2.7、2026/09/21 明確化）。"""
+    counts = count_rows(_two_of_each_quadrant())
 
-    counts = count_rows(rows)
-
-    assert counts.attention == 6
+    assert counts.attention == counts.total - counts.normal_flow == 12
 
 
 def test_count_rows_flow_quadrant_counts_sum_to_total():
@@ -132,21 +126,25 @@ def test_row_counts_has_no_critical_or_warning_fields():
 
 
 def test_d057_counts_by_quadrant_label_uses_new_names():
-    rows = [
-        _row(QUADRANT_LOW_FLOW_NO_INCOMING),
-        _row(QUADRANT_DORMANT_STOCK),
-        _row(QUADRANT_LOW_FLOW_NO_SHIPMENT),
-        _row(QUADRANT_NORMAL_FLOW),
+    counts = count_rows([_row(quadrant) for quadrant in FLOW_QUADRANTS])
+
+    # ランク順（S-203）の 7 キー
+    assert list(counts.by_quadrant) == [
+        "欠品（入荷なし）",
+        "欠品",
+        "低流動品（入荷なし）",
+        "在庫死蔵品",
+        "低流動品（出荷なし）",
+        "打ち切り候補",
+        "通常流動品",
     ]
+    assert set(counts.by_quadrant.values()) == {1}
 
-    counts = count_rows(rows)
 
-    assert counts.by_quadrant == {
-        "低流動品（入荷なし）": 1,
-        "在庫死蔵品": 1,
-        "低流動品（出荷なし）": 1,
-        "通常流動品": 1,
-    }
+def test_fqr_c001_by_quadrant_counts_sum_to_total():
+    counts = count_rows(_two_of_each_quadrant())
+
+    assert sum(counts.by_quadrant.values()) == counts.total
 
 
 def test_d057_legacy_labels_are_counted_under_new_quadrants():

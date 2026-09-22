@@ -1,7 +1,10 @@
 {
   "_comment": "推奨アクション（T-207）の文言を上書きする定義ファイル。本ファイルを recommended_actions.json にコピーして編集する。キーは流動区分キー、値は文言。未知のキーは無視される。",
+  "stockout-no-incoming": "発注状況・仕入先の納期を至急確認。発注がなければ即発注",
+  "stockout": "供給遅延。工程の連鎖で止まっている箇所を確認し納期前倒しを依頼",
   "low-flow-no-incoming": "仕入先へ生産継続可否・設備/金型の有無を確認。在庫切れ予測月が近いものから",
   "dormant-stock": "処分・廃却の検討、得意先へ補給要否を確認",
   "low-flow-no-shipment": "発注を抑制、営業へ需要を確認",
+  "discontinuation-candidate": "営業へ終了を確認。終了なら確認済みにする",
   "normal-flow": ""
 }

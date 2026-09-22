@@ -132,7 +132,7 @@ def test_TC_SHC_X_020_fill_detail_sections_does_not_build_mari_anchored_trend():
     assert "mariAnchor" not in fill_block
     assert "mariAnchoredTrend" not in fill_block
     assert (
-        "renderAnchoredStockChart(anchoredStockTrendSection, slimsAnchoredTrend, incomingTrend)"
+        "renderAnchoredStockChart(anchoredStockTrendSection, slimsAnchoredTrend, incomingTrend, forecastTrend"
         in fill_block
     )
 
@@ -157,7 +157,8 @@ def test_TC_SHC_X_022_chart_scale_includes_incoming_quantities():
     )[0]
 
     assert "incomingQtys" in render_block
-    assert "Math.max(1, ...slims.map((point) => Number(point.qty) || 0), ...incomingQtys)" in render_block
+    # 値域は 実績＋予測（points）と入荷・予定入荷の棒を含む（2026/09/18 予測部分の追加）
+    assert "Math.max(1, ...points.map((point) => Number(point.qty) || 0), ...incomingQtys, ...plannedQtys)" in render_block
 
 
 def test_TC_SHC_X_023_legend_shows_incoming_item():
@@ -238,8 +239,9 @@ def test_x017_list_client_js_reads_year_matrix_keys():
     source = CLIENT_JS_PATH.read_text(encoding="utf-8")
 
     assert 'DEFAULT_PERIOD_KEY = "Y1"' in source
-    assert '"low-flow-no-incoming": 0' in source
-    assert '"low-flow-no-shipment": 2' in source
+    # 07 で 7 区分になりランクがずれた（TC-FQR-C-006）
+    assert '"low-flow-no-incoming": 2' in source
+    assert '"low-flow-no-shipment": 4' in source
     assert "supply-risk" not in source
     assert "excess-stock-risk" not in source
 
@@ -287,8 +289,8 @@ def test_list_client_js_counts_use_new_quadrant_names():
     assert "lowFlowNoShipment" in source
     assert "supplyRisk" not in source
     assert "excessStockRisk" not in source
-    assert "低流動品（入荷なし）" in source
-    assert "低流動品（出荷なし）" in source
+    # 06: 件数サマリは在庫切れリスク
+    assert "危険 ${counts.danger} 件" in source
     assert "供給リスク品" not in source
     assert "在庫過剰リスク品" not in source
 
@@ -375,13 +377,11 @@ def test_inventory_order_alert_list_js_updates_table_counts_label():
     source = JS_PATH.read_text(encoding="utf-8")
     assert "ioa-table-counts-left" in source
     assert "ioa-table-counts-right" in source
-    assert "低流動品（入荷なし）" in source
-    assert "在庫死蔵品" in source
-    assert "低流動品（出荷なし）" in source
-    assert "通常流動品" in source
+    # 06: 件数サマリは在庫切れリスク（危険 / 注意 / 監視 / 対象外）
+    assert "危険 ${counts.danger ?? 0} 件" in source
+    assert "対象外 ${counts.noneRisk ?? 0} 件" in source
     assert "供給リスク品" not in source
     assert "在庫過剰リスク品" not in source
-    assert "counts.lowFlowNoIncoming" in source
     assert "supplyRisk" not in source
     assert "全件数:" not in source
     assert "確認済み" in source
@@ -476,10 +476,10 @@ def test_inventory_order_alert_list_js_import_overlay_has_spinner_css():
     assert "body.inventory-order-alert-page .ioa-detail-memo-col-content" not in css
     table_rule = css.split("body.inventory-order-alert-page .ioa-alert-rules-table,")[1].split("}")[0]
     assert "ioa-location-table" in table_rule
-    assert "ioa-alert-rules-color-swatch" in css
-    assert "td:last-child" not in css.split("ioa-alert-rules-row--low-flow-no-incoming")[1].split("ioa-alert-rules-actions", 1)[0]
+    # 判定ルールダイアログの行は流動区分で色付けしない（2026/09/18: 色の意味は在庫切れリスクのみ）
+    assert "ioa-alert-rules-color-swatch" not in css
+    assert "ioa-alert-rules-row--" not in css
     shared_block = css.split("/* ポータル共通: 一覧・判定ルールダイアログの行背景色", 1)[1]
-    assert "body.inventory-order-alert-page .ioa-alert-rules-row--low-flow-no-incoming" in shared_block
     assert ".shipment-trend-page .st-row-decrease-strong," in shared_block
 
 
@@ -690,10 +690,10 @@ def test_TC_SHC_X_041_anchor_breakdown_shown_only_for_multi_item_units():
 
 def test_x020_list_client_js_sorts_months_of_stock_with_empty_last():
     source = CLIENT_JS_PATH.read_text(encoding="utf-8")
-    block = source.split("function monthsOfStockSortValue(", 1)[1].split("function sortValue(", 1)[0]
+    block = source.split("function nullsLastSortValue(", 1)[1].split("function sortValue(", 1)[0]
 
     assert "monthsOfStock" in block
-    assert 'sortDirectionOf(state, "months_of_stock") === "desc"' in block
+    assert 'sortDirectionOf(state, column) === "desc"' in block
     # 空は昇順・降順とも末尾: desc では [0, …]、asc では [1, …] を空に割り当てる
     assert "isEmpty ? [0, 0] : [1, number]" in block
     assert "isEmpty ? [1, 0] : [0, number]" in block
@@ -724,3 +724,151 @@ def test_stage2_list_js_fills_demand_forecast_section():
     assert "getUnconfirmedOrderTrend" in block
     assert "parseAnchorQty" in block
     assert "renderDemandForecast(custCode, row.dataset.itemCd" in source
+
+
+# --- 06_stockout-risk: TC-SOR-X-009 ---
+
+
+def test_sor_x009_list_client_js_handles_stockout_risk():
+    source = CLIENT_JS_PATH.read_text(encoding="utf-8")
+
+    assert 'STOCKOUT_RISK_RANK = { danger: 0, caution: 1, watch: 2, none: 3 }' in source
+    assert "function rowStockoutRiskKey(row)" in source
+    assert 'column === "stockout_risk"' in source
+    assert 'column === "days_until_stockout"' in source
+    assert "nullsLastSortValue(row.daysUntilStockout" in source
+    assert "`stockout-${riskKey}`" in source  # 行の色は在庫切れリスクのみ
+    assert 'params.set("stockout_risk"' in source
+    assert 'params.set("ordering_method"' in source
+    assert '"#ioa-stockout-risk"' in source and '"#ioa-ordering-method"' in source
+    assert "getStockoutRisk(custCode, itemCd)" in source
+    # 判定はサーバ値のみ。JS で発注残やリードタイムを比較しない
+    cell = source.split('if (column.key === "stockout_risk")', 1)[1].split("return `<td", 1)[0]
+    assert "leadTime" not in cell and "replenishment" not in cell
+
+
+def test_sor_x009_list_js_fills_stockout_risk_section():
+    source = JS_PATH.read_text(encoding="utf-8")
+    block = source.split("function renderStockoutRisk(", 1)[1].split("function renderDemandForecast(", 1)[0] if "function renderDemandForecast(" in source.split("function renderStockoutRisk(", 1)[1] else source.split("function renderStockoutRisk(", 1)[1]
+
+    assert "getStockoutRisk" in block
+    for class_name in ("ioa-detail-stockout-risk", "ioa-detail-stockout-replenishment", "ioa-detail-stockout-lead-time"):
+        assert class_name in source
+    assert "renderStockoutRisk(custCode, row.dataset.itemCd" in source
+
+
+def test_sor_x011_detail_replenishment_mentions_stale_overdue_and_deadline():
+    """詳細の補充見込みは 長期納期超過 N を除外 / 補充期限より後 N を添える（2026/09/21）。"""
+    source = JS_PATH.read_text(encoding="utf-8")
+    block = source.split("const rep = info.replenishment || {};", 1)[1].split("setDetailText(riskFields.replenishment", 1)[0]
+
+    assert "rep.staleQty" in block
+    assert "長期納期超過" in block
+    assert "補充期限より後" in block
+    assert "在庫切れ予測月より後" not in block
+
+
+# --- 2026/09/18: 推定在庫推移グラフの予測部分（点線） ---
+
+
+def test_forecast_line_is_built_from_unit_demand_forecast_and_planned_incoming():
+    """予測の需要は demandForecast（照合単位の合計。在庫切れ予測月と同じ根拠）。行単位の内示推移は使わない（design §6.4a、2026/09/18 改訂）。"""
+    source = JS_PATH.read_text(encoding="utf-8")
+    block = source.split("function buildForecastStockTrend(", 1)[1].split("function renderAnchoredStockChart(", 1)[0]
+
+    # TC-FQR-C-007: 予測は basis が「内示」のときだけ描く（「なし」と旧値「実績ベース」は空）
+    assert 'forecast.basis !== "内示"' in block
+    assert "forecast.currentMonthRemaining" in block  # 当月残（単位合計）
+    assert "forecast.monthly" in block and "monthly[offset - 1]" in block  # 翌月〜翌々々月の内示
+    assert "unconfirmedTrend" not in block and "getUnconfirmedOrderTrend" not in block
+    assert "plannedIncomingByMonth(processChain, currentMonth)" in block
+    assert "offset <= 3" in block  # 翌月〜翌々々月の 3 点
+    planned = source.split("function plannedIncomingByMonth(", 1)[1].split("function buildForecastStockTrend(", 1)[0]
+    assert "processChain[0]" in planned  # 完成品直下の工程の発注残
+    assert "key < currentMonth" in planned  # 納期超過は当月扱い
+
+
+def test_forecast_series_is_drawn_dotted_with_planned_bars_and_stockout_marker():
+    source = JS_PATH.read_text(encoding="utf-8")
+    chart = source.split("function renderAnchoredStockChart(", 1)[1].split("function fillDetailSections(", 1)[0]
+
+    assert "const points = slims.concat(forecast);" in chart
+    assert 'polyline.style.strokeDasharray = "4 3";' in chart
+    assert "ioa-anchored-stock-trend-line--forecast" in chart
+    assert "ioa-anchored-stock-trend-bar--planned" in chart
+    assert "ioa-anchored-stock-trend-stockout-line" in chart
+    assert "ioa-anchored-stock-trend-now-line" in chart
+    assert "予測在庫(内示・発注残)" in chart and "予定入荷(発注残)" in chart
+    assert "renderAnchoredStockChart(anchoredStockTrendSection, slimsAnchoredTrend, incomingTrend, forecastTrend, forecastInfo?.stockoutForecastMonth" in source
+
+    css = (Path(__file__).resolve().parents[3] / "static" / "css" / "app.css").read_text(encoding="utf-8")
+    for class_name in ("ioa-anchored-stock-trend-line--forecast", "ioa-anchored-stock-trend-bar--planned", "ioa-anchored-stock-trend-stockout-line", "ioa-anchored-stock-trend-legend-item--forecast"):
+        assert class_name in css
+
+
+# --- TC-FQR-C-006: 7 区分のランク・理由表示（07_flow-quadrant-refinement） ---
+
+
+def test_fqr_c006_client_js_flow_quadrant_rank_has_seven_keys():
+    """クライアント側のランクは 7 区分（欠品 2 区分と打ち切り候補を含む）。未知キーは通常流動品に倒れるため、
+    ここが 4 キーのままだと欠品の行が通常流動品として表示されてしまう。"""
+    source = CLIENT_JS_PATH.read_text(encoding="utf-8")
+    block = source.split("const FLOW_QUADRANT_RANK = {", 1)[1].split("};", 1)[0]
+
+    for index, key in enumerate(
+        [
+            "stockout-no-incoming",
+            "stockout",
+            "low-flow-no-incoming",
+            "dormant-stock",
+            "low-flow-no-shipment",
+            "discontinuation-candidate",
+        ]
+    ):
+        assert f'"{key}": {index}' in block
+    assert "[QUADRANT_NORMAL_FLOW_KEY]: 6" in block
+
+
+def test_fqr_c006_client_js_exposes_flow_reasons():
+    source = CLIENT_JS_PATH.read_text(encoding="utf-8")
+
+    assert "getFlowReasons(" in source
+    assert "row.flowReasons" in source
+
+
+def test_fqr_c005a_client_js_reads_flow_reasons_by_period():
+    """理由も判定期間で変わるため、区分と同じく期間キーで引き直す（07 design §1-6）。"""
+    source = CLIENT_JS_PATH.read_text(encoding="utf-8")
+    block = source.split("getFlowReasons(", 1)[1].split("getEvaluationPeriodLabel(", 1)[0]
+
+    assert "flowReasonsByPeriod" in block
+    assert "flowSelectionKey(state)" in block  # 既定は選択中の判定期間
+
+
+def test_fqr_c006_detail_dialog_lists_flow_reasons():
+    source = JS_PATH.read_text(encoding="utf-8")
+
+    assert "ioa-detail-flow-reasons" in source
+    assert "getFlowReasons?.(" in source
+
+    template = (Path(__file__).resolve().parents[3] / "templates" / "inventory_order_alert" / "list.html").read_text(encoding="utf-8")
+    assert "ioa-detail-flow-reasons" in template
+
+
+def test_fqr_c005b_rules_dialog_explains_the_evaluation_period_basis():
+    """判定ルールダイアログで期間判断の基準を説明する（用語集 V-211「期間判断の基準」）。"""
+    template = (Path(__file__).resolve().parents[3] / "templates" / "inventory_order_alert" / "list.html").read_text(encoding="utf-8")
+    block = template.split('<dialog id="ioa-alert-rules-dialog"', 1)[1].split("</dialog>", 1)[0]
+
+    assert "期間にかかわる判断はすべて上の判定期間で行います" in block
+    assert "判定期間では変わりません" in block
+    # 需要の定義は内示のみ（出荷実績は見ない。07 REQ-FQR-F-002）
+    assert "需要は<strong>内示の有無</strong>" in block
+    assert "内示または出荷実績" not in block
+
+
+def test_fqr_c006_css_has_badges_for_the_new_quadrants():
+    css = (Path(__file__).resolve().parents[3] / "static" / "css" / "app.css").read_text(encoding="utf-8")
+
+    for key in ("stockout-no-incoming", "stockout", "discontinuation-candidate"):
+        assert f"ioa-flow-quadrant--{key}" in css

@@ -1,4 +1,4 @@
-"""需要予測（V-220）・在庫切れ予測月（V-221）・在庫月数（V-222）のテスト（test-design.md TC-SFV-D-090〜109）。
+"""需要予測（V-220）・在庫切れ予測月（V-221）・在庫月数（V-222）のテスト（test-design.md TC-SFV-D-090〜109、07 TC-FQR-D-001〜006）。
 
 test-design §3.1 の ROW_100 / ROW_104 / ROW_137_A / ROW_137_B（96160-00500 の照合単位）を使う。
 """
@@ -10,9 +10,9 @@ from datetime import date
 import pytest
 
 from application.inventory_order_alert.domain.value_objects.demand_forecast import (
-    BASIS_ACTUAL,
     BASIS_NONE,
     BASIS_UNCONFIRMED,
+    DEMAND_FORECAST_BASES,
     STOCKOUT_FORECAST_LIMIT_MONTHS,
     DemandForecast,
     attach_demand_forecast,
@@ -95,23 +95,22 @@ def test_d092_average_uses_only_months_with_orders():
     assert forecast.monthly_average == 300.0
 
 
-# --- TC-SFV-D-093: 内示ゼロで出荷実績があれば実績ベース ---
+# --- TC-SFV-D-093 → 07 TC-FQR-D-001/002: 内示ゼロなら出荷実績があっても なし（実績ベースは廃止。REQ-FQR-F-002） ---
 
 
-def test_d093_zero_unconfirmed_with_shipments_gives_actual_basis():
-    forecast = build_demand_forecast([_row("100", "X", unconfirmed=[0, 0, 0, 0], shipments=[100] * 12)], as_of_date=AS_OF)
+def test_d093_fqr_d001_zero_unconfirmed_with_recent_shipments_gives_none_basis():
+    forecast = build_demand_forecast([_row("100", "X", unconfirmed=[0, 0, 0, 0], shipments=[0] * 9 + [10, 20, 30])], as_of_date=AS_OF)
 
-    assert forecast.basis == BASIS_ACTUAL
-    assert forecast.monthly_average == 100.0
-    assert forecast.current_month_remaining == 0
+    assert forecast.basis == BASIS_NONE
+    assert forecast.monthly_average == 0
+    assert forecast.has_demand is False
 
 
-def test_d093_actual_basis_uses_only_the_most_recent_12_months():
-    trend = [{"month": f"M{index:02d}", "qty": 999 if index < 12 else 50} for index in range(24)]
+def test_d093_fqr_d002_older_shipments_only_give_none_basis():
+    trend = [{"month": f"M{index:02d}", "qty": 999 if index < 12 else 0} for index in range(24)]
     forecast = build_demand_forecast([{"cust_code": "100", "item_cd": "X", "shipment_trend": trend, "unconfirmed_order_trend": _trend([0, 0, 0, 0])}], as_of_date=AS_OF)
 
-    assert forecast.basis == BASIS_ACTUAL
-    assert forecast.monthly_average == 50.0
+    assert forecast.basis == BASIS_NONE
 
 
 # --- TC-SFV-D-094: 内示も出荷もゼロなら なし ---
@@ -128,21 +127,22 @@ def test_d094_no_orders_and_no_shipments_gives_none_basis():
 # --- TC-SFV-D-095: 内示推移を持たない旧行 ---
 
 
-def test_d095_rows_without_unconfirmed_trend_fall_back_to_actual_or_none():
+def test_d095_rows_without_unconfirmed_trend_are_none_even_with_shipments():
     with_shipments = build_demand_forecast([_row("100", "X", shipments=[120] * 12)], as_of_date=AS_OF)
     without = build_demand_forecast([_row("100", "X")], as_of_date=AS_OF)
 
-    assert with_shipments.basis == BASIS_ACTUAL
-    assert with_shipments.monthly_average == 120.0
+    assert with_shipments.basis == BASIS_NONE
     assert without.basis == BASIS_NONE
 
 
-# --- TC-SFV-D-096: basis は 3 値以外を拒否 ---
+# --- TC-SFV-D-096 / TC-FQR-D-003: basis は 内示 / なし の 2 値 ---
 
 
-def test_d096_invalid_basis_is_rejected():
+@pytest.mark.parametrize("basis", ["内示受注", "実績ベース"])
+def test_d096_fqr_d003_invalid_basis_is_rejected(basis):
+    assert DEMAND_FORECAST_BASES == (BASIS_UNCONFIRMED, BASIS_NONE)
     with pytest.raises(ValueError):
-        DemandForecast(basis="内示受注", current_month_remaining=0, monthly=(0, 0, 0), monthly_average=0.0)
+        DemandForecast(basis=basis, current_month_remaining=0, monthly=(0, 0, 0), monthly_average=0.0)
 
 
 # --- TC-SFV-D-097: 在庫月数 = 在庫合計 ÷ 月平均、小数 1 桁 ---
@@ -163,7 +163,7 @@ def test_d098_months_of_stock_is_none_without_demand():
 
     assert months_of_stock(1000, none_basis) is None
     assert months_of_stock(1000, zero_average) is None
-    assert months_of_stock(None, DemandForecast(basis=BASIS_ACTUAL, current_month_remaining=0, monthly=(0, 0, 0), monthly_average=10.0)) is None
+    assert months_of_stock(None, DemandForecast(basis=BASIS_UNCONFIRMED, current_month_remaining=0, monthly=(0, 0, 0), monthly_average=10.0)) is None
 
 
 # --- TC-SFV-D-099: 在庫切れ予測月（内示で当月残を引く） ---
@@ -196,14 +196,19 @@ def test_d101_stock_below_current_month_remaining_is_current_month():
     assert stockout_forecast_month(50, _forecast(100, (0, 0, 0), 0.0), as_of_date=AS_OF) == "2026-09"
 
 
-# --- TC-SFV-D-102: 在庫 0 で需要ありは当月・在庫月数 0.0 ---
+# --- TC-SFV-D-102 → 07 TC-FQR-D-005/006: 在庫 0 は需要が初めて出る月（「在庫 0 以下は当月」は廃止。2026/09/21） ---
 
 
-def test_d102_zero_stock_with_demand_is_current_month_and_zero_months():
-    forecast = _forecast(0, (100, 100, 100), 100.0)
+def test_d102_fqr_d005_zero_stock_stockout_month_is_the_first_month_with_demand():
+    assert stockout_forecast_month(0, _forecast(0, (100, 100, 100), 100.0), as_of_date=AS_OF) == "2026-10"
+    assert stockout_forecast_month(0, _forecast(0, (0, 320, 290), 305.0), as_of_date=AS_OF) == "2026-11"
+    assert stockout_forecast_month(0, _forecast(50, (0, 320, 290), 305.0), as_of_date=AS_OF) == "2026-09"
+    assert months_of_stock(0, _forecast(0, (100, 100, 100), 100.0)) == 0.0
 
-    assert stockout_forecast_month(0, forecast, as_of_date=AS_OF) == "2026-09"
-    assert months_of_stock(0, forecast) == 0.0
+
+def test_d102_fqr_d006_zero_stock_without_monthly_demand_falls_to_average():
+    # 内示 3 か月とも 0 だが月平均 > 0（データ不整合）でも 4 か月目以降の平均で尽きる
+    assert stockout_forecast_month(0, _forecast(0, (0, 0, 0), 10.0), as_of_date=AS_OF) == "2027-01"
 
 
 # --- TC-SFV-D-103: 120 か月以内に尽きなければ空 ---

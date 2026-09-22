@@ -102,11 +102,29 @@
         {% include "includes/portal_prefix_filter_field.html" with label="得意先品番" name="item_cd" value=list_filter.item_cd datalist_id="ioa-item-cd-options" placeholder="得意先品番" field_class="ioa-filter-field" label_class="ioa-filter-field-label" input_class="ioa-filter-control ioa-filter-item-cd" options=filter_options.item_cd_options %}
         {% include "includes/portal_prefix_filter_field.html" with label="仕入先品番" name="level1_item_cd" value=list_filter.level1_item_cd datalist_id="ioa-level1-item-cd-options" placeholder="仕入先品番" field_class="ioa-filter-field" label_class="ioa-filter-field-label" input_class="ioa-filter-control ioa-filter-level1-item-cd" options=filter_options.level1_item_cd_options %}
         <label class="ioa-filter-field">
+          <span class="ioa-filter-field-label">在庫切れリスク</span>
+          <select id="ioa-stockout-risk" name="stockout_risk" class="ioa-filter-select ioa-filter-control">
+            <option value="">すべて</option>
+            {% for key, label in stockout_risk_options %}
+              <option value="{{ key }}" {% if stockout_risk_filter == key %}selected{% endif %}>{{ label }}</option>
+            {% endfor %}
+          </select>
+        </label>
+        <label class="ioa-filter-field">
           <span class="ioa-filter-field-label">流動区分</span>
           <select id="ioa-flow-quadrant" name="flow_quadrant" class="ioa-filter-select ioa-filter-control">
             <option value="">すべて</option>
             {% for rule in flow_quadrant_rule_rows %}
               <option value="{{ rule.quadrant_key }}" {% if flow_quadrant_filter == rule.quadrant_key %}selected{% endif %}>{{ rule.quadrant }}</option>
+            {% endfor %}
+          </select>
+        </label>
+        <label class="ioa-filter-field">
+          <span class="ioa-filter-field-label">発注方式</span>
+          <select id="ioa-ordering-method" name="ordering_method" class="ioa-filter-select ioa-filter-control">
+            <option value="">すべて</option>
+            {% for key, label in ordering_method_options %}
+              <option value="{{ key }}" {% if ordering_method_filter == key %}selected{% endif %}>{{ label }}</option>
             {% endfor %}
           </select>
         </label>
@@ -148,6 +166,7 @@
             data-last-incoming-date="{{ row|ioa_display:'last_incoming_date' }}"
             data-last-ship-date="{{ row|ioa_display:'last_ship_date' }}"
             data-flow-quadrant="{{ row.flow_quadrant_key|default:'' }}"
+            data-stockout-risk="{{ row.stockout_risk_key|default:'watch' }}"
             data-flow-status="{{ row.flow_status|default:'' }}"
             data-recommended-action="{{ row.recommended_action|default:'' }}"
             data-responsible-department="{{ row.responsible_department|default:'' }}"
@@ -161,9 +180,12 @@
             data-stock-as-of-label="{{ row.stock_as_of_label|default:'' }}"
             data-confirmation-status="{{ row.confirmation_status_key }}">
           {% for header in table_headers %}
-          {% if header.key == "flow_quadrant" %}
+          {% if header.key == "stockout_risk" %}
+          {# 在庫切れリスク（S-204）は取込時の判定値。対象外・旧行は空（06 design §6.4）。 #}
+          <td class="ioa-stockout-risk-cell">{% if row.stockout_risk and row.stockout_risk != "対象外" %}<span class="ioa-stockout-risk ioa-stockout-risk--{{ row.stockout_risk_key }}">{{ row.stockout_risk }}</span>{% endif %}</td>
+          {% elif header.key == "flow_quadrant" %}
           {# 流動区分セルは区分名のみ（05 design §6.3、REQ-SFV-F-004。2026-09-17 改訂）。説明は詳細ダイアログ。通常流動品は空。 #}
-          <td class="ioa-flow-cell">{% if row.flow_quadrant_key != "normal-flow" %}<span class="ioa-flow-quadrant">{{ row.flow_quadrant }}</span>{% endif %}</td>
+          <td class="ioa-flow-cell">{% if row.flow_quadrant_key != "normal-flow" %}<span class="ioa-flow-quadrant ioa-flow-quadrant--{{ row.flow_quadrant_key }}">{{ row.flow_quadrant }}</span>{% endif %}</td>
           {% else %}
           <td>
             {% if header.key == "confirmation_status" %}
@@ -212,7 +234,7 @@
     {# 件数サマリは常時表示する（0件時も絞り込み状況が分かるように）。判定条件は判定期間セレクトで分かるため表示しない。 #}
     <div class="ioa-table-footer-right">
       <div class="ioa-table-counts">
-        <p class="ioa-table-counts-left">低流動品（入荷なし） {{ counts.low_flow_no_incoming }} 件 / 在庫死蔵品 {{ counts.dormant_stock }} 件 / 低流動品（出荷なし） {{ counts.low_flow_no_shipment }} 件 / 通常流動品 {{ counts.normal_flow }} 件</p>
+        <p class="ioa-table-counts-left">危険 {{ counts.danger }} 件 / 注意 {{ counts.caution }} 件 / 監視 {{ counts.watch }} 件 / 対象外 {{ counts.none_risk }} 件</p>
         <p class="ioa-table-counts-right">確認済み {{ counts.confirmed }} 件 / 確認中 {{ counts.in_progress }} 件 / 未確認 {{ counts.unconfirmed }} 件</p>
       </div>
     </div>
@@ -280,11 +302,23 @@
     <h3 class="ioa-alert-rules-title">判定ルール</h3>
     <p class="ioa-alert-rules-condition">現在の判定期間: <span class="ioa-alert-rules-period">{{ flow_selection.period_label }}</span></p>
     <p class="ioa-alert-rules-help muted">
-      期間内入荷／期間内出荷は、BOM 基準日から遡った判定期間（1年 / 3年 / 5年）内に最終入荷日／最終出荷日があることを指します。
+      在庫は SLIMS 在庫の有無、需要は<strong>内示の有無</strong>（出荷実績は見ません）、直近入荷は最終入荷日が基準日から 30 日以内にあることを指します。
+      期間内入荷／期間内出荷は、BOM 基準日から遡った判定期間内に最終入荷日／最終出荷日があることを指します。「—」は判定に使わない材料です。
+    </p>
+    {# 07 design §1-6: 期間判断の基準は判定期間ひとつ。どこで何が変わるかを利用者に示す #}
+    <p class="ioa-alert-rules-help muted">
+      <strong>期間にかかわる判断はすべて上の判定期間で行います。</strong>
+      判定期間を切り替えると、在庫ありの 4 区分（低流動品（入荷なし）／在庫死蔵品／低流動品（出荷なし）／通常流動品）と、それに伴う状況・理由が変わります。
+      在庫なしの 3 区分（欠品（入荷なし）／欠品／打ち切り候補）と、需要予測・在庫切れ予測月・在庫月数・在庫切れリスクは、在庫・需要・直近入荷・日数だけで決まるため判定期間では変わりません。
+      判定期間とは別の窓として、直近入荷（30 日）・安全日数・リードタイム・監視期間（6 か月）を用途ごとに使います。
     </p>
     <div class="ioa-alert-rules-table-wrap">
     <table class="ioa-alert-rules-table">
       <colgroup>
+        {# 07 design §2.9: 在庫 / 需要 / 直近入荷 の判定材料列 #}
+        <col class="ioa-alert-rules-col-fact">
+        <col class="ioa-alert-rules-col-fact">
+        <col class="ioa-alert-rules-col-fact">
         <col class="ioa-alert-rules-col-incoming">
         <col class="ioa-alert-rules-col-shipment">
         <col class="ioa-alert-rules-col-level">
@@ -294,6 +328,9 @@
       </colgroup>
       <thead>
         <tr>
+          <th scope="col">在庫</th>
+          <th scope="col">需要</th>
+          <th scope="col">直近入荷</th>
           <th scope="col">期間内入荷</th>
           <th scope="col">期間内出荷</th>
           <th scope="col">流動区分</th>
@@ -304,17 +341,15 @@
       </thead>
       <tbody>
         {% for rule in flow_quadrant_rule_rows %}
-        <tr class="ioa-alert-rules-row ioa-alert-rules-row--{{ rule.quadrant_key }}">
+        <tr class="ioa-alert-rules-row">
+          <td>{{ rule.stock }}</td>
+          <td>{{ rule.demand }}</td>
+          <td>{{ rule.recent_incoming }}</td>
           <td>{{ rule.has_incoming }}</td>
           <td>{{ rule.has_shipment }}</td>
-          <td>
-            <span class="ioa-alert-rules-level-label">
-              <span class="ioa-alert-rules-color-swatch" aria-hidden="true"></span>
-              {{ rule.quadrant }}
-            </span>
-          </td>
-          {# 状況テンプレートの {period} は JS が選択中の判定期間ラベルに置換する（data-status-template）。 #}
-          <td class="ioa-alert-rules-status" data-status-template="{{ rule.status_template }}">{{ rule.status_template }}</td>
+          <td><span class="ioa-alert-rules-level-label">{{ rule.quadrant }}</span></td>
+          {# 凡例の状況: 日付は YYYY/MM/DD、{period} は JS が選択中の判定期間ラベルに置換する（data-status-template）。 #}
+          <td class="ioa-alert-rules-status" data-status-template="{{ rule.status_example }}">{{ rule.status_text }}</td>
           <td class="ioa-alert-rules-action">{{ rule.action }}</td>
           <td>{{ rule.departments|join:"・" }}</td>
         </tr>
@@ -348,6 +383,9 @@
         <p class="ioa-detail-flow-quadrant"></p>
         <dl class="ioa-detail-fields">
           <dt>状況</dt><dd class="ioa-detail-flow-status"></dd>
+          {# 理由（07 REQ-FQR-F-005）。該当がない行では JS が行ごと隠す #}
+          <dt class="ioa-detail-flow-reasons-label">理由</dt>
+          <dd><ul class="ioa-detail-flow-reasons"></ul></dd>
           <dt>推奨アクション</dt><dd class="ioa-detail-recommended-action"></dd>
           <dt>責任部署</dt><dd class="ioa-detail-department"></dd>
           <dt>判定期間</dt><dd class="ioa-detail-evaluation-period"></dd>
@@ -382,8 +420,7 @@
     <p class="ioa-location-as-of muted"></p>
     </section>
     <section class="ioa-detail-anchored-stock-trend-section">
-      <h4 class="ioa-detail-section-title">推定在庫推移（参考値）と入荷実績</h4>
-      <p class="ioa-detail-section-note muted">折れ線は出荷・入荷の実績から逆算した参考値です（実測の在庫履歴ではありません）。棒は MARI の月次入荷実績（検収数量）です。在庫数(SLIMS)が空の品番は 0 を起点に逆算しています。<strong>在庫・出荷・入荷は、同じ仕入先品番を共有する得意先品番をまとめた単位で合算</strong>しています（入荷が仕入先品番に対して発生するため）。同じ単位に属する行では同じグラフになります。マイナスは、入荷が「在庫＋出荷」を上回っている（棚卸差異・生産消費など出荷以外の在庫変動がある）ことを示します。</p>
+      <h4 class="ioa-detail-section-title">推定在庫推移（参考値）と入荷実績・予測</h4>
       <div class="ioa-detail-anchored-stock-trend-chart"></div>
       <p class="ioa-detail-anchored-stock-trend-empty muted" hidden>推定在庫推移を算出できません。</p>
       {# 照合単位が複数の得意先品番を含むときだけ、起点の内訳を JS が描画する（design.md §6.6）。 #}
@@ -395,6 +432,31 @@
       </p>
     </section>
     {# 需要予測（V-220〜V-222）区分。推定在庫推移とメモの間（05 design §6.4、REQ-SFV-F-014）。値は JS が行データから流し込む。 #}
+    {# 在庫切れリスク（S-204）区分。判定・理由・補充見込みは取込時の値（06 design §6.4、REQ-SOR-F-007）。 #}
+    <section class="ioa-detail-stockout-risk-section">
+      <h4 class="ioa-detail-section-title">在庫切れリスク</h4>
+      <dl class="ioa-detail-fields ioa-detail-stockout-risk-fields">
+        <dt>在庫切れリスク</dt><dd class="ioa-detail-stockout-risk"></dd>
+        <dt>理由</dt><dd class="ioa-detail-stockout-risk-reasons"></dd>
+        <dt>猶予日数</dt><dd class="ioa-detail-stockout-days"></dd>
+        <dt>補充見込み（発注残）</dt><dd class="ioa-detail-stockout-replenishment"></dd>
+        <dt>不足数量</dt><dd class="ioa-detail-stockout-shortage"></dd>
+        <dt>リードタイム</dt><dd class="ioa-detail-stockout-lead-time"></dd>
+        <dt>発注方式</dt><dd class="ioa-detail-stockout-ordering-method"></dd>
+        <dt>上流工程の発注残</dt><dd class="ioa-detail-stockout-upstream"></dd>
+      </dl>
+      {# 工程の連鎖（直下 → 上流）。各工程のリードタイムと発注残を JS が描画する（06 design §4.1a）。 #}
+      <h5 class="ioa-detail-section-subtitle">工程の連鎖（完成品直下 → 上流）</h5>
+      <div class="ioa-detail-process-chain-wrap">
+        <table class="ioa-detail-process-chain-table">
+          <thead>
+            <tr><th scope="col">階層</th><th scope="col">仕入先品番</th><th scope="col">仕入先</th><th scope="col">リードタイム</th><th scope="col">発注残（納期）</th></tr>
+          </thead>
+          <tbody class="ioa-detail-process-chain-body"></tbody>
+        </table>
+      </div>
+      <p class="ioa-detail-process-chain-empty muted" hidden>工程の連鎖を取得できません（仕入先未解決、または旧スナップショット）。</p>
+    </section>
     <section class="ioa-detail-demand-forecast-section">
       <h4 class="ioa-detail-section-title">需要予測</h4>
       <dl class="ioa-detail-fields ioa-detail-demand-forecast-fields">
@@ -446,6 +508,6 @@
 <script src="/static/js/portal-list-prefix-filter.js?v=20260629-dependent-cust" defer></script>
 <script src="/static/js/portal-list-dependent-cust-filter.js?v=20260629-dependent-cust" defer></script>
 <script src="/static/js/portal-list-sort-dialog.js?v=20260629-dependent-cust" defer></script>
-<script src="/static/js/inventory-order-alert-list-client.js?v=20260917-flow-cell-compact" defer></script>
-<script src="/static/js/inventory-order-alert-list.js?v=20260917-flow-cell-compact" defer></script>
+<script src="/static/js/inventory-order-alert-list-client.js?v=20260918-unit-forecast" defer></script>
+<script src="/static/js/inventory-order-alert-list.js?v=20260921-stale-overdue" defer></script>
 {% endblock %}

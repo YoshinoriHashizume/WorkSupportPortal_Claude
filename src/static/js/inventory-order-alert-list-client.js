@@ -62,13 +62,27 @@
   // 流動区分の判定ロジックはサーバ側にのみ置く。ここは row.flowQuadrants（Y1/Y3/Y5）から引くだけにする
   // （05 design §3.1）。暦月計算を JS に持ち込まない。
   const QUADRANT_NORMAL_FLOW_KEY = "normal-flow";
+  // ランクは S-203（07 で 7 区分に拡張）。未知のキーは通常流動品に倒れるので、
+  // ここに載っていない区分は一覧で通常流動品として扱われてしまう点に注意。
   const FLOW_QUADRANT_RANK = {
-    "low-flow-no-incoming": 0,
-    "dormant-stock": 1,
-    "low-flow-no-shipment": 2,
-    [QUADRANT_NORMAL_FLOW_KEY]: 3,
+    "stockout-no-incoming": 0,
+    "stockout": 1,
+    "low-flow-no-incoming": 2,
+    "dormant-stock": 3,
+    "low-flow-no-shipment": 4,
+    "discontinuation-candidate": 5,
+    [QUADRANT_NORMAL_FLOW_KEY]: 6,
   };
   const DEFAULT_PERIOD_KEY = "Y1";
+  // 在庫切れリスク（S-204）。判定は取込時にサーバで行い、ここは行の値を使うだけ（06 design §6.4）。
+  const STOCKOUT_RISK_RANK = { danger: 0, caution: 1, watch: 2, none: 3 };
+  const STOCKOUT_RISK_LABELS = { danger: "危険", caution: "注意", watch: "監視", none: "対象外" };
+  const ORDERING_METHOD_KEYS = ["manual", "mrp", "unknown"];
+
+  function rowStockoutRiskKey(row) {
+    const key = String(row.stockoutRiskKey || "");
+    return Object.prototype.hasOwnProperty.call(STOCKOUT_RISK_RANK, key) ? key : "watch";
+  }
   const NO_INCOMING_RECORD_TEXT = "入荷実績なし";
   const CONFIRMATION_STATUS_RANK = {
     unconfirmed: 0,
@@ -153,6 +167,8 @@
       level1ItemCd: params.get("level1_item_cd") || "",
       periodKey,
       flowQuadrant: Object.prototype.hasOwnProperty.call(FLOW_QUADRANT_RANK, quadrantRaw) ? quadrantRaw : "",
+      stockoutRisk: Object.prototype.hasOwnProperty.call(STOCKOUT_RISK_RANK, params.get("stockout_risk") || "") ? params.get("stockout_risk") : "",
+      orderingMethod: ORDERING_METHOD_KEYS.includes(params.get("ordering_method") || "") ? params.get("ordering_method") : "",
       attentionOnly: (params.get("attentionOnly") || "").toLowerCase() === "true",
       ...Core.readBaseStateFromUrl(defaults, defaultDirectionForColumn),
     };
@@ -225,6 +241,12 @@
       if (state.attentionOnly && quadrantKey === QUADRANT_NORMAL_FLOW_KEY) {
         return false;
       }
+      if (state.stockoutRisk && rowStockoutRiskKey(row) !== state.stockoutRisk) {
+        return false;
+      }
+      if (state.orderingMethod && String(row.orderingMethodKey || "unknown") !== state.orderingMethod) {
+        return false;
+      }
       if (state.custCode && String(row.cust_code || "").trim() !== state.custCode) {
         return false;
       }
@@ -254,6 +276,16 @@
         } else {
           counts.normalFlow += 1;
         }
+        const riskKey = rowStockoutRiskKey(row);
+        if (riskKey === "danger") {
+          counts.danger += 1;
+        } else if (riskKey === "caution") {
+          counts.caution += 1;
+        } else if (riskKey === "watch") {
+          counts.watch += 1;
+        } else {
+          counts.noneRisk += 1;
+        }
         const status = String(row.confirmation_status || "未確認");
         if (status === "確認済み") {
           counts.confirmed += 1;
@@ -269,6 +301,10 @@
         dormantStock: 0,
         lowFlowNoShipment: 0,
         normalFlow: 0,
+        danger: 0,
+        caution: 0,
+        watch: 0,
+        noneRisk: 0,
         confirmed: 0,
         inProgress: 0,
         unconfirmed: 0,
@@ -281,15 +317,19 @@
     return spec ? spec.direction : "asc";
   }
 
-  // 在庫月数（V-222）の並び替え。空は昇順・降順とも末尾（05 design §6.1、TC-SFV-D-059）。
-  function monthsOfStockSortValue(row, state) {
-    const raw = row.demandForecast?.monthsOfStock ?? row.months_of_stock;
+  // 空を昇順・降順とも末尾に置く数値ソートキー（在庫月数・猶予日数）。
+  function nullsLastSortValue(raw, state, column) {
     const number = raw === null || raw === undefined || raw === "" ? null : Number(raw);
     const isEmpty = number === null || !Number.isFinite(number);
-    if (sortDirectionOf(state, "months_of_stock") === "desc") {
+    if (sortDirectionOf(state, column) === "desc") {
       return isEmpty ? [0, 0] : [1, number];
     }
     return isEmpty ? [1, 0] : [0, number];
+  }
+
+  // 在庫月数（V-222）の並び替え。空は昇順・降順とも末尾（05 design §6.1、TC-SFV-D-059）。
+  function monthsOfStockSortValue(row, state) {
+    return nullsLastSortValue(row.demandForecast?.monthsOfStock ?? row.months_of_stock, state, "months_of_stock");
   }
 
   function sortValue(row, column, state) {
@@ -299,6 +339,12 @@
     }
     if (column === "months_of_stock") {
       return monthsOfStockSortValue(row, state);
+    }
+    if (column === "stockout_risk") {
+      return STOCKOUT_RISK_RANK[rowStockoutRiskKey(row)];
+    }
+    if (column === "days_until_stockout") {
+      return nullsLastSortValue(row.daysUntilStockout, state, "days_until_stockout");
     }
     if (column === "post_shipment_count" || column === "post_shipment_total_qty") {
       const number = Number.parseInt(String(value || "0"), 10);
@@ -370,6 +416,8 @@
     const countsRight = pageRoot.querySelector(".ioa-table-counts-right");
     const evaluationPeriodSelect = pageRoot.querySelector("#ioa-evaluation-period");
     const flowQuadrantSelect = pageRoot.querySelector("#ioa-flow-quadrant");
+    const stockoutRiskSelect = pageRoot.querySelector("#ioa-stockout-risk");
+    const orderingMethodSelect = pageRoot.querySelector("#ioa-ordering-method");
     const flowQuadrantLabels = payload.flowQuadrantLabels || {};
     const flowQuadrantDepartments = payload.flowQuadrantDepartments || {};
     const recommendedActions = payload.recommendedActions || {};
@@ -629,6 +677,16 @@
       if (state.flowQuadrant) {
         params.set("flow_quadrant", state.flowQuadrant);
       }
+      if (state.stockoutRisk) {
+        params.set("stockout_risk", state.stockoutRisk);
+      } else {
+        params.delete("stockout_risk");
+      }
+      if (state.orderingMethod) {
+        params.set("ordering_method", state.orderingMethod);
+      } else {
+        params.delete("ordering_method");
+      }
       if (state.attentionOnly) {
         params.set("attentionOnly", "true");
       }
@@ -687,7 +745,8 @@
       if (quadrantKey === QUADRANT_NORMAL_FLOW_KEY) {
         return `<td class="ioa-flow-cell"></td>`;
       }
-      return `<td class="ioa-flow-cell"><span class="ioa-flow-quadrant">${Core.escapeHtml(flowQuadrantLabels[quadrantKey] || "")}</span></td>`;
+      // 区分ごとのバッジ色は CSS（.ioa-flow-quadrant--<key>）。行の色は付けない（07 design §5.1）
+      return `<td class="ioa-flow-cell"><span class="ioa-flow-quadrant ioa-flow-quadrant--${Core.escapeHtml(quadrantKey)}">${Core.escapeHtml(flowQuadrantLabels[quadrantKey] || "")}</span></td>`;
     }
 
     function renderTableBody(pageRows) {
@@ -703,9 +762,10 @@
           const rowKey = row.rowKey || buildRowKeyAttribute(identity);
           const quadrantKey = rowFlowQuadrantKey(row, state);
           const statusKey = String(row.confirmationStatusKey || "unconfirmed");
-          // 確認状態は流動区分より優先する（design.md §6.6.7）。
+          const riskKey = rowStockoutRiskKey(row);
+          // 行の色は 確認状態 > 在庫切れリスク のみ。流動区分は色に使わない（06 design §6.4、2026/09/18 改訂）。
           const rowClass =
-            statusKey === "confirmed" ? "確認済" : statusKey === "in_progress" ? "確認中" : quadrantKey;
+            statusKey === "confirmed" ? "確認済" : statusKey === "in_progress" ? "確認中" : `stockout-${riskKey}`;
           const cells = sortableColumns
             .map((column) => {
               if (column.key === "confirmation_status") {
@@ -717,6 +777,11 @@
               // 判定期間を切り替えたら流動区分は引き直す（05 design §3.1）。
               if (column.key === "flow_quadrant") {
                 return renderFlowCell(row, quadrantKey);
+              }
+              // 在庫切れリスク（S-204）はサーバ判定値をそのまま出す。対象外・旧行は空
+              if (column.key === "stockout_risk") {
+                const label = riskKey === "none" || !row.stockoutRiskKey ? "" : STOCKOUT_RISK_LABELS[riskKey];
+                return `<td class="ioa-stockout-risk-cell">${label ? `<span class="ioa-stockout-risk ioa-stockout-risk--${riskKey}">${Core.escapeHtml(label)}</span>` : ""}</td>`;
               }
               return `<td>${Core.escapeHtml(display[column.key] ?? "")}</td>`;
             })
@@ -735,6 +800,7 @@
             data-flow-status="${Core.escapeHtml(quadrantKey === QUADRANT_NORMAL_FLOW_KEY ? "" : flowStatusOf(row, quadrantKey))}"
             data-recommended-action="${Core.escapeHtml(recommendedActionOf(quadrantKey))}"
             data-responsible-department="${Core.escapeHtml(responsibleDepartmentOf(quadrantKey))}"
+            data-stockout-risk="${Core.escapeHtml(riskKey)}"
             data-demand-forecast-basis="${Core.escapeHtml(row.demandForecast?.basis || "")}"
             data-months-of-stock="${Core.escapeHtml(row.demandForecast?.monthsOfStock ?? "")}"
             data-stockout-forecast-month="${Core.escapeHtml(row.demandForecast?.stockoutForecastMonth || "")}"
@@ -751,7 +817,7 @@
 
     function renderCounts(counts) {
       countsLeft.textContent =
-        `低流動品（入荷なし） ${counts.lowFlowNoIncoming} 件 / 在庫死蔵品 ${counts.dormantStock} 件 / 低流動品（出荷なし） ${counts.lowFlowNoShipment} 件 / 通常流動品 ${counts.normalFlow} 件`;
+        `危険 ${counts.danger} 件 / 注意 ${counts.caution} 件 / 監視 ${counts.watch} 件 / 対象外 ${counts.noneRisk} 件`;
       countsRight.textContent =
         `確認済み ${counts.confirmed} 件 / 確認中 ${counts.inProgress} 件 / 未確認 ${counts.unconfirmed} 件`;
     }
@@ -759,7 +825,10 @@
     function render() {
       const filtered = applyListFilters(allRows, state);
       const counts = countRows(filtered, state);
+      // 同順位の並びはサーバの既定（table_display.sort_rows）と同じ: 猶予日数 → 流動区分 → 得意先コード → 得意先品番
       const sorted = Core.sortRows(filtered, state.sortSpecs, (row, column) => sortValue(row, column, state), [
+        { column: "days_until_stockout", direction: "asc" },
+        { column: "flow_quadrant", direction: "asc" },
         { column: "cust_code", direction: "asc" },
         { column: "item_cd", direction: "asc" },
       ]);
@@ -803,6 +872,12 @@
       if (flowQuadrantSelect) {
         flowQuadrantSelect.value = state.flowQuadrant || "";
       }
+      if (stockoutRiskSelect) {
+        stockoutRiskSelect.value = state.stockoutRisk || "";
+      }
+      if (orderingMethodSelect) {
+        orderingMethodSelect.value = state.orderingMethod || "";
+      }
       // 判定ルールダイアログの「現在の判定期間」と状況テンプレートの {period} を選択中の判定期間に合わせる。
       if (alertRulesDialog) {
         const periodElement = alertRulesDialog.querySelector(".ioa-alert-rules-period");
@@ -822,6 +897,12 @@
 
     flowQuadrantSelect?.addEventListener("change", () => {
       setState({ flowQuadrant: flowQuadrantSelect.value, page: 1 });
+    });
+    stockoutRiskSelect?.addEventListener("change", () => {
+      setState({ stockoutRisk: stockoutRiskSelect.value, page: 1 });
+    });
+    orderingMethodSelect?.addEventListener("change", () => {
+      setState({ orderingMethod: orderingMethodSelect.value, page: 1 });
     });
 
     custChrgSelect?.addEventListener("change", () => {
@@ -878,6 +959,26 @@
         const row = findRow(custCode, itemCd);
         return row ? urgencyTextOf(row) : "";
       },
+      // 詳細ダイアログの在庫切れリスク（06 design §6.4）。
+      getStockoutRisk(custCode, itemCd) {
+        const row = findRow(custCode, itemCd);
+        if (!row) {
+          return null;
+        }
+        return {
+          risk: row.stockoutRisk || "監視",
+          key: rowStockoutRiskKey(row),
+          reasons: Array.isArray(row.stockoutRiskReasons) ? row.stockoutRiskReasons : [],
+          daysUntilStockout: row.daysUntilStockout ?? null,
+          shortageQty: row.shortageQty ?? null,
+          replenishment: row.replenishment || { qty: 0, laterQty: 0, earliestDue: "", hasOverdue: false, unknown: false },
+          leadTimeDays: row.leadTimeDays ?? null,
+          leadTimeSource: row.leadTimeSource || "",
+          orderingMethod: row.orderingMethod || "不明",
+          upstreamOrder: row.upstreamOrder || { qty: 0, overdue: false, earliestDue: "" },
+          processChain: Array.isArray(row.processChain) ? row.processChain : [],
+        };
+      },
       // 詳細ダイアログ用（05 design §6.4）。状況・推奨アクション・責任部署は流動区分からの導出値であり、
       // 判定期間の切替に追随させるため属性ではなく対応表から引く。
       getFlowQuadrantLabel(quadrantKey) {
@@ -895,6 +996,20 @@
           return "";
         }
         return flowStatusOf(row, quadrantKey);
+      },
+      // 流動区分の理由（07 REQ-FQR-F-005）。理由も判定期間で変わるため、区分と同じく期間キーで引く
+      // （判定ロジックは JS に持ち込まない。07 design §1-6）。
+      getFlowReasons(custCode, itemCd, periodKey) {
+        const row = findRow(custCode, itemCd);
+        if (!row) {
+          return [];
+        }
+        const byPeriod = row.flowReasonsByPeriod || {};
+        const reasons = byPeriod[periodKey || flowSelectionKey(state)];
+        if (Array.isArray(reasons)) {
+          return reasons;
+        }
+        return Array.isArray(row.flowReasons) ? row.flowReasons : [];
       },
       getEvaluationPeriodLabel() {
         return currentPeriod().label;

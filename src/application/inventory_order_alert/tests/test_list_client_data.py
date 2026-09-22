@@ -128,13 +128,37 @@ def test_payload_has_no_legacy_quadrant_names():
 def test_build_list_client_payload_includes_flow_quadrant_labels_and_order():
     payload = _payload([_row()])
 
-    assert len(payload["flowQuadrantLabels"]) == 4
+    # 07_flow-quadrant-refinement で 7 区分（欠品 2 + 従来 4 + 打ち切り候補）
+    assert len(payload["flowQuadrantLabels"]) == 7
     assert payload["flowQuadrantOrder"] == [
+        "stockout-no-incoming",
+        "stockout",
         "low-flow-no-incoming",
         "dormant-stock",
         "low-flow-no-shipment",
+        "discontinuation-candidate",
         "normal-flow",
     ]
+    assert payload["flowQuadrantLabels"]["stockout-no-incoming"] == "欠品（入荷なし）"
+    assert payload["flowQuadrantLabels"]["stockout"] == "欠品"
+
+
+def test_fqr_c005_row_carries_flow_reasons():
+    """流動区分の理由は詳細ダイアログに出す（TC-FQR-C-005）。キーがない旧行は空配列。"""
+    payload = _payload([_row(flow_reasons=["入荷 < 需要", "1年以上出荷なし・経路要確認"])])
+
+    assert payload["rows"][0]["flowReasons"] == ["入荷 < 需要", "1年以上出荷なし・経路要確認"]
+    assert _payload([_row()])["rows"][0]["flowReasons"] == []
+
+
+def test_fqr_c005_row_carries_flow_reasons_for_every_period():
+    """判定期間の切替はクライアント側で行うため、理由も 3 期間ぶん渡す（07 design §1-6）。"""
+    by_period = {"Y1": ["1年以上出荷なし・経路要確認"], "Y3": [], "Y5": []}
+    payload = _payload([_row(flow_reasons_by_period=by_period)])
+
+    assert payload["rows"][0]["flowReasonsByPeriod"] == by_period
+    # 旧スナップショット（キーなし）は 3 期間とも空
+    assert _payload([_row()])["rows"][0]["flowReasonsByPeriod"] == {"Y1": [], "Y3": [], "Y5": []}
     assert payload["flowQuadrantLabels"]["low-flow-no-incoming"] == "低流動品（入荷なし）"
     assert payload["flowQuadrantLabels"]["low-flow-no-shipment"] == "低流動品（出荷なし）"
 
@@ -210,7 +234,7 @@ def test_TC_IOA_DOM_07G_row_to_client_dict_includes_display_and_keys():
     client_row = row_to_client_dict(row)
     assert client_row["cust_code"] == "112"
     assert client_row["item_cd"] == "90249-10112"
-    assert client_row["alertRowClass"] == "low-flow-no-incoming"
+    assert client_row["alertRowClass"] == "stockout-watch"
     assert client_row["confirmationStatusKey"] == "unconfirmed"
     assert client_row["display"]["stock_qty"] == "100"
     assert client_row["display"]["flow_quadrant"] == QUADRANT_LOW_FLOW_NO_INCOMING
@@ -240,7 +264,7 @@ def test_TC_IOA_DOM_07H_build_list_client_payload():
     assert len(payload["rows"]) == 2
     assert payload["rows"][0]["item_cd"] == "90249-10112"
     assert payload["defaultPageSize"] == 50
-    assert payload["defaultSortSpecs"] == [{"column": "flow_quadrant", "direction": "asc"}]
+    assert payload["defaultSortSpecs"] == [{"column": "stockout_risk", "direction": "asc"}]
     assert len(payload["sortableColumns"]) >= 10
     assert payload["filterOptions"]["custOptions"][0]["value"] == "112"
     assert payload["itemCdOptions"] == ["90249-10112", "ITEM-2"]
@@ -304,8 +328,23 @@ def test_stage2_payload_row_without_forecast_keys_has_none_basis():
     assert row["demandForecast"]["monthly"] == [0, 0, 0]
 
 
+def test_sor_x010_payload_replenishment_includes_stale_qty():
+    """補充見込みに長期納期超過の残数（`replenishment_stale_qty`）を写す。旧行は 0（2026/09/21）。"""
+    row = _stage2_row(replenishment_qty=5, replenishment_later_qty=0, replenishment_stale_qty=400, replenishment_has_overdue=True)
+
+    assert _payload([row])["rows"][0]["replenishment"] == {
+        "qty": 5,
+        "laterQty": 0,
+        "staleQty": 400,
+        "earliestDue": "",
+        "hasOverdue": True,
+        "unknown": False,
+    }
+    assert _payload([_row()])["rows"][0]["replenishment"]["staleQty"] == 0
+
+
 def test_stage2_payload_lists_sort_only_columns_separately():
     payload = _payload([_row()])
 
-    assert payload["sortOnlyColumns"] == [{"key": "months_of_stock", "label": "在庫月数"}]
+    assert payload["sortOnlyColumns"] == [{"key": "months_of_stock", "label": "在庫月数"}, {"key": "days_until_stockout", "label": "猶予日数"}]
     assert "months_of_stock" not in [column["key"] for column in payload["sortableColumns"]]

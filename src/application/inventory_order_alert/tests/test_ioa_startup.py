@@ -78,7 +78,8 @@ def test_count_rows_uses_renamed_quadrants():
 
 def test_flow_quadrant_rules_use_renamed_quadrants():
     rows = build_flow_quadrant_rule_rows()
-    assert [row.quadrant for row in rows][0] == QUADRANT_LOW_FLOW_NO_INCOMING
+    # 07 で先頭は 欠品（入荷なし）。改称後の名前が凡例に含まれることを確認する
+    assert QUADRANT_LOW_FLOW_NO_INCOMING in [row.quadrant for row in rows]
 
 
 def test_dashboard_banner_label_is_period_only():

@@ -1133,18 +1133,15 @@ summary { cursor: pointer; font-weight: 700; }
    確認状態のクラス（確認済／確認中）は本要件の対象外のため日本語のまま据え置く。 */
 .alert-row--low-flow-no-incoming,
 .shipment-trend-page .st-row-decrease-strong,
-body.portal-app-page.shipment-trend-page .st-alert-rules-row--decrease-strong,
-body.inventory-order-alert-page .ioa-alert-rules-row--low-flow-no-incoming {
+body.portal-app-page.shipment-trend-page .st-alert-rules-row--decrease-strong {
   background: #fde8e8;
 }
-.alert-row--dormant-stock,
-body.inventory-order-alert-page .ioa-alert-rules-row--dormant-stock {
+.alert-row--dormant-stock {
   background: #ffedd5;
 }
 .alert-row--low-flow-no-shipment,
 .shipment-trend-page .st-row-decrease-mild,
-body.portal-app-page.shipment-trend-page .st-alert-rules-row--decrease-mild,
-body.inventory-order-alert-page .ioa-alert-rules-row--low-flow-no-shipment {
+body.portal-app-page.shipment-trend-page .st-alert-rules-row--decrease-mild {
   background: #fff8e1;
 }
 .alert-row--確認済,
@@ -1157,8 +1154,7 @@ body.portal-app-page.shipment-trend-page .st-alert-rules-row--increase-strong {
 }
 .alert-row--normal-flow,
 .shipment-trend-page .st-row-neutral,
-body.portal-app-page.shipment-trend-page .st-alert-rules-row--neutral,
-body.inventory-order-alert-page .ioa-alert-rules-row--normal-flow {
+body.portal-app-page.shipment-trend-page .st-alert-rules-row--neutral {
   background: #fff;
 }
 /* ポータル共通: 警告条件ダイアログの設定セレクト */
@@ -1271,6 +1267,96 @@ body.portal-app-page .portal-alert-rules-select {
 .inventory-order-alert-page .ioa-flow-quadrant {
   font-weight: 600;
   white-space: nowrap;
+}
+/* 在庫なしの 3 区分（T-209/T-210）はバッジで目立たせる。行の色は在庫切れリスクのみ（07 design §5.1）。 */
+.inventory-order-alert-page .ioa-flow-quadrant--stockout-no-incoming,
+.inventory-order-alert-page .ioa-flow-quadrant--stockout,
+.inventory-order-alert-page .ioa-flow-quadrant--discontinuation-candidate {
+  display: inline-block;
+  padding: 0 8px;
+  border-radius: 999px;
+}
+.inventory-order-alert-page .ioa-flow-quadrant--stockout-no-incoming {
+  background: #c62828;
+  color: #fff;
+}
+.inventory-order-alert-page .ioa-flow-quadrant--stockout {
+  background: #ea580c;
+  color: #fff;
+}
+.inventory-order-alert-page .ioa-flow-quadrant--discontinuation-candidate {
+  background: #e2e8f0;
+  color: #334155;
+}
+/* 詳細ダイアログの流動区分の理由（07 REQ-FQR-F-005）。 */
+.inventory-order-alert-page .ioa-detail-flow-reasons {
+  margin: 0;
+  padding-left: 1.2em;
+}
+/* 在庫切れリスク（S-204）のセル・バッジ（06 design §6.4）。 */
+.inventory-order-alert-page .ioa-stockout-risk {
+  display: inline-block;
+  padding: 0 8px;
+  border-radius: 999px;
+  font-weight: 700;
+  white-space: nowrap;
+}
+.inventory-order-alert-page .ioa-stockout-risk--danger {
+  background: #c62828;
+  color: #fff;
+}
+.inventory-order-alert-page .ioa-stockout-risk--caution {
+  background: #f59e0b;
+  color: #1f2937;
+}
+.inventory-order-alert-page .ioa-stockout-risk--watch {
+  background: #e2e8f0;
+  color: #334155;
+}
+/* 行の背景色は 確認状態 > 在庫切れリスク のみ（06 design §6.4、2026/09/18 改訂）。監視・対象外は色なし。 */
+.alert-row--stockout-danger,
+body.inventory-order-alert-page .ioa-table tbody tr.alert-row--stockout-danger.ioa-data-row {
+  background: #fde8e8;
+}
+.alert-row--stockout-caution,
+body.inventory-order-alert-page .ioa-table tbody tr.alert-row--stockout-caution.ioa-data-row {
+  background: #fff8e1;
+}
+.inventory-order-alert-page .ioa-table tbody tr.alert-row--stockout-danger.ioa-data-row:hover {
+  background: #fecaca;
+}
+.inventory-order-alert-page .ioa-table tbody tr.alert-row--stockout-caution.ioa-data-row:hover {
+  background: #fde68a;
+}
+.inventory-order-alert-page .ioa-table tbody tr.alert-row--stockout-watch.ioa-data-row:hover,
+.inventory-order-alert-page .ioa-table tbody tr.alert-row--stockout-none.ioa-data-row:hover {
+  background: #f1f5f9;
+}
+
+body.inventory-order-alert-page .ioa-detail-stockout-risk-fields {
+  grid-template-columns: 11em minmax(0, 1fr);
+}
+body.inventory-order-alert-page .ioa-detail-process-chain-wrap {
+  overflow-x: auto;
+}
+body.inventory-order-alert-page .ioa-detail-process-chain-table {
+  width: 100%;
+  min-width: 0;
+  border-collapse: collapse;
+  font-size: 12px;
+}
+body.inventory-order-alert-page .ioa-detail-process-chain-table th,
+body.inventory-order-alert-page .ioa-detail-process-chain-table td {
+  border: 1px solid #cbd5e1;
+  padding: 4px 6px;
+  text-align: left;
+  white-space: normal;
+}
+body.inventory-order-alert-page .ioa-detail-process-chain-table th {
+  background: #f8fafc;
+}
+body.inventory-order-alert-page .ioa-detail-process-chain-row--overdue td {
+  background: #fff8e1;
 }
 /* 詳細ダイアログの需要予測区分（05 design §6.4）。 */
 body.inventory-order-alert-page .ioa-detail-demand-forecast-fields {
@@ -1706,23 +1792,23 @@ body.inventory-order-alert-page .ioa-location-col-location {
 body.inventory-order-alert-page .ioa-location-col-qty {
   width: 32%;
 }
-body.inventory-order-alert-page .ioa-alert-rules-col-incoming {
-  width: 9%;
-}
+/* 判定ルール表: 判定材料 5 列（在庫・需要・直近入荷・期間内入荷・期間内出荷）＋ 区分・状況・推奨アクション・責任部署 */
+body.inventory-order-alert-page .ioa-alert-rules-col-fact,
+body.inventory-order-alert-page .ioa-alert-rules-col-incoming,
 body.inventory-order-alert-page .ioa-alert-rules-col-shipment {
-  width: 9%;
+  width: 7%;
 }
 body.inventory-order-alert-page .ioa-alert-rules-col-level {
-  width: 18%;
+  width: 15%;
 }
 body.inventory-order-alert-page .ioa-alert-rules-col-status {
-  width: 26%;
+  width: 22%;
 }
 body.inventory-order-alert-page .ioa-alert-rules-col-action {
-  width: 26%;
+  width: 18%;
 }
 body.inventory-order-alert-page .ioa-alert-rules-col-department {
-  width: 12%;
+  width: 10%;
 }
 body.inventory-order-alert-page .ioa-alert-rules-table th,
 body.inventory-order-alert-page .ioa-alert-rules-table td,
@@ -1732,8 +1818,10 @@ body.inventory-order-alert-page .ioa-location-table td {
   padding: 8px;
   text-align: left;
   vertical-align: top;
+  white-space: normal;
   word-break: break-word;
   overflow-wrap: anywhere;
+  line-height: 1.5;
 }
 body.inventory-order-alert-page .ioa-alert-rules-table th,
 body.inventory-order-alert-page .ioa-location-table th {
@@ -1743,29 +1831,10 @@ body.inventory-order-alert-page .ioa-location-table td.ioa-location-qty {
   text-align: right;
   font-variant-numeric: tabular-nums;
 }
-body.inventory-order-alert-page .ioa-alert-rules-row--low-flow-no-incoming .ioa-alert-rules-color-swatch {
-  background: #fecaca;
-}
-body.inventory-order-alert-page .ioa-alert-rules-row--dormant-stock .ioa-alert-rules-color-swatch {
-  background: #fed7aa;
-}
-body.inventory-order-alert-page .ioa-alert-rules-row--low-flow-no-shipment .ioa-alert-rules-color-swatch {
-  background: #fde68a;
-}
-body.inventory-order-alert-page .ioa-alert-rules-row--normal-flow .ioa-alert-rules-color-swatch {
-  background: #fff;
-}
 body.inventory-order-alert-page .ioa-alert-rules-level-label {
   display: inline-flex;
   align-items: center;
   gap: 6px;
-}
-body.inventory-order-alert-page .ioa-alert-rules-color-swatch {
-  flex-shrink: 0;
-  width: 14px;
-  height: 14px;
-  border: 1px solid #cbd5e1;
-  border-radius: 3px;
 }
 body.inventory-order-alert-page .ioa-alert-rules-actions,
 body.inventory-order-alert-page .ioa-location-actions {
@@ -1846,6 +1915,45 @@ body.inventory-order-alert-page .ioa-anchored-stock-trend-zero-line {
 body.inventory-order-alert-page .ioa-anchored-stock-trend-line {
   fill: none;
   stroke-width: 1.5;
+}
+body.inventory-order-alert-page .ioa-anchored-stock-trend-line--forecast {
+  fill: none;
+  stroke: #7c3aed;
+  stroke-width: 1.6;
+}
+body.inventory-order-alert-page .ioa-anchored-stock-trend-point--forecast {
+  fill: #7c3aed;
+}
+body.inventory-order-alert-page .ioa-anchored-stock-trend-bar--planned {
+  fill: #c4b5fd;
+  fill-opacity: 0.6;
+  stroke: #7c3aed;
+  stroke-dasharray: 2 2;
+}
+body.inventory-order-alert-page .ioa-anchored-stock-trend-now-line {
+  stroke: #94a3b8;
+  stroke-width: 1;
+}
+body.inventory-order-alert-page .ioa-anchored-stock-trend-stockout-line {
+  stroke: #c62828;
+  stroke-width: 1.2;
+  stroke-dasharray: 3 3;
+}
+body.inventory-order-alert-page .ioa-anchored-stock-trend-stockout-label {
+  fill: #c62828;
+  font-size: 9px;
+}
+body.inventory-order-alert-page .ioa-anchored-stock-trend-legend-item--forecast::before {
+  background: #7c3aed;
+}
+body.inventory-order-alert-page .ioa-anchored-stock-trend-legend-item--forecast::before {
+  background: repeating-linear-gradient(90deg, #7c3aed 0 3px, transparent 3px 5px);
+}
+body.inventory-order-alert-page .ioa-anchored-stock-trend-legend-item--planned::before {
+  width: 9px;
+  height: 9px;
+  background: #c4b5fd;
+  border: 1px dashed #7c3aed;
 }
 body.inventory-order-alert-page .ioa-anchored-stock-trend-line--slims {
   stroke: #4f46e5;
@@ -1946,8 +2054,10 @@ body.inventory-order-alert-page .ioa-detail-memo-table td {
   padding: 8px;
   text-align: left;
   vertical-align: top;
+  white-space: normal;
   word-break: break-word;
   overflow-wrap: anywhere;
+  line-height: 1.5;
 }
 body.inventory-order-alert-page .ioa-detail-memo-table th {
   background: #f8fafc;
@@ -2039,24 +2149,13 @@ body.inventory-order-alert-page .ioa-detail-memo {
 .inventory-order-alert-page .ioa-table tbody tr.ioa-data-row {
   cursor: pointer;
 }
-.inventory-order-alert-page .ioa-table tbody tr.alert-row--low-flow-no-incoming.ioa-data-row:hover {
-  background: #fecaca;
-}
-.inventory-order-alert-page .ioa-table tbody tr.alert-row--dormant-stock.ioa-data-row:hover {
-  background: #fed7aa;
-}
-.inventory-order-alert-page .ioa-table tbody tr.alert-row--low-flow-no-shipment.ioa-data-row:hover {
-  background: #fde68a;
-}
 .inventory-order-alert-page .ioa-table tbody tr.alert-row--確認済.ioa-data-row:hover {
   background: #bbf7d0;
 }
 .inventory-order-alert-page .ioa-table tbody tr.alert-row--確認中.ioa-data-row:hover {
   background: #bfdbfe;
 }
-.inventory-order-alert-page .ioa-table tbody tr.alert-row--normal-flow.ioa-data-row:hover {
-  background: #f1f5f9;
-}
+
 .inventory-order-alert-page .ioa-table tbody tr.alert-row--確認済.ioa-data-row.is-selected {
   background: #bbf7d0;
   box-shadow: inset 4px 0 0 #16a34a;

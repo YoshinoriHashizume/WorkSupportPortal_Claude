@@ -119,6 +119,8 @@
       select.disabled = false;
     }
   }
+  const STOCKOUT_RISK_LABEL_BY_KEY = { danger: "危険", caution: "注意", watch: "監視", none: "対象外" };
+
   function updateTableCounts(counts) {
     const countsElement = document.querySelector(".inventory-order-alert-page .ioa-table-counts");
     if (!countsElement || !counts) {
@@ -128,7 +130,7 @@
     const right = countsElement.querySelector(".ioa-table-counts-right");
     if (left) {
       left.textContent =
-        `低流動品（入荷なし） ${counts.lowFlowNoIncoming} 件 / 在庫死蔵品 ${counts.dormantStock} 件 / 低流動品（出荷なし） ${counts.lowFlowNoShipment} 件 / 通常流動品 ${counts.normalFlow} 件`;
+        `危険 ${counts.danger ?? 0} 件 / 注意 ${counts.caution ?? 0} 件 / 監視 ${counts.watch ?? 0} 件 / 対象外 ${counts.noneRisk ?? 0} 件`;
     }
     if (right) {
       right.textContent =
@@ -227,6 +229,8 @@
         lastShip: dialog.querySelector(".ioa-detail-item-last-ship"),
         flowQuadrant: dialog.querySelector(".ioa-detail-flow-quadrant"),
         flowStatus: dialog.querySelector(".ioa-detail-flow-status"),
+        flowReasons: dialog.querySelector(".ioa-detail-flow-reasons"),
+        flowReasonsLabel: dialog.querySelector(".ioa-detail-flow-reasons-label"),
         recommendedAction: dialog.querySelector(".ioa-detail-recommended-action"),
         department: dialog.querySelector(".ioa-detail-department"),
         evaluationPeriod: dialog.querySelector(".ioa-detail-evaluation-period"),
@@ -246,6 +250,103 @@
       empty: dialog.querySelector(".ioa-detail-demand-empty"),
       fields: dialog.querySelector(".ioa-detail-demand-forecast-fields"),
     };
+    // 在庫切れリスク（S-204）区分（06 design §6.4）。
+    const riskFields = {
+      risk: dialog.querySelector(".ioa-detail-stockout-risk"),
+      reasons: dialog.querySelector(".ioa-detail-stockout-risk-reasons"),
+      days: dialog.querySelector(".ioa-detail-stockout-days"),
+      replenishment: dialog.querySelector(".ioa-detail-stockout-replenishment"),
+      shortage: dialog.querySelector(".ioa-detail-stockout-shortage"),
+      leadTime: dialog.querySelector(".ioa-detail-stockout-lead-time"),
+      orderingMethod: dialog.querySelector(".ioa-detail-stockout-ordering-method"),
+      upstream: dialog.querySelector(".ioa-detail-stockout-upstream"),
+      chainBody: dialog.querySelector(".ioa-detail-process-chain-body"),
+      chainWrap: dialog.querySelector(".ioa-detail-process-chain-wrap"),
+      chainEmpty: dialog.querySelector(".ioa-detail-process-chain-empty"),
+    };
+
+    const escapeHtml = (value) => (window.PortalListCore?.escapeHtml ? window.PortalListCore.escapeHtml(value) : String(value ?? "").replace(/[&<>"']/g, (ch) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[ch]));
+
+    // 工程の連鎖（完成品直下 → 上流）。各工程のリードタイムと発注残（納期・納期超過）を表にする（06 design §4.1a）。
+    function renderProcessChain(chain) {
+      if (!riskFields.chainBody || !riskFields.chainWrap || !riskFields.chainEmpty) {
+        return;
+      }
+      const stages = Array.isArray(chain) ? chain : [];
+      riskFields.chainWrap.hidden = !stages.length;
+      riskFields.chainEmpty.hidden = Boolean(stages.length);
+      const today = new Date();
+      riskFields.chainBody.innerHTML = stages
+        .map((stage, index) => {
+          const orders = Array.isArray(stage.openOrders) ? stage.openOrders : [];
+          const orderText = orders.length
+            ? orders
+                .map((order) => {
+                  const due = String(order.dueDate || "");
+                  const overdue = due && new Date(due.replace(/\//g, "-")) < today;
+                  return `${formatQty(order.remainingQty)}（${due || "納期未定"}${overdue ? "・納期超過" : ""}）`;
+                })
+                .join(" / ")
+            : "なし";
+          const lt = `${stage.leadTimeDays ?? 0} 日${stage.leadTimeSource === "default" ? "（未設定）" : ""}`;
+          return `<tr class="${orders.some((order) => order.dueDate && new Date(String(order.dueDate).replace(/\//g, "-")) < today) ? "ioa-detail-process-chain-row--overdue" : ""}">
+            <td>${escapeHtml(String(stage.level || index + 1))}</td>
+            <td class="mono">${escapeHtml(stage.itemCd || "")}</td>
+            <td>${escapeHtml(stage.vendCd || "")} ${escapeHtml(stage.vendName || "")}</td>
+            <td>${escapeHtml(lt)}</td>
+            <td>${escapeHtml(orderText)}</td>
+          </tr>`;
+        })
+        .join("");
+    }
+
+    function renderStockoutRisk(custCode, itemCd, row) {
+      const info = listClient?.getStockoutRisk?.(custCode, itemCd);
+      if (!riskFields.risk) {
+        return;
+      }
+      if (!info) {
+        setDetailText(riskFields.risk, row.dataset.stockoutRisk ? STOCKOUT_RISK_LABEL_BY_KEY[row.dataset.stockoutRisk] || "-" : "-");
+        return;
+      }
+      setDetailText(riskFields.risk, info.risk || "-");
+      if (riskFields.risk) {
+        riskFields.risk.className = `ioa-detail-stockout-risk ioa-stockout-risk ioa-stockout-risk--${info.key}`;
+      }
+      setDetailText(riskFields.reasons, info.reasons.length ? info.reasons.join(" / ") : "-");
+      setDetailText(riskFields.days, info.daysUntilStockout === null || info.daysUntilStockout === undefined ? "-" : `${info.daysUntilStockout} 日（在庫切れ予測月の 1 日まで）`);
+      // 補充見込みは補充期限（V-229）までの発注残。補充期限より後・長期納期超過（V-230）は数えず、注記で示す（2026/09/21）
+      const rep = info.replenishment || {};
+      let replenishment = "-";
+      if (rep.unknown) {
+        replenishment = "取得できませんでした";
+      } else if (rep.qty > 0) {
+        replenishment = `${formatQty(rep.qty)}（最早納期 ${rep.earliestDue || "-"}${rep.hasOverdue ? "・納期超過あり" : ""}）`;
+      } else if (info.key !== "watch" || rep.laterQty > 0 || rep.staleQty > 0) {
+        replenishment = "なし";
+      }
+      if (!rep.unknown) {
+        const notes = [];
+        if (rep.laterQty > 0) notes.push(`補充期限より後の発注残 ${formatQty(rep.laterQty)}`);
+        if (rep.staleQty > 0) notes.push(`長期納期超過 ${formatQty(rep.staleQty)} は除外`);
+        if (notes.length) replenishment += `（${notes.join("・")}）`;
+      }
+      setDetailText(riskFields.replenishment, replenishment);
+      setDetailText(riskFields.shortage, info.shortageQty === null || info.shortageQty === undefined ? "-" : formatQty(info.shortageQty));
+      setDetailText(
+        riskFields.leadTime,
+        info.leadTimeDays === null || info.leadTimeDays === undefined ? "-" : `${info.leadTimeDays} 日${info.leadTimeSource === "default" ? "（既定値）" : ""}`,
+      );
+      setDetailText(riskFields.orderingMethod, info.orderingMethod || "-");
+      const upstream = info.upstreamOrder || {};
+      setDetailText(
+        riskFields.upstream,
+        upstream.qty > 0
+          ? `${formatQty(upstream.qty)}（最早納期 ${upstream.earliestDue || "-"}${upstream.overdue ? "・納期超過" : ""}）`
+          : "なし",
+      );
+      renderProcessChain(info.processChain);
+    }
     const gonenLinkRow = dialog.querySelector(".ioa-detail-gonen-link-row");
     const gonenLink = dialog.querySelector(".ioa-detail-gonen-link");
     const locationTableBody = dialog.querySelector(".ioa-location-table-body");
@@ -368,6 +469,30 @@
     function setDetailText(element, value) {
       if (element) {
         element.textContent = value;
+      }
+    }
+
+    // 流動区分の理由（07 REQ-FQR-F-005）。該当がなければ見出しごと隠す。
+    function renderFlowReasons(reasons) {
+      const list = detailFields.flowReasons;
+      const label = detailFields.flowReasonsLabel;
+      if (!list) {
+        return;
+      }
+      list.textContent = "";
+      const hasReasons = Array.isArray(reasons) && reasons.length > 0;
+      for (const reason of hasReasons ? reasons : []) {
+        const item = document.createElement("li");
+        item.textContent = String(reason);
+        list.appendChild(item);
+      }
+      const hidden = !hasReasons;
+      list.hidden = hidden;
+      if (list.parentElement) {
+        list.parentElement.hidden = hidden;
+      }
+      if (label) {
+        label.hidden = hidden;
       }
     }
 
@@ -532,7 +657,72 @@
       return result;
     }
 
-    function renderAnchoredStockChart(sectionEl, slimsSeries, incomingSeries) {
+    // 月キー "YYYY-MM" に months か月を足す。
+    function addMonthsToKey(monthKey, months) {
+      const [year, month] = String(monthKey || "").split("-").map((part) => Number(part));
+      if (!Number.isFinite(year) || !Number.isFinite(month)) {
+        return "";
+      }
+      const total = year * 12 + (month - 1) + months;
+      return `${Math.floor(total / 12)}-${String((total % 12) + 1).padStart(2, "0")}`;
+    }
+
+    // 予定入荷（完成品直下の工程の発注残）を納期の月で束ねる。納期超過・納期未定は当月扱い（06 design §6.4a）。
+    function plannedIncomingByMonth(processChain, currentMonth) {
+      const stage = Array.isArray(processChain) && processChain.length ? processChain[0] : null;
+      const orders = stage && Array.isArray(stage.openOrders) ? stage.openOrders : [];
+      const byMonth = {};
+      orders.forEach((order) => {
+        const qty = Number(order.remainingQty) || 0;
+        if (qty <= 0) {
+          return;
+        }
+        let key = String(order.dueDate || "").slice(0, 7).replace("/", "-");
+        if (!/^\d{4}-\d{2}$/.test(key) || key < currentMonth) {
+          key = currentMonth;
+        }
+        byMonth[key] = (byMonth[key] || 0) + qty;
+      });
+      return byMonth;
+    }
+
+    // 予測在庫（V-218 予測部分）: 現在の在庫から 当月残 と 翌月〜翌々々月の需要 を引き、予定入荷を足した 3 点。
+    // 需要は需要予測（照合単位の合計。サーバの在庫切れ予測月と同じ根拠）。
+    // 起点の在庫が単位合計なので、行単位の内示推移は使わない。需要なし・在庫未取得は空（06 design §6.4a、2026/09/18 改訂）。
+    // 算出根拠は「内示」のみ（07 REQ-FQR-F-002。「なし」と廃止済みの旧根拠は描かない）。
+    function buildForecastStockTrend(anchorQty, currentMonth, forecast, processChain) {
+      if (anchorQty === null || !forecast || forecast.basis !== "内示" || !currentMonth) {
+        return [];
+      }
+      const monthly = Array.isArray(forecast.monthly) ? forecast.monthly : [];
+      const demandFor = (offset) => {
+        if (offset === 0) {
+          return Number(forecast.currentMonthRemaining) || 0;
+        }
+        return Number(monthly[offset - 1]) || 0;
+      };
+      const planned = plannedIncomingByMonth(processChain, currentMonth);
+      let qty = Number(anchorQty) - demandFor(0) + (planned[currentMonth] || 0);
+      const points = [];
+      for (let offset = 1; offset <= 3; offset += 1) {
+        const month = addMonthsToKey(currentMonth, offset);
+        qty = qty - demandFor(offset) + (planned[month] || 0);
+        points.push({ month, qty: Math.round(qty), planned: planned[month] || 0, demand: demandFor(offset) });
+      }
+      return points;
+    }
+
+    // 目盛り間隔の候補 1・2・5 × 10^n から、rawStep 以上で最小のものを返す（0 を基準にした丸い目盛りを作るため）。
+    // 数量は整数なので間隔の下限は 1（0.5 刻みだとラベルが丸めで重複する）。
+    function niceGridStep(rawStep) {
+      const step = Math.max(1, Number(rawStep) || 0);
+      const magnitude = Math.pow(10, Math.floor(Math.log10(step)));
+      const normalized = step / magnitude;
+      const factor = normalized <= 1 ? 1 : normalized <= 2 ? 2 : normalized <= 5 ? 5 : 10;
+      return factor * magnitude;
+    }
+
+    function renderAnchoredStockChart(sectionEl, slimsSeries, incomingSeries, forecastSeries, stockoutMonth) {
       if (!sectionEl) {
         return;
       }
@@ -544,6 +734,7 @@
 
       const slims = Array.isArray(slimsSeries) ? slimsSeries : [];
       const incoming = Array.isArray(incomingSeries) ? incomingSeries : [];
+      const forecast = Array.isArray(forecastSeries) ? forecastSeries : [];
       container.innerHTML = "";
       if (!slims.length) {
         container.hidden = true;
@@ -557,7 +748,8 @@
         emptyMessage.hidden = true;
       }
 
-      const points = slims;
+      // 横軸は 実績 24 か月 ＋ 予測 3 か月（予測がなければ実績のみ）。
+      const points = slims.concat(forecast);
       const width = 560;
       const height = 140;
       const paddingLeft = 44;
@@ -568,8 +760,15 @@
       // マイナスもそのまま表示するため、0 を必ず範囲に含めてゼロ基準線を描けるようにする（design.md §6.6）。
       // 入荷の棒が切れないよう、値域には入荷数量も算入する（design.md §6.6）。
       const incomingQtys = incoming.slice(0, slims.length).map((point) => Number(point?.qty) || 0);
-      const minQty = Math.min(0, ...slims.map((point) => Number(point.qty) || 0), ...incomingQtys);
-      const maxQty = Math.max(1, ...slims.map((point) => Number(point.qty) || 0), ...incomingQtys);
+      const plannedQtys = forecast.map((point) => Number(point?.planned) || 0);
+      const rawMinQty = Math.min(0, ...points.map((point) => Number(point.qty) || 0), ...incomingQtys);
+      const rawMaxQty = Math.max(1, ...points.map((point) => Number(point.qty) || 0), ...incomingQtys, ...plannedQtys);
+      // 目盛りは 0 を基準に丸い間隔（1・2・5 × 10^n）で刻む。軸の下限・上限を間隔の倍数に丸めることで、
+      // 0 が必ず目盛り線に乗る（2026/09/18。単純な等分では 0 が目盛りの途中に来て基準線とラベルがずれていた）。
+      const GRID_LINE_COUNT = 4;
+      const gridStep = niceGridStep((rawMaxQty - rawMinQty) / GRID_LINE_COUNT);
+      const minQty = Math.floor(rawMinQty / gridStep) * gridStep;
+      const maxQty = Math.ceil(rawMaxQty / gridStep) * gridStep;
       const valueRange = maxQty - minQty || 1;
       const stepX = points.length > 1 ? plotWidth / (points.length - 1) : 0;
 
@@ -586,10 +785,11 @@
       svg.setAttribute("role", "img");
       svg.setAttribute("aria-label", "推定在庫推移（参考値）と入荷実績");
 
-      // Excel風に、等間隔の目盛り線を GRID_LINE_COUNT 分割（=GRID_LINE_COUNT+1本）描画する。
-      const GRID_LINE_COUNT = 4;
-      for (let gridIndex = 0; gridIndex <= GRID_LINE_COUNT; gridIndex += 1) {
-        const gridQty = minQty + (valueRange * gridIndex) / GRID_LINE_COUNT;
+      // Excel風に、等間隔の目盛り線を描画する。間隔は gridStep（丸い値）、下限〜上限はその倍数なので 0 も目盛りに含まれる。
+      // 本数は概ね GRID_LINE_COUNT+1 本（丸めにより 1〜2 本増えることがある）。
+      const gridLineTotal = Math.round(valueRange / gridStep);
+      for (let gridIndex = 0; gridIndex <= gridLineTotal; gridIndex += 1) {
+        const gridQty = minQty + gridStep * gridIndex;
         const [, gridY] = coordsOf(0, gridQty);
 
         const gridLine = document.createElementNS(svgNs, "line");
@@ -676,8 +876,97 @@
         });
       }
 
+      // 予定入荷（発注残）の棒。予測月の位置に薄く描く（06 design §6.4a）。
+      function drawPlannedBars(forecastPoints) {
+        const barWidth = stepX > 0 ? stepX * 0.5 : plotWidth * 0.5;
+        const [, zeroY] = coordsOf(0, 0);
+        forecastPoints.forEach((point, offset) => {
+          const qty = Number(point?.planned) || 0;
+          if (qty <= 0) {
+            return;
+          }
+          const index = slims.length + offset;
+          const [centerX, valueY] = coordsOf(index, qty);
+          const rect = document.createElementNS(svgNs, "rect");
+          rect.setAttribute("x", String(centerX - barWidth / 2));
+          rect.setAttribute("y", String(Math.min(zeroY, valueY)));
+          rect.setAttribute("width", String(barWidth));
+          rect.setAttribute("height", String(Math.abs(zeroY - valueY)));
+          rect.setAttribute("class", "ioa-anchored-stock-trend-bar ioa-anchored-stock-trend-bar--planned");
+          const title = document.createElementNS(svgNs, "title");
+          title.textContent = `予定入荷(発注残) ${point.month}: ${qty}`;
+          rect.append(title);
+          svg.append(rect);
+        });
+      }
+
+      // 予測在庫の点線。実績の最終点（現在の在庫）から右へ延ばす。
+      function drawForecastSeries(forecastPoints) {
+        if (!forecastPoints.length || !slims.length) {
+          return;
+        }
+        const lastActual = slims[slims.length - 1];
+        const linePoints = [coordsOf(slims.length - 1, lastActual.qty).join(",")]
+          .concat(forecastPoints.map((point, offset) => coordsOf(slims.length + offset, point.qty).join(",")))
+          .join(" ");
+        const polyline = document.createElementNS(svgNs, "polyline");
+        polyline.setAttribute("points", linePoints);
+        polyline.setAttribute("class", "ioa-anchored-stock-trend-line ioa-anchored-stock-trend-line--forecast");
+        polyline.style.strokeDasharray = "4 3";
+        svg.append(polyline);
+        forecastPoints.forEach((point, offset) => {
+          const [x, y] = coordsOf(slims.length + offset, point.qty);
+          const circle = document.createElementNS(svgNs, "circle");
+          circle.setAttribute("cx", String(x));
+          circle.setAttribute("cy", String(y));
+          circle.setAttribute("r", "2");
+          circle.setAttribute("class", "ioa-anchored-stock-trend-point ioa-anchored-stock-trend-point--forecast");
+          const title = document.createElementNS(svgNs, "title");
+          title.textContent = `予測在庫 ${point.month}: ${point.qty}（需要 ${point.demand}、予定入荷 ${point.planned}）`;
+          circle.append(title);
+          svg.append(circle);
+        });
+        // 現在（実績と予測の境）の縦線
+        const [nowX] = coordsOf(slims.length - 1, 0);
+        const nowLine = document.createElementNS(svgNs, "line");
+        nowLine.setAttribute("x1", String(nowX));
+        nowLine.setAttribute("x2", String(nowX));
+        nowLine.setAttribute("y1", String(paddingTop));
+        nowLine.setAttribute("y2", String(paddingTop + plotHeight));
+        nowLine.setAttribute("class", "ioa-anchored-stock-trend-now-line");
+        svg.append(nowLine);
+      }
+
+      // 在庫切れ予測月（V-221）が描画範囲内なら縦の破線とラベル。
+      function drawStockoutMarker(month) {
+        if (!month) {
+          return;
+        }
+        const index = points.findIndex((point) => point.month === month);
+        if (index < 0) {
+          return;
+        }
+        const [x] = coordsOf(index, 0);
+        const marker = document.createElementNS(svgNs, "line");
+        marker.setAttribute("x1", String(x));
+        marker.setAttribute("x2", String(x));
+        marker.setAttribute("y1", String(paddingTop));
+        marker.setAttribute("y2", String(paddingTop + plotHeight));
+        marker.setAttribute("class", "ioa-anchored-stock-trend-stockout-line");
+        svg.append(marker);
+        const label = document.createElementNS(svgNs, "text");
+        label.setAttribute("x", String(Math.min(x + 3, width - 60)));
+        label.setAttribute("y", String(paddingTop + 10));
+        label.setAttribute("class", "ioa-anchored-stock-trend-stockout-label");
+        label.textContent = "在庫切れ予測";
+        svg.append(label);
+      }
+
       drawIncomingBars(incoming);
+      drawPlannedBars(forecast);
       drawSeries(slims, "ioa-anchored-stock-trend-line ioa-anchored-stock-trend-line--slims", "ioa-anchored-stock-trend-point ioa-anchored-stock-trend-point--slims", "SLIMS起点");
+      drawForecastSeries(forecast);
+      drawStockoutMarker(stockoutMonth);
 
       points.forEach((point, index) => {
         if (index % 4 === 0 || index === points.length - 1) {
@@ -704,7 +993,11 @@
       legend.className = "ioa-anchored-stock-trend-legend";
       legend.innerHTML =
         '<span class="ioa-anchored-stock-trend-legend-item ioa-anchored-stock-trend-legend-item--slims">推定在庫(SLIMS起点)</span>' +
-        '<span class="ioa-anchored-stock-trend-legend-item ioa-anchored-stock-trend-legend-item--incoming">入荷(MARI)</span>';
+        '<span class="ioa-anchored-stock-trend-legend-item ioa-anchored-stock-trend-legend-item--incoming">入荷(MARI)</span>' +
+        (forecast.length
+          ? '<span class="ioa-anchored-stock-trend-legend-item ioa-anchored-stock-trend-legend-item--forecast">予測在庫(内示・発注残)</span>' +
+            '<span class="ioa-anchored-stock-trend-legend-item ioa-anchored-stock-trend-legend-item--planned">予定入荷(発注残)</span>'
+          : "");
       container.append(legend);
     }
 
@@ -730,6 +1023,10 @@
       const recommendedAction =
         listClient?.getRecommendedAction?.(quadrantKey) ?? row.dataset.recommendedAction ?? "";
       setDetailText(detailFields.flowStatus, flowStatus || "-");
+      // 理由（07 REQ-FQR-F-005）は箇条書き。該当がない行では見出しごと隠す。
+      // 判定期間で変わるため、listClient が選択中の期間で引き直す（07 design §1-6）
+      const flowReasons = listClient?.getFlowReasons?.(custCode, row.dataset.itemCd || "") || [];
+      renderFlowReasons(flowReasons);
       setDetailText(detailFields.recommendedAction, recommendedAction || "-");
       setDetailText(
         detailFields.department,
@@ -751,9 +1048,15 @@
 
       const slimsAnchor = sumUnitAnchorQty(itemTrends.stocks, row.dataset.stockQty);
       const slimsAnchoredTrend = buildAnchoredStockTrend(shipmentTrend, incomingTrend, slimsAnchor);
-      renderAnchoredStockChart(anchoredStockTrendSection, slimsAnchoredTrend, incomingTrend);
+      // 予測部分（点線）: 需要予測・内示推移・工程の連鎖（発注残）は listClient から引く（06 design §6.4a）。
+      const forecastInfo = listClient?.getDemandForecast?.(custCode, row.dataset.itemCd || "") || null;
+      const riskInfo = listClient?.getStockoutRisk?.(custCode, row.dataset.itemCd || "") || null;
+      const currentMonth = slimsAnchoredTrend.length ? String(slimsAnchoredTrend[slimsAnchoredTrend.length - 1].month || "") : "";
+      const forecastTrend = buildForecastStockTrend(slimsAnchor, currentMonth, forecastInfo, riskInfo ? riskInfo.processChain : []);
+      renderAnchoredStockChart(anchoredStockTrendSection, slimsAnchoredTrend, incomingTrend, forecastTrend, forecastInfo?.stockoutForecastMonth || "");
       renderAnchorBreakdown(itemTrends.stocks, slimsAnchor);
       renderDemandForecast(custCode, row.dataset.itemCd || "", row, itemTrends.stocks);
+      renderStockoutRisk(custCode, row.dataset.itemCd || "", row);
       updateGonenLink(custCode, row.dataset.itemCd || "");
     }
 

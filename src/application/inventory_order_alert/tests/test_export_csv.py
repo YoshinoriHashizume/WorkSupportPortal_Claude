@@ -197,6 +197,18 @@ def test_d060_flow_quadrant_is_new_name_and_axis_column_is_empty():
     assert record["判定期間"] == "1年"
 
 
+def test_fqr_c004_flow_quadrant_column_carries_all_seven_quadrants():
+    """流動区分の値が 7 種になるだけで、列は増えない（07 design §2.8、TC-FQR-C-004）。"""
+    from application.inventory_order_alert.domain.value_objects.flow_quadrant import FLOW_QUADRANTS
+
+    for quadrant in FLOW_QUADRANTS:
+        row = _sample_row()
+        row["flow_quadrant"] = quadrant
+        assert _csv_record(row)["流動区分"] == quadrant
+
+    assert len(EXPORT_COLUMNS) == 39
+
+
 def test_d060_axis_column_is_empty_even_if_row_carries_a_value():
     row = _sample_row()
     row["flow_axis"] = "低流動判定軸"
@@ -243,8 +255,9 @@ def test_d061_existing_columns_unchanged_and_new_columns_appended():
     columns = [column for column, _label in EXPORT_COLUMNS]
 
     assert columns[: len(EXISTING_COLUMNS_IN_ORDER)] == EXISTING_COLUMNS_IN_ORDER
-    assert EXPORT_COLUMNS[len(EXISTING_COLUMNS_IN_ORDER) :] == STAGE2_TRAILING_COLUMNS
-    assert len(EXPORT_COLUMNS) == 28
+    # 05 第 2 段階の 4 列の後ろに 06 の 11 列が続く
+    assert EXPORT_COLUMNS[len(EXISTING_COLUMNS_IN_ORDER) : len(EXISTING_COLUMNS_IN_ORDER) + 4] == STAGE2_TRAILING_COLUMNS
+    assert len(EXPORT_COLUMNS) == 39
 
 
 def test_d061_new_columns_render_values_and_empty_for_missing():

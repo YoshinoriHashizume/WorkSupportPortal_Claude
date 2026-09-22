@@ -44,6 +44,8 @@ from application.inventory_order_alert.domain.value_objects.recommended_action i
     RecommendedActions,
 )
 from application.inventory_order_alert.domain.value_objects.row_display import row_alert_class
+from application.inventory_order_alert.domain.value_objects.ordering_profile import ORDERING_METHOD_KEYS, ORDERING_METHODS
+from application.inventory_order_alert.domain.value_objects.stockout_risk import STOCKOUT_RISK_KEYS, STOCKOUT_RISKS
 
 
 @dataclass(frozen=True)
@@ -85,6 +87,11 @@ class ListPageContext:
     #: 判定期間セレクタの選択肢（1/3/5 年）。05 design §6.3
     evaluation_periods: list[EvaluationPeriod]
     flow_quadrant_filter: str
+    #: 06: 在庫切れリスク・発注方式の絞り込み（キー）。選択肢はテンプレートが固定で持つ
+    stockout_risk_filter: str
+    ordering_method_filter: str
+    stockout_risk_options: list[tuple[str, str]]
+    ordering_method_options: list[tuple[str, str]]
     flow_quadrant_rule_rows: list[FlowQuadrantRuleRow]
     #: 一覧ペイロード（`build_list_client_payload`）に渡す推奨アクション定義（上書き適用済み）
     recommended_actions: RecommendedActions
@@ -168,6 +175,8 @@ class ListPage:
                 as_of_date=as_of_date,
                 query=list_query,
                 recommended_actions=self._recommended_actions,
+                # 直近入荷の窓は設定値（07 REQ-FQR-F-008）。取込時と同じ閾値で引き直す
+                thresholds=app_settings.to_flow_thresholds(),
             )
 
         summary_total = len(all_rows)
@@ -193,6 +202,8 @@ class ListPage:
                     filter_params=list_filter,
                     flow_selection=list_query.flow_selection,
                     flow_quadrant=list_query.flow_quadrant,
+                    stockout_risk=list_query.stockout_risk,
+                    ordering_method=list_query.ordering_method,
                     page=1,
                     sort_specs=single_column_sort_specs(table_params, column),
                 ),
@@ -208,6 +219,8 @@ class ListPage:
                     filter_params=list_filter,
                     flow_selection=list_query.flow_selection,
                     flow_quadrant=list_query.flow_quadrant,
+                    stockout_risk=list_query.stockout_risk,
+                    ordering_method=list_query.ordering_method,
                     page=paginated.page - 1,
                 )
             if paginated.has_next:
@@ -216,6 +229,8 @@ class ListPage:
                     filter_params=list_filter,
                     flow_selection=list_query.flow_selection,
                     flow_quadrant=list_query.flow_quadrant,
+                    stockout_risk=list_query.stockout_risk,
+                    ordering_method=list_query.ordering_method,
                     page=paginated.page + 1,
                 )
 
@@ -249,7 +264,13 @@ class ListPage:
             flow_selection=list_query.flow_selection,
             evaluation_periods=list(EVALUATION_PERIODS),
             flow_quadrant_filter=list_query.flow_quadrant,
-            flow_quadrant_rule_rows=build_flow_quadrant_rule_rows(self._recommended_actions),
+            stockout_risk_filter=list_query.stockout_risk,
+            ordering_method_filter=list_query.ordering_method,
+            stockout_risk_options=[(STOCKOUT_RISK_KEYS[risk], risk) for risk in STOCKOUT_RISKS],
+            ordering_method_options=[(ORDERING_METHOD_KEYS[method], method) for method in ORDERING_METHODS],
+            flow_quadrant_rule_rows=build_flow_quadrant_rule_rows(
+                self._recommended_actions, period_label=list_query.flow_selection.period_label
+            ),
             recommended_actions=self._recommended_actions,
             test_data_warning=looks_like_test_import(
                 stock_info.file_name if stock_info else "",

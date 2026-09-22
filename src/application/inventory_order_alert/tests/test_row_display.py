@@ -36,7 +36,7 @@ def test_display_flow_quadrant_normalizes_legacy_quadrant_names():
 def test_row_alert_class_returns_new_key_for_legacy_label_row():
     row = {"flow_quadrant": LEGACY_EXCESS_STOCK_RISK_LABEL, "confirmation_status": "未確認"}
 
-    assert row_alert_class(row) == "low-flow-no-shipment"
+    assert row_alert_class(row) == "stockout-watch"  # 行の色は在庫切れリスクのみ（旧行は監視）
 
 
 def test_row_alert_class_returns_confirmed_class_for_confirmed_row():
@@ -54,13 +54,13 @@ def test_row_alert_class_returns_in_progress_class_for_in_progress_row():
 def test_row_alert_class_returns_flow_quadrant_key_for_unconfirmed_row():
     row = {"flow_quadrant": QUADRANT_LOW_FLOW_NO_INCOMING, "confirmation_status": "未確認"}
 
-    assert row_alert_class(row) == "low-flow-no-incoming"
+    assert row_alert_class(row) == "stockout-watch"
 
 
 def test_row_alert_class_returns_normal_flow_key_for_normal_flow_row():
     row = {"flow_quadrant": QUADRANT_NORMAL_FLOW, "confirmation_status": "未確認"}
 
-    assert row_alert_class(row) == "normal-flow"
+    assert row_alert_class(row) == "stockout-watch"
 
 
 def test_row_display_module_has_no_counts_toward_alert_summary():

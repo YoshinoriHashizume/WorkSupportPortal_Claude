@@ -116,6 +116,7 @@ def _shipped_pair_patches(mari_stock_totals: dict[str, object] | None = None, **
         "fetch_last_incoming_by_item_vend": {},
         "fetch_mari_stock_totals": mari_stock_totals if mari_stock_totals is not None else {},
         "fetch_incoming_receipts": [],
+        "fetch_cust_item_phase_out_dates": {},
     }
     defaults.update(overrides)
     return [
@@ -136,6 +137,51 @@ def _build_rows_with(mari_stock_totals: dict[str, object] | None = None, **overr
     finally:
         for p in patches:
             p.stop()
+
+
+# --- TC-FQR-I-002: 適用終了日（07 design §4.1） ---
+
+
+def test_fqr_build_summary_rows_attaches_phase_out_date() -> None:
+    rows = _build_rows_with(
+        {},
+        fetch_cust_item_phase_out_dates={("137", "10523-X0A02"): date(2026, 3, 31)},
+    )
+
+    assert rows[0]["phase_out_date"] == "2026/03/31"
+
+
+def test_fqr_build_summary_rows_leaves_phase_out_date_empty_when_absent() -> None:
+    rows = _build_rows_with({}, fetch_cust_item_phase_out_dates={})
+
+    assert rows[0]["phase_out_date"] == ""
+
+
+def test_fqr_i002_phase_out_date_fetch_failure_only_warns() -> None:
+    """適用終了日の取得失敗は取込を止めず、警告文を残して空扱いにする。"""
+    from application.inventory_order_alert.infrastructure.oracle.summary_queries import (
+        PHASE_OUT_DATE_FETCH_ERROR_PREFIX,
+    )
+    from application.sales.infrastructure.oracle.client import OracleQueryError
+
+    warnings: list[str] = []
+    patches = _shipped_pair_patches({})
+    for p in patches:
+        p.start()
+    failing = patch(
+        "application.inventory_order_alert.infrastructure.oracle.summary_queries.fetch_cust_item_phase_out_dates",
+        side_effect=OracleQueryError("ORA-00942: 表またはビューが存在しません。"),
+    )
+    failing.start()
+    try:
+        rows = build_summary_rows(MagicMock(), date(2026, 6, 29), warnings=warnings)
+    finally:
+        failing.stop()
+        for p in patches:
+            p.stop()
+
+    assert rows[0]["phase_out_date"] == ""
+    assert any(warning.startswith(PHASE_OUT_DATE_FETCH_ERROR_PREFIX) for warning in warnings)
 
 
 def test_build_summary_rows_attaches_mari_stock_qty() -> None:
@@ -405,3 +451,139 @@ def test_a001_run_summary_aggregation_applies_enrich_rows_before_store_and_retur
     assert warning == "内示受注の取得に失敗: ORA-00942"
     assert snapshot.rows[0]["demand_forecast_basis"] == "なし"
     assert snapshot.aggregation_error == ""
+
+
+# --- 06_stockout-risk: TC-SOR-I-004〜006 ---
+
+
+def _stage3_patches(**overrides):
+    base = {
+        "fetch_unconfirmed_orders_or_warn": ([], ""),
+        "fetch_bom_level1_by_root": {"96160-00500": ["X-9065"]},
+        "fetch_vendor_by_component": {"X-9065": ("9065", "ミズタニ")},
+        "fetch_last_incoming_by_item_vend": {("X-9065", "9065"): date(2025, 4, 2)},
+        "fetch_open_purchase_orders_or_warn": ([("PO-1", "X-9065", "9065", date(2026, 8, 5), 100), ("PO-2", "OTHER", "9065", date(2026, 8, 5), 9)], ""),
+        "fetch_item_ordering_profiles_or_warn": ({"X-9065": (3, "4")}, ""),
+    }
+    base.update(overrides)
+    return base
+
+
+def test_i004_build_summary_rows_attaches_open_orders_and_ordering_profile_without_assessing() -> None:
+    rows = _build_rows_with({}, **_stage3_patches())
+
+    row = rows[0]
+    assert row["level1_item_cd"] == "X-9065"
+    assert row["open_purchase_orders"] == [{"order_cd": "PO-1", "item_cd": "X-9065", "vend_cd": "9065", "due_date": "2026/08/05", "remaining_qty": 100}]
+    assert row["open_purchase_orders_unknown"] is False
+    assert row["lead_time_days"] == 3
+    assert row["lead_time_source"] == "master"
+    assert row["ordering_method"] == "手動発注"
+    for key in ("stockout_risk", "replenishment_qty", "days_until_stockout"):
+        assert key not in row
+
+
+def test_i004_unresolved_level1_has_no_open_orders_and_default_profile() -> None:
+    rows = _build_rows_with({}, **_stage3_patches(fetch_bom_level1_by_root={"96160-00500": []}, fetch_vendor_by_component={}, fetch_last_incoming_by_item_vend={}))
+
+    row = rows[0]
+    assert row["level1_item_cd"] == ""
+    assert row["open_purchase_orders"] == []
+    assert row["lead_time_source"] == "default"
+    assert row["ordering_method"] == "不明"
+
+
+def test_i005_open_order_fetch_failure_marks_rows_unknown_and_warns() -> None:
+    warnings: list[str] = []
+    patches = _shipped_pair_patches({}, **_stage3_patches(fetch_open_purchase_orders_or_warn=([], "発注残の取得に失敗: ORA-00942")))
+    for p in patches:
+        p.start()
+    try:
+        rows = build_summary_rows(MagicMock(), date(2026, 6, 29), warnings=warnings)
+    finally:
+        for p in patches:
+            p.stop()
+
+    assert rows[0]["open_purchase_orders_unknown"] is True
+    assert rows[0]["open_purchase_orders"] == []
+    assert warnings == ["発注残の取得に失敗: ORA-00942"]
+
+
+def test_i006_item_master_fetch_failure_uses_defaults_and_warns() -> None:
+    warnings: list[str] = []
+    patches = _shipped_pair_patches({}, **_stage3_patches(fetch_item_ordering_profiles_or_warn=({}, "品目マスタの取得に失敗: ORA-00942")))
+    for p in patches:
+        p.start()
+    try:
+        rows = build_summary_rows(MagicMock(), date(2026, 6, 29), warnings=warnings)
+    finally:
+        for p in patches:
+            p.stop()
+
+    assert rows[0]["lead_time_source"] == "default"
+    assert rows[0]["ordering_method"] == "不明"
+    assert "品目マスタの取得に失敗: ORA-00942" in warnings
+
+
+def test_i003_open_order_and_item_master_queries_are_called_once() -> None:
+    patches = _shipped_pair_patches({}, **_stage3_patches())
+    started = {p.attribute: p.start() for p in patches}
+    try:
+        build_summary_rows(MagicMock(), date(2026, 6, 29))
+    finally:
+        for p in patches:
+            p.stop()
+
+    assert started["fetch_open_purchase_orders_or_warn"].call_count == 1
+    assert started["fetch_item_ordering_profiles_or_warn"].call_count == 1
+
+
+# --- 2026/09/18: 工程の連鎖（BOM 全段の外注工程）と全工程の発注残 ---
+
+
+def _chain_patches(**extra):
+    base = _stage3_patches(
+        fetch_bom_level1_by_root={"96160-00500": ["X-9133"]},
+        fetch_vendor_by_component={"X-9133": ("9133", "丸栄NW"), "X-9213": ("9213", "サーテック"), "X-9106": ("9106", "誠豊電子")},
+        fetch_last_incoming_by_item_vend={("X-9133", "9133"): date(2025, 1, 13)},
+        fetch_bom_chain_by_root={"96160-00500": [(1, "X-9133"), (2, "X-9213"), (3, "X-9106")]},
+        fetch_open_purchase_orders_or_warn=(
+            [("PO-A", "X-9106", "9106", date(2026, 6, 15), 240), ("PO-B", "X-9133", "9133", date(2026, 10, 5), 10), ("PO-C", "OTHER", "9106", date(2026, 8, 5), 9)],
+            "",
+        ),
+        fetch_item_ordering_profiles_or_warn=({"X-9133": (0, "5"), "X-9213": (4, "5"), "X-9106": (5, "4")}, ""),
+    )
+    base.update(extra)
+    return base
+
+
+def test_chain_build_summary_rows_attaches_process_chain_and_all_stage_orders() -> None:
+    rows = _build_rows_with({}, **_chain_patches())
+
+    row = rows[0]
+    assert row["level1_item_cd"] == "X-9133"
+    assert [stage["item_cd"] for stage in row["process_chain"]] == ["X-9133", "X-9213", "X-9106"]
+    assert row["process_chain"][0] == {"level": 1, "item_cd": "X-9133", "vend_cd": "9133", "vend_name": "丸栄NW", "lead_time_days": 0, "lead_time_source": "default"}
+    assert row["process_chain"][2] == {"level": 3, "item_cd": "X-9106", "vend_cd": "9106", "vend_name": "誠豊電子", "lead_time_days": 5, "lead_time_source": "master"}
+    assert sorted((o["order_cd"], o["item_cd"], o["remaining_qty"]) for o in row["open_purchase_orders"]) == [("PO-A", "X-9106", 240), ("PO-B", "X-9133", 10)]
+    assert row["ordering_method"] == "MRP 発注"  # 直下の工程の発注方式
+
+
+def test_chain_falls_back_to_level1_only_when_bom_chain_is_empty() -> None:
+    rows = _build_rows_with({}, **_chain_patches(fetch_bom_chain_by_root={}))
+
+    row = rows[0]
+    assert [stage["item_cd"] for stage in row["process_chain"]] == ["X-9133"]
+    assert [o["item_cd"] for o in row["open_purchase_orders"]] == ["X-9133"]
+
+
+def test_chain_fetch_is_called_once_with_all_roots() -> None:
+    patches = _shipped_pair_patches({}, **_chain_patches())
+    started = {p.attribute: p.start() for p in patches}
+    try:
+        build_summary_rows(MagicMock(), date(2026, 6, 29))
+    finally:
+        for p in patches:
+            p.stop()
+
+    assert started["fetch_bom_chain_by_root"].call_count == 1

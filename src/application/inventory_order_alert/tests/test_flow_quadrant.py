@@ -6,7 +6,7 @@
 
 from __future__ import annotations
 
-from dataclasses import FrozenInstanceError
+from dataclasses import FrozenInstanceError, fields
 from datetime import date
 
 import pytest
@@ -20,10 +20,15 @@ from application.inventory_order_alert.domain.value_objects.flow_quadrant import
     FLOW_QUADRANT_LABELS,
     FLOW_QUADRANT_SORT_RANK,
     FLOW_QUADRANTS,
+    QUADRANT_DISCONTINUATION_CANDIDATE,
     QUADRANT_DORMANT_STOCK,
     QUADRANT_LOW_FLOW_NO_INCOMING,
     QUADRANT_LOW_FLOW_NO_SHIPMENT,
     QUADRANT_NORMAL_FLOW,
+    QUADRANT_STOCKOUT,
+    QUADRANT_STOCKOUT_NO_INCOMING,
+    FlowThresholds,
+    is_recent_incoming,
     REFERENCE_FLOW_SELECTION,
     EvaluationPeriod,
     FlowSelection,
@@ -245,10 +250,18 @@ def test_is_within_evaluation_period_handles_sixty_months_for_five_years():
 
 
 def test_resolve_flow_quadrant_ignores_stock_quantity_because_it_takes_no_stock_argument():
-    """在庫数は判定に用いない（S-203 補足）。引数にすら存在しないことで担保する。"""
+    """在庫「数」は判定に用いない（S-203 補足）。
+
+    07（2026/09/18）で在庫の**有無**（`stock_missing`）は判定に入ったが、数量は依然として用いない。
+    数量を表す引数が存在しないことで担保する。
+    """
     import inspect
 
-    assert "stock" not in " ".join(inspect.signature(resolve_flow_quadrant).parameters)
+    parameters = set(inspect.signature(resolve_flow_quadrant).parameters)
+
+    assert "stock_missing" in parameters
+    for quantity_argument in ("stock", "stock_qty", "stock_quantity", "stock_total"):
+        assert quantity_argument not in parameters
 
 
 def test_resolve_flow_quadrant_returns_one_of_four_labels_for_all_input_combinations():
@@ -282,15 +295,20 @@ def test_D018_matrix_values_are_new_ascii_keys_and_match_resolve():
 
 def test_flow_quadrant_keys_are_new_ascii_keys():
     assert FLOW_QUADRANT_KEYS == {
+        QUADRANT_STOCKOUT_NO_INCOMING: "stockout-no-incoming",
+        QUADRANT_STOCKOUT: "stockout",
         QUADRANT_LOW_FLOW_NO_INCOMING: "low-flow-no-incoming",
         QUADRANT_DORMANT_STOCK: "dormant-stock",
         QUADRANT_LOW_FLOW_NO_SHIPMENT: "low-flow-no-shipment",
+        QUADRANT_DISCONTINUATION_CANDIDATE: "discontinuation-candidate",
         QUADRANT_NORMAL_FLOW: "normal-flow",
     }
     assert FLOW_QUADRANT_LABELS == {key: label for label, key in FLOW_QUADRANT_KEYS.items()}
 
 
 def test_flow_quadrant_labels_use_ubiquitous_language():
+    assert QUADRANT_STOCKOUT_NO_INCOMING == "欠品（入荷なし）"
+    assert QUADRANT_STOCKOUT == "欠品"  # 2026-09-18 に 欠品（入荷即出荷） から改名（TC-FQR-Q-008）
     assert QUADRANT_LOW_FLOW_NO_INCOMING == "低流動品（入荷なし）"
     assert QUADRANT_LOW_FLOW_NO_SHIPMENT == "低流動品（出荷なし）"
     assert QUADRANT_DORMANT_STOCK == "在庫死蔵品"
@@ -308,20 +326,30 @@ def test_longest_flow_quadrant_label_fits_confirmation_field_length():
     assert max(len(label) for label in FLOW_QUADRANTS) <= 40
 
 
-def test_D019_sort_rank_is_no_incoming_dormant_no_shipment_normal():
+def test_D019_sort_rank_is_stockout_no_incoming_dormant_no_shipment_discontinuation_normal():
+    """07（2026/09/18）: 欠品 2 区分と打ち切り候補を加えた 7 区分のランク（TC-FQR-Q-006）。"""
     assert FLOW_QUADRANT_SORT_RANK == {
-        QUADRANT_LOW_FLOW_NO_INCOMING: 0,
-        QUADRANT_DORMANT_STOCK: 1,
-        QUADRANT_LOW_FLOW_NO_SHIPMENT: 2,
-        QUADRANT_NORMAL_FLOW: 3,
+        QUADRANT_STOCKOUT_NO_INCOMING: 0,
+        QUADRANT_STOCKOUT: 1,
+        QUADRANT_LOW_FLOW_NO_INCOMING: 2,
+        QUADRANT_DORMANT_STOCK: 3,
+        QUADRANT_LOW_FLOW_NO_SHIPMENT: 4,
+        QUADRANT_DISCONTINUATION_CANDIDATE: 5,
+        QUADRANT_NORMAL_FLOW: 6,
     }
     assert FLOW_QUADRANTS == (
+        QUADRANT_STOCKOUT_NO_INCOMING,
+        QUADRANT_STOCKOUT,
         QUADRANT_LOW_FLOW_NO_INCOMING,
         QUADRANT_DORMANT_STOCK,
         QUADRANT_LOW_FLOW_NO_SHIPMENT,
+        QUADRANT_DISCONTINUATION_CANDIDATE,
         QUADRANT_NORMAL_FLOW,
     )
-    assert [flow_quadrant_sort_rank(label) for label in FLOW_QUADRANTS] == [0, 1, 2, 3]
+    assert [flow_quadrant_sort_rank(label) for label in FLOW_QUADRANTS] == [0, 1, 2, 3, 4, 5, 6]
+    assert FLOW_QUADRANT_KEYS[QUADRANT_STOCKOUT_NO_INCOMING] == "stockout-no-incoming"
+    assert FLOW_QUADRANT_KEYS[QUADRANT_STOCKOUT] == "stockout"
+    assert FLOW_QUADRANT_KEYS[QUADRANT_DISCONTINUATION_CANDIDATE] == "discontinuation-candidate"
 
 
 @pytest.mark.parametrize(
@@ -338,6 +366,8 @@ def test_D019_sort_rank_is_no_incoming_dormant_no_shipment_normal():
         ("アラートなし", QUADRANT_NORMAL_FLOW),
         ("なし", QUADRANT_NORMAL_FLOW),
         ("問題なし", QUADRANT_NORMAL_FLOW),
+        # 2026-09-18 に 欠品 へ改名した区分名（TC-FQR-Q-008）
+        ("欠品（入荷即出荷）", QUADRANT_STOCKOUT),
     ],
 )
 def test_D020_normalize_maps_legacy_labels_to_new_quadrants(legacy_label, expected):
@@ -353,6 +383,10 @@ def test_D020_normalize_maps_legacy_labels_to_new_quadrants(legacy_label, expect
         ("normal-flow", QUADRANT_NORMAL_FLOW),
         ("low-flow-no-incoming", QUADRANT_LOW_FLOW_NO_INCOMING),
         ("low-flow-no-shipment", QUADRANT_LOW_FLOW_NO_SHIPMENT),
+        ("stockout-no-incoming", QUADRANT_STOCKOUT_NO_INCOMING),
+        ("stockout", QUADRANT_STOCKOUT),
+        ("stockout-pass-through", QUADRANT_STOCKOUT),  # 旧キー（TC-FQR-Q-008）
+        ("discontinuation-candidate", QUADRANT_DISCONTINUATION_CANDIDATE),
     ],
 )
 def test_D021_normalize_maps_keys_to_labels(legacy_key, expected):
@@ -372,6 +406,11 @@ def test_D022_normalize_keeps_current_labels_and_trims_whitespace():
 
 def test_D023_escalation_is_true_only_when_rank_decreases():
     assert is_flow_escalated(QUADRANT_DORMANT_STOCK, QUADRANT_LOW_FLOW_NO_INCOMING) is True
+    # TC-FQR-Q-007: 低流動品（入荷なし）→ 欠品（入荷なし）は深刻化、逆は違う
+    assert is_flow_escalated(QUADRANT_LOW_FLOW_NO_INCOMING, QUADRANT_STOCKOUT_NO_INCOMING) is True
+    assert is_flow_escalated(QUADRANT_STOCKOUT_NO_INCOMING, QUADRANT_LOW_FLOW_NO_INCOMING) is False
+    assert is_flow_escalated(QUADRANT_NORMAL_FLOW, QUADRANT_DISCONTINUATION_CANDIDATE) is True
+    assert is_flow_escalated(QUADRANT_STOCKOUT, QUADRANT_STOCKOUT_NO_INCOMING) is True
     assert is_flow_escalated(QUADRANT_NORMAL_FLOW, QUADRANT_DORMANT_STOCK) is True
     assert is_flow_escalated(QUADRANT_NORMAL_FLOW, QUADRANT_LOW_FLOW_NO_SHIPMENT) is True
     assert is_flow_escalated(QUADRANT_LOW_FLOW_NO_INCOMING, QUADRANT_DORMANT_STOCK) is False
@@ -389,6 +428,9 @@ def test_D024_responsible_departments_per_quadrant():
     assert responsible_departments(QUADRANT_DORMANT_STOCK) == ("調達G",)
     assert responsible_departments(QUADRANT_LOW_FLOW_NO_SHIPMENT) == ("営業G",)
     assert responsible_departments(QUADRANT_NORMAL_FLOW) == ("生産管理",)
+    assert responsible_departments(QUADRANT_STOCKOUT_NO_INCOMING) == ("調達G", "生産管理")
+    assert responsible_departments(QUADRANT_STOCKOUT) == ("生産管理", "調達G")
+    assert responsible_departments(QUADRANT_DISCONTINUATION_CANDIDATE) == ("営業G",)
     assert responsible_departments("unknown") == ()
 
 
@@ -410,3 +452,108 @@ def test_no_incoming_record_can_coexist_with_dormant_stock():
 
     assert quadrant == QUADRANT_DORMANT_STOCK
     assert is_no_incoming_record(None) is True
+
+
+# --- 07 流動区分の 7 分類（TC-FQR-Q-001〜005, 009, 010） ---
+
+AS_OF_07 = date(2026, 9, 18)
+SELECTION_07 = FlowSelection(EvaluationPeriod(1))
+
+
+def test_fqr_q001_stock_missing_with_demand_and_no_recent_incoming_is_stockout_no_incoming():
+    quadrant = resolve_flow_quadrant(
+        date(2025, 1, 10),
+        date(2026, 9, 1),
+        as_of_date=AS_OF_07,
+        selection=SELECTION_07,
+        stock_missing=True,
+        has_demand=True,
+        recent_incoming=False,
+    )
+    assert quadrant == QUADRANT_STOCKOUT_NO_INCOMING
+
+
+def test_fqr_q002_stock_missing_with_demand_and_recent_incoming_is_stockout_pass_through():
+    quadrant = resolve_flow_quadrant(
+        date(2026, 9, 10),
+        date(2026, 9, 12),
+        as_of_date=AS_OF_07,
+        selection=SELECTION_07,
+        stock_missing=True,
+        has_demand=True,
+        recent_incoming=True,
+    )
+    assert quadrant == QUADRANT_STOCKOUT
+
+
+@pytest.mark.parametrize("recent_incoming", [True, False])
+def test_fqr_q003_stock_missing_without_demand_is_discontinuation_candidate(recent_incoming):
+    quadrant = resolve_flow_quadrant(
+        date(2026, 9, 10),
+        date(2026, 1, 15),
+        as_of_date=AS_OF_07,
+        selection=SELECTION_07,
+        stock_missing=True,
+        has_demand=False,
+        recent_incoming=recent_incoming,
+    )
+    assert quadrant == QUADRANT_DISCONTINUATION_CANDIDATE
+
+
+def test_fqr_q004_stock_present_keeps_four_way_resolution_regardless_of_demand():
+    for has_demand in (True, False):
+        assert (
+            resolve_flow_quadrant(
+                date(2025, 1, 10),
+                date(2026, 9, 1),
+                as_of_date=AS_OF_07,
+                selection=SELECTION_07,
+                stock_missing=False,
+                has_demand=has_demand,
+                recent_incoming=False,
+            )
+            == QUADRANT_LOW_FLOW_NO_INCOMING
+        )
+    assert (
+        resolve_flow_quadrant(None, None, as_of_date=AS_OF_07, selection=SELECTION_07, has_demand=True)
+        == QUADRANT_DORMANT_STOCK
+    )
+
+
+def test_fqr_q005_matrix_is_period_independent_for_stock_missing_rows():
+    matrix = resolve_flow_quadrant_matrix(
+        date(2025, 1, 10),
+        date(2026, 9, 1),
+        as_of_date=AS_OF_07,
+        stock_missing=True,
+        has_demand=True,
+        recent_incoming=False,
+    )
+    assert matrix == {"Y1": "stockout-no-incoming", "Y3": "stockout-no-incoming", "Y5": "stockout-no-incoming"}
+    matrix = resolve_flow_quadrant_matrix(None, date(2026, 1, 15), as_of_date=AS_OF_07, stock_missing=True)
+    assert set(matrix.values()) == {"discontinuation-candidate"}
+
+
+@pytest.mark.parametrize(
+    ("last_incoming", "expected"),
+    [(date(2026, 8, 19), True), (date(2026, 8, 18), False), (date(2026, 9, 18), True), (None, False)],
+)
+def test_fqr_q009_recent_incoming_boundary_is_thirty_days_inclusive(last_incoming, expected):
+    assert is_recent_incoming(last_incoming, as_of_date=AS_OF_07, days=30) is expected
+
+
+def test_fqr_q010_flow_thresholds_defaults_and_ranges():
+    thresholds = FlowThresholds()
+    assert thresholds.recent_incoming_days == 30
+    for kwargs in ({"recent_incoming_days": 0}, {"recent_incoming_days": 91}):
+        with pytest.raises(ValueError):
+            FlowThresholds(**kwargs)
+
+
+def test_fqr_q010_flow_thresholds_has_no_demand_window():
+    """需要の判定は内示のみになったため、需要の窓は閾値から撤去（07 REQ-FQR-F-002）。"""
+    assert [field.name for field in fields(FlowThresholds)] == ["recent_incoming_days"]
+    with pytest.raises(TypeError):
+        FlowThresholds(demand_window_months=3)
+    for name in ("DEFAULT_DEMAND_WINDOW_MONTHS", "MIN_DEMAND_WINDOW_MONTHS", "MAX_DEMAND_WINDOW_MONTHS"):
+        assert not hasattr(module, name)

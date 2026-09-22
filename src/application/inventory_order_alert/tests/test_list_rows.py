@@ -4,14 +4,19 @@ from __future__ import annotations
 
 from datetime import date
 
+from application.inventory_order_alert.domain.value_objects.flow_facts import FLOW_REASON_INCOMING_BELOW_DEMAND
 from application.inventory_order_alert.domain.value_objects.flow_quadrant import (
     FLOW_QUADRANT_KEYS,
+    QUADRANT_DISCONTINUATION_CANDIDATE,
     QUADRANT_DORMANT_STOCK,
     QUADRANT_LOW_FLOW_NO_INCOMING,
     QUADRANT_LOW_FLOW_NO_SHIPMENT,
     QUADRANT_NORMAL_FLOW,
+    QUADRANT_STOCKOUT,
+    QUADRANT_STOCKOUT_NO_INCOMING,
     EvaluationPeriod,
     FlowSelection,
+    FlowThresholds,
 )
 from application.inventory_order_alert.domain.value_objects.list_query import ListQuery, parse_list_query
 from application.inventory_order_alert.domain.value_objects.list_rows import (
@@ -222,3 +227,135 @@ def test_selection_object_is_usable_directly():
 
     assert row["flow_quadrant"] == QUADRANT_NORMAL_FLOW
     assert row["flow_status"] == ""
+
+
+# --- TC-FQR-L-001〜005: 在庫なしの 3 区分・理由・並び・絞り込み（07） ---
+
+
+def _stock_missing_row(dates: tuple[str, str], **extra: object) -> dict[str, object]:
+    """SLIMS 在庫なし（該当なし）の行。需要予測は付与済みの想定。"""
+    row = _row(dates, stock_qty="", demand_forecast_stock_total=0.0)
+    row.update(extra)
+    return row
+
+
+def test_fqr_l001_stock_missing_with_demand_and_recent_incoming_is_stockout():
+    [row] = _apply(
+        [
+            _stock_missing_row(
+                ("2026/09/01", "2026/06/15"),
+                demand_forecast_basis="内示",
+                demand_forecast_monthly=[20, 20, 20],
+                incoming_trend=[{"month": "2026-09", "qty": 10}],
+            )
+        ]
+    )
+
+    assert row["flow_quadrant"] == QUADRANT_STOCKOUT
+    assert row["flow_quadrant_key"] == "stockout"
+    # 欠品・打ち切り候補は判定期間によらないので 3 キーとも同値（TC-FQR-Q-005）
+    assert set(row["flow_quadrants"].values()) == {"stockout"}
+    assert row["flow_reasons"] == [FLOW_REASON_INCOMING_BELOW_DEMAND]
+    assert "在庫なし・入荷はあるが在庫が残らない" in row["flow_status"]
+
+
+def test_fqr_l001_stock_missing_without_recent_incoming_is_stockout_no_incoming():
+    [row] = _apply([_stock_missing_row(("2026/06/01", "2026/06/15"), demand_forecast_basis="内示")])
+
+    assert row["flow_quadrant"] == QUADRANT_STOCKOUT_NO_INCOMING
+    assert row["flow_reasons"] == []
+    assert "直近 30 日入荷なし" in row["flow_status"]
+
+
+def test_fqr_l002_stock_missing_without_demand_is_discontinuation_candidate():
+    [row] = _apply(
+        [_stock_missing_row(("2026/09/01", "2023/07/27"), demand_forecast_basis="なし", phase_out_date="2026/03/31")]
+    )
+
+    assert row["flow_quadrant"] == QUADRANT_DISCONTINUATION_CANDIDATE
+    assert row["flow_status"] == "在庫なし・内示なし（最終出荷 2023/07/27）"
+    assert row["recommended_action"] == DEFAULT_RECOMMENDED_ACTIONS.for_quadrant(QUADRANT_DISCONTINUATION_CANDIDATE).action
+    assert row["responsible_department"] == "営業G"
+    assert row["flow_reasons"] == ["適用終了日 2026/03/31"]
+
+
+def test_fqr_l003_legacy_row_without_stock_key_keeps_the_four_quadrants():
+    """在庫数のキーがない旧スナップショットは未取得。欠品・打ち切り候補にしない。"""
+    [row] = _apply([_row(ROW_DORMANT_STOCK)])
+
+    assert row["flow_quadrant"] == QUADRANT_DORMANT_STOCK
+    assert row["flow_reasons"] == []
+
+
+def test_fqr_l004_default_sort_puts_stockout_before_low_flow():
+    rows = _apply(
+        [
+            _row(ROW_LOW_FLOW_NO_INCOMING, qty=40),
+            _stock_missing_row(("", "2026/06/15"), demand_forecast_basis="内示"),
+        ]
+    )
+
+    ordered = sort_summary_rows(rows)
+
+    assert [row["flow_quadrant"] for row in ordered] == [QUADRANT_STOCKOUT_NO_INCOMING, QUADRANT_LOW_FLOW_NO_INCOMING]
+
+
+def test_fqr_l005_filter_by_stockout_key():
+    rows = _apply(
+        [
+            _row(ROW_NORMAL_FLOW, qty=10),
+            _stock_missing_row(("2026/09/01", "2026/06/15"), demand_forecast_basis="内示"),
+        ]
+    )
+
+    filtered = filter_summary_rows(rows, _query(flow_quadrant="stockout"))
+
+    assert [row["flow_quadrant"] for row in filtered] == [QUADRANT_STOCKOUT]
+
+
+def test_fqr_l006_rows_carry_reasons_for_every_evaluation_period():
+    """理由は判定期間で変わるため、区分と同じく 3 期間ぶん持たせる（07 design §1-6）。"""
+    [row] = _apply(
+        [
+            _stock_missing_row(
+                ("2026/09/01", "2025/08/20"),  # 最終出荷は 1 年より前・3 年内
+                demand_forecast_basis="内示",
+                demand_forecast_monthly=[20, 20, 20],
+                incoming_trend=[{"month": "2026-09", "qty": 100}],
+            )
+        ]
+    )
+
+    assert set(row["flow_reasons_by_period"]) == {"Y1", "Y3", "Y5"}
+    assert row["flow_reasons_by_period"]["Y1"] == ["1年以上出荷なし・経路要確認"]
+    assert row["flow_reasons_by_period"]["Y3"] == []
+    assert row["flow_reasons_by_period"]["Y5"] == []
+    # 表示中の判定期間（既定 1 年）の理由は flow_reasons に入る
+    assert row["flow_reasons"] == ["1年以上出荷なし・経路要確認"]
+
+
+def test_fqr_l007_period_dependent_reason_follows_the_quadrant():
+    """低流動品（出荷なし）は期間を広げると通常流動品になり、理由も消える（古い理由が残らない）。"""
+    [row] = _apply([_row(ROW_LOW_FLOW_NO_SHIPMENT, stock_qty="100", demand_forecast_basis="内示")])
+
+    assert row["flow_quadrants"]["Y1"] == FLOW_QUADRANT_KEYS[QUADRANT_LOW_FLOW_NO_SHIPMENT]
+    assert row["flow_reasons_by_period"]["Y1"] == ["内示あり（立ち上がり／出荷経路要確認）"]
+    assert row["flow_quadrants"]["Y5"] == FLOW_QUADRANT_KEYS[QUADRANT_NORMAL_FLOW]
+    assert row["flow_reasons_by_period"]["Y5"] == []
+
+
+def test_fqr_l001_thresholds_change_the_recent_incoming_boundary():
+    """直近入荷の窓を広げると 欠品（入荷なし）が 欠品 になる（第 2 段階の設定に備える）。"""
+    # 最終入荷 2026/07/01 は基準日 2026/09/07 の 68 日前。既定 30 日では直近入荷なし、90 日なら直近入荷あり
+    rows = [_stock_missing_row(("2026/07/01", "2026/06/15"), demand_forecast_basis="内示")]
+
+    [default_row] = apply_flow_quadrants_to_rows(rows, as_of_date=AS_OF, query=_query(period="1"))
+    [widened] = apply_flow_quadrants_to_rows(
+        rows,
+        as_of_date=AS_OF,
+        query=_query(period="1"),
+        thresholds=FlowThresholds(recent_incoming_days=90),
+    )
+
+    assert default_row["flow_quadrant"] == QUADRANT_STOCKOUT_NO_INCOMING
+    assert widened["flow_quadrant"] == QUADRANT_STOCKOUT

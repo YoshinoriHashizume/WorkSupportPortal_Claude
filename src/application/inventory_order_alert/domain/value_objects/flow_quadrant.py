@@ -1,7 +1,8 @@
 """流動区分（S-203）と判定期間（V-211）のドメイン定義。
 
 05_single-flow-view（2026-09）で判定軸（V-210）を廃止し、判定期間を 1/3/5 年に一本化した。
-流動区分は 低流動品（入荷なし）/ 在庫死蔵品 / 低流動品（出荷なし）/ 通常流動品 の 4 値。
+07_flow-quadrant-refinement（2026-09-18）で SLIMS 在庫のない行を 欠品（入荷なし）/ 欠品 /
+打ち切り候補 に切り分け、流動区分は 7 値になった（用語集 S-203）。
 """
 
 from __future__ import annotations
@@ -97,16 +98,22 @@ REFERENCE_FLOW_SELECTION = FlowSelection(DEFAULT_EVALUATION_PERIOD)
 
 # --- 流動区分（S-203） ---
 
+QUADRANT_STOCKOUT_NO_INCOMING = "欠品（入荷なし）"
+QUADRANT_STOCKOUT = "欠品"
 QUADRANT_LOW_FLOW_NO_INCOMING = "低流動品（入荷なし）"
 QUADRANT_DORMANT_STOCK = "在庫死蔵品"
 QUADRANT_LOW_FLOW_NO_SHIPMENT = "低流動品（出荷なし）"
+QUADRANT_DISCONTINUATION_CANDIDATE = "打ち切り候補"
 QUADRANT_NORMAL_FLOW = "通常流動品"
 
 #: CSS キー・URL 値・事前判定行列の値。
 FLOW_QUADRANT_KEYS = {
+    QUADRANT_STOCKOUT_NO_INCOMING: "stockout-no-incoming",
+    QUADRANT_STOCKOUT: "stockout",
     QUADRANT_LOW_FLOW_NO_INCOMING: "low-flow-no-incoming",
     QUADRANT_DORMANT_STOCK: "dormant-stock",
     QUADRANT_LOW_FLOW_NO_SHIPMENT: "low-flow-no-shipment",
+    QUADRANT_DISCONTINUATION_CANDIDATE: "discontinuation-candidate",
     QUADRANT_NORMAL_FLOW: "normal-flow",
 }
 
@@ -114,19 +121,66 @@ FLOW_QUADRANT_LABELS = {key: label for label, key in FLOW_QUADRANT_KEYS.items()}
 
 #: ランク（深刻度・並び順）。数値が小さいほど深刻（S-203）。
 FLOW_QUADRANT_SORT_RANK = {
-    QUADRANT_LOW_FLOW_NO_INCOMING: 0,
-    QUADRANT_DORMANT_STOCK: 1,
-    QUADRANT_LOW_FLOW_NO_SHIPMENT: 2,
-    QUADRANT_NORMAL_FLOW: 3,
+    QUADRANT_STOCKOUT_NO_INCOMING: 0,
+    QUADRANT_STOCKOUT: 1,
+    QUADRANT_LOW_FLOW_NO_INCOMING: 2,
+    QUADRANT_DORMANT_STOCK: 3,
+    QUADRANT_LOW_FLOW_NO_SHIPMENT: 4,
+    QUADRANT_DISCONTINUATION_CANDIDATE: 5,
+    QUADRANT_NORMAL_FLOW: 6,
 }
 
 #: ランク順に並べた流動区分。
-FLOW_QUADRANTS = (
-    QUADRANT_LOW_FLOW_NO_INCOMING,
-    QUADRANT_DORMANT_STOCK,
-    QUADRANT_LOW_FLOW_NO_SHIPMENT,
-    QUADRANT_NORMAL_FLOW,
+FLOW_QUADRANTS = tuple(sorted(FLOW_QUADRANT_SORT_RANK, key=FLOW_QUADRANT_SORT_RANK.__getitem__))
+
+#: SLIMS 在庫なし（T-209/T-210）の行にだけ付く区分。判定期間によらない。
+STOCK_MISSING_QUADRANTS = (
+    QUADRANT_STOCKOUT_NO_INCOMING,
+    QUADRANT_STOCKOUT,
+    QUADRANT_DISCONTINUATION_CANDIDATE,
 )
+
+# --- 欠品・打ち切り候補の閾値（07 design §2.1。第 1 段階は既定値のみ） ---
+
+DEFAULT_RECENT_INCOMING_DAYS = 30
+MIN_RECENT_INCOMING_DAYS = 1
+MAX_RECENT_INCOMING_DAYS = 90
+
+
+@dataclass(frozen=True)
+class FlowThresholds:
+    """直近入荷（日）。欠品（T-209）と打ち切り候補（T-210）の判定に使う。
+
+    需要の窓（か月）は 2026/09/21 に撤去した。需要ありの判定は内示推移（V-219）のみで行うため（07 REQ-FQR-F-002）。
+    """
+
+    recent_incoming_days: int = DEFAULT_RECENT_INCOMING_DAYS
+
+    def __post_init__(self) -> None:
+        if not MIN_RECENT_INCOMING_DAYS <= int(self.recent_incoming_days) <= MAX_RECENT_INCOMING_DAYS:
+            raise ValueError(
+                f"直近入荷の日数は {MIN_RECENT_INCOMING_DAYS}〜{MAX_RECENT_INCOMING_DAYS}: {self.recent_incoming_days}"
+            )
+
+
+DEFAULT_FLOW_THRESHOLDS = FlowThresholds()
+
+
+@dataclass(frozen=True)
+class FlowFacts:
+    """1 行ぶんの判定材料（07 design §2.1）。日付以外は既に真偽に落としてある。
+
+    行から組み立てるのは `flow_facts.build_flow_facts`。ここでは形だけを定義する。
+    """
+
+    last_incoming_date: date | None
+    last_ship_date: date | None
+    #: SLIMS 在庫なし（T-209/T-210）。在庫未取得の旧行は False
+    stock_missing: bool = False
+    #: 需要あり（内示推移 V-219 に数量がある）
+    has_demand: bool = False
+    #: 直近入荷あり（`recent_incoming_days` 日以内）
+    recent_incoming: bool = False
 
 #: 責任部署（R-201）を1セルに収めるときの区切り。
 RESPONSIBLE_DEPARTMENT_SEPARATOR = "・"
@@ -134,6 +188,9 @@ RESPONSIBLE_DEPARTMENT_SEPARATOR = "・"
 #: 旧称・旧キー・旧アラートレベルから流動区分への互換写像。
 #: 確認記録（confirmed_flow_quadrant）・URL（flow_quadrant）・旧スナップショットの読込に用いる。
 LEGACY_QUADRANT_ALIASES = {
+    # 2026-09-18 の一時的な区分名・キー（同日中に 欠品 へ改名。S-203）
+    "欠品（入荷即出荷）": QUADRANT_STOCKOUT,
+    "stockout-pass-through": QUADRANT_STOCKOUT,
     # 2026-09-15 までの旧称（S-203）
     "供給リスク品": QUADRANT_LOW_FLOW_NO_INCOMING,
     "在庫過剰リスク品": QUADRANT_LOW_FLOW_NO_SHIPMENT,
@@ -159,6 +216,14 @@ def is_no_incoming_record(last_incoming_date: date | None) -> bool:
     return last_incoming_date is None
 
 
+def is_recent_incoming(last_incoming_date: date | None, *, as_of_date: date, days: int) -> bool:
+    """直近入荷あり（T-209）: 最終入荷日が 基準日 − days 以降か（境界日は含む。未来日も含む）。"""
+
+    if last_incoming_date is None:
+        return False
+    return (as_of_date - last_incoming_date).days <= days
+
+
 def is_within_evaluation_period(target: date | None, *, as_of_date: date, months: int) -> bool:
     """target が基準日から遡る判定期間に含まれるか（境界日ちょうどは含む）。"""
 
@@ -173,9 +238,21 @@ def resolve_flow_quadrant(
     *,
     as_of_date: date,
     selection: FlowSelection,
+    stock_missing: bool = False,
+    has_demand: bool = False,
+    recent_incoming: bool = False,
 ) -> str:
-    """期間内入荷（V-212）／期間内出荷（V-213）の有無から流動区分を決める。在庫数は用いない。"""
+    """流動区分（S-203）を決める。
 
+    SLIMS 在庫なし（`stock_missing`）の行は判定期間によらず、需要の有無と直近入荷の有無で
+    欠品（入荷なし）/ 欠品 / 打ち切り候補 のいずれかにする（07）。
+    在庫ありの行は期間内入荷（V-212）／期間内出荷（V-213）の有無で 4 区分に分ける。在庫数は用いない。
+    """
+
+    if stock_missing:
+        if not has_demand:
+            return QUADRANT_DISCONTINUATION_CANDIDATE
+        return QUADRANT_STOCKOUT if recent_incoming else QUADRANT_STOCKOUT_NO_INCOMING
     months = selection.period.months
     has_incoming = is_within_evaluation_period(last_incoming_date, as_of_date=as_of_date, months=months)
     has_shipment = is_within_evaluation_period(last_ship_date, as_of_date=as_of_date, months=months)
@@ -189,6 +266,9 @@ def resolve_flow_quadrant_matrix(
     last_ship_date: date | None,
     *,
     as_of_date: date,
+    stock_missing: bool = False,
+    has_demand: bool = False,
+    recent_incoming: bool = False,
 ) -> dict[str, str]:
     """判定期間 3 値すべてで判定し、判定期間キー（Y1/Y3/Y5）→ 流動区分キーの辞書を返す。"""
 
@@ -199,6 +279,9 @@ def resolve_flow_quadrant_matrix(
                 last_ship_date,
                 as_of_date=as_of_date,
                 selection=FlowSelection(period),
+                stock_missing=stock_missing,
+                has_demand=has_demand,
+                recent_incoming=recent_incoming,
             )
         ]
         for period in EVALUATION_PERIODS

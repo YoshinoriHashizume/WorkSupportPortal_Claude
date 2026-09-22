@@ -1,7 +1,7 @@
 """需要予測（V-220）・在庫切れ予測月（V-221）・在庫月数（V-222）（05 design §4.6）。
 
-照合単位（T-208）ごとに、内示推移（V-219）を (得意先, 内作品番) の重複を除いて合算し、
-内示がなければ直近 12 か月の出荷実績の平均を、どちらもなければ「なし」とする。
+照合単位（T-208）ごとに、内示推移（V-219）を (得意先, 内作品番) の重複を除いて合算する。
+内示がなければ「なし」（07 REQ-FQR-F-002。出荷実績の平均による代替は 2026/09/21 に廃止）。
 """
 
 from __future__ import annotations
@@ -15,16 +15,12 @@ from application.inventory_order_alert.domain.value_objects.reconciliation_unit 
 from application.inventory_order_alert.domain.value_objects.stock_quantity import is_stock_fetched
 
 BASIS_UNCONFIRMED = "内示"
-BASIS_ACTUAL = "実績ベース"
 BASIS_NONE = "なし"
-DEMAND_FORECAST_BASES = (BASIS_UNCONFIRMED, BASIS_ACTUAL, BASIS_NONE)
-DemandForecastBasis = Literal["内示", "実績ベース", "なし"]
+DEMAND_FORECAST_BASES = (BASIS_UNCONFIRMED, BASIS_NONE)
+DemandForecastBasis = Literal["内示", "なし"]
 
 #: 在庫切れ予測月の上限（この月数を超えても尽きなければ「十分」＝ None）。REQ-SFV-F-018
 STOCKOUT_FORECAST_LIMIT_MONTHS = 120
-
-#: 実績ベースの平均に用いる直近の月数。
-ACTUAL_BASIS_MONTHS = 12
 
 #: 翌月〜翌々々月。
 FORECAST_MONTHS = 3
@@ -69,9 +65,8 @@ def _month_key(value: date) -> str:
 def build_demand_forecast(unit_rows: list[dict[str, object]], *, as_of_date: date) -> DemandForecast:
     """照合単位の行から需要予測を作る。
 
-    1. (cust_code, internal_item_cd) で重複を除いて内示推移を月ごとに合算
-    2. 翌月〜翌々々月の合計が 0 なら、全行の出荷推移の直近 12 か月合計 / 12 を実績ベースとする
-    3. どちらも 0 なら なし
+    (cust_code, internal_item_cd) で重複を除いて内示推移を月ごとに合算し、翌月〜翌々々月の合計が 0 なら なし。
+    出荷実績は見ない（07 REQ-FQR-F-002）。
     """
     _ = as_of_date
     totals = [0] * (FORECAST_MONTHS + 1)
@@ -92,24 +87,6 @@ def build_demand_forecast(unit_rows: list[dict[str, object]], *, as_of_date: dat
             current_month_remaining=totals[0],
             monthly=monthly,
             monthly_average=round(sum(months_with_orders) / len(months_with_orders), 4),
-        )
-
-    shipped = 0
-    seen_rows: set[tuple[str, str]] = set()
-    for row in unit_rows:
-        key = (str(row.get("cust_code") or "").strip(), str(row.get("item_cd") or "").strip())
-        if key in seen_rows:
-            continue
-        seen_rows.add(key)
-        shipped += sum(max(qty, 0) for qty in _trend_qtys(row.get("shipment_trend"))[-ACTUAL_BASIS_MONTHS:])
-    if shipped > 0:
-        average = round(shipped / ACTUAL_BASIS_MONTHS, 4)
-        monthly_estimate = int(round(average))
-        return DemandForecast(
-            basis=BASIS_ACTUAL,
-            current_month_remaining=0,
-            monthly=(monthly_estimate, monthly_estimate, monthly_estimate),
-            monthly_average=average,
         )
     return NO_DEMAND
 
@@ -142,11 +119,13 @@ def stock_total_of(unit_rows: list[dict[str, object]]) -> float | None:
 
 
 def stockout_forecast_month(stock_total: float | None, forecast: DemandForecast, *, as_of_date: date) -> str | None:
-    """在庫切れ予測月（V-221）。当月残を引き、翌月から月別需要（4 か月目以降は平均）を順に引いて初めて負になる月。"""
+    """在庫切れ予測月（V-221）。当月残を引き、翌月から月別需要（4 か月目以降は平均）を順に引いて初めて負になる月。
+
+    在庫 0 でも需要が出るまでは尽きないので、在庫 0 の照合単位は需要が初めて出る月になる
+    （2026/09/21、07 REQ-FQR-F-002。「在庫 0 以下は当月」の特例を廃止）。
+    """
     if stock_total is None or not forecast.has_demand:
         return None
-    if stock_total <= 0:
-        return _month_key(as_of_date)
     remaining = stock_total - forecast.current_month_remaining
     if remaining < 0:
         return _month_key(as_of_date)

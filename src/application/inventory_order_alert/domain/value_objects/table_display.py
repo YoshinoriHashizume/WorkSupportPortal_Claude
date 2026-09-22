@@ -9,6 +9,7 @@ from application.inventory_order_alert.domain.value_objects.code_sort import num
 from application.inventory_order_alert.domain.value_objects.dates import parse_optional_ymd
 
 SORTABLE_COLUMNS: tuple[tuple[str, str], ...] = (
+    ("stockout_risk", "在庫切れリスク"),
     ("flow_quadrant", "流動区分"),
     ("cust_chrg_psn_cd", "担当者コード"),
     ("cust_code", "得意先コード"),
@@ -28,7 +29,7 @@ SORTABLE_COLUMNS: tuple[tuple[str, str], ...] = (
 
 PAGE_SIZE_OPTIONS = (20, 50, 100, 200)
 DEFAULT_PAGE_SIZE = 50
-DEFAULT_SORT = "flow_quadrant"
+DEFAULT_SORT = "stockout_risk"
 DEFAULT_DIRECTION = "asc"
 MAX_SORT_SPECS = 5
 from application.inventory_order_alert.domain.value_objects.confirmation import confirmation_status_sort_key
@@ -36,11 +37,12 @@ from application.inventory_order_alert.domain.value_objects.flow_quadrant import
     QUADRANT_NORMAL_FLOW,
     flow_quadrant_sort_rank,
 )
+from application.inventory_order_alert.domain.value_objects.stockout_risk import stockout_risk_sort_rank
 VALID_DIRECTIONS = {"asc", "desc"}
 #: 一覧の列には出さないがソートできる項目（05 design §6.1）。在庫月数（V-222）は流動区分セルの緊急度行に表示する。
-SORT_ONLY_COLUMNS: tuple[tuple[str, str], ...] = (("months_of_stock", "在庫月数"),)
+SORT_ONLY_COLUMNS: tuple[tuple[str, str], ...] = (("months_of_stock", "在庫月数"), ("days_until_stockout", "猶予日数"))
 #: 空（None・キーなし）を昇順・降順とも末尾に置く列。
-NULLS_LAST_COLUMNS = {"months_of_stock"}
+NULLS_LAST_COLUMNS = {"months_of_stock", "days_until_stockout"}
 SORTABLE_KEYS = {column for column, _label in SORTABLE_COLUMNS} | {column for column, _label in SORT_ONLY_COLUMNS}
 COLUMN_LABELS = dict(SORTABLE_COLUMNS) | dict(SORT_ONLY_COLUMNS)
 
@@ -201,6 +203,8 @@ def _date_sort_key(value: object) -> tuple[int, str]:
 
 def _sort_value(row: dict[str, object], column: str) -> object:
     value = row.get(column, "")
+    if column == "stockout_risk":
+        return stockout_risk_sort_rank(row)
     if column == "flow_quadrant":
         return flow_quadrant_sort_rank(str(value or QUADRANT_NORMAL_FLOW))
     if column in {"post_shipment_count", "post_shipment_total_qty"}:
@@ -223,7 +227,7 @@ def _sort_value(row: dict[str, object], column: str) -> object:
         return numeric_code_sort_key(str(value or ""))
     if column == "confirmation_status":
         return confirmation_status_sort_key(row)
-    if column == "months_of_stock":
+    if column in {"months_of_stock", "days_until_stockout"}:
         try:
             return None if value is None or value == "" else float(value)
         except (TypeError, ValueError):
@@ -245,6 +249,8 @@ def _sort_key(row: dict[str, object], spec: SortSpec) -> object:
 def sort_rows(rows: list[dict[str, object]], *, sort_specs: tuple[SortSpec, ...]) -> list[dict[str, object]]:
     sorted_rows = list(rows)
     tiebreakers = (
+        SortSpec("days_until_stockout", "asc"),
+        SortSpec("flow_quadrant", "asc"),
         SortSpec("cust_code", "asc"),
         SortSpec("item_cd", "asc"),
     )

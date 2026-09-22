@@ -42,7 +42,7 @@ from application.inventory_order_alert.infrastructure.persistence.user_display_r
 
 
 def import_stock_usecase() -> ImportStock:
-    return ImportStock(import_slims_csv_text)
+    return ImportStock(import_slims_csv_text, load_app_settings)
 
 
 def list_page_usecase() -> ListPage:

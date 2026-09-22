@@ -86,6 +86,10 @@ def list_page(request: HttpRequest) -> HttpResponse:
             "flow_selection": context.flow_selection,
             "evaluation_periods": context.evaluation_periods,
             "flow_quadrant_filter": context.flow_quadrant_filter,
+            "stockout_risk_filter": context.stockout_risk_filter,
+            "ordering_method_filter": context.ordering_method_filter,
+            "stockout_risk_options": context.stockout_risk_options,
+            "ordering_method_options": context.ordering_method_options,
             "flow_quadrant_rule_rows": context.flow_quadrant_rule_rows,
             "test_data_warning": context.test_data_warning,
             "list_client_payload": list_client_payload,
@@ -164,6 +168,7 @@ def settings_page(request: HttpRequest) -> HttpResponse:
         {
             "warning_days": settings.warning_days,
             "stock_stale_days": settings.stock_stale_days,
+            "recent_incoming_days": settings.recent_incoming_days,
             "can_reset_confirmations": can_reset_confirmations(),
         },
     )

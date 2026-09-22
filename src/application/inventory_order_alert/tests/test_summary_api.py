@@ -109,11 +109,20 @@ def test_summary_api_counts_payload_uses_flow_quadrant_keys():
     assert set(result["counts"]) == {
         "total",
         "attention",
+        # 07 在庫なしの 3 区分（TC-FQR-C-003）
+        "stockoutNoIncoming",
+        "stockout",
+        "discontinuationCandidate",
         "lowFlowNoIncoming",
         "dormantStock",
         "lowFlowNoShipment",
         "normalFlow",
         "unconfirmed",
+        # 06 在庫切れリスク
+        "danger",
+        "caution",
+        "watch",
+        "noneRisk",
     }
     assert result["counts"]["lowFlowNoIncoming"] == 1
 
@@ -266,11 +275,17 @@ def test_dashboard_summary_serializes_counts_and_stock_import():
 
     assert result["ok"] is True
     assert set(result["counts"]) == {
+        "stockoutNoIncoming",
+        "stockout",
         "lowFlowNoIncoming",
         "dormantStock",
         "lowFlowNoShipment",
+        "discontinuationCandidate",
         "attention",
         "unconfirmed",
+        "danger",
+        "caution",
+        "watch",
     }
     assert result["stockImport"]["hasData"] is True
     assert result["stockImport"]["stockAsOfLabel"] == "2026年6月17日時点の在庫"
@@ -282,11 +297,17 @@ def test_dashboard_summary_without_stock_data():
     result = DashboardSummary(dashboard, lambda: None).execute()
 
     assert result["counts"] == {
+        "stockoutNoIncoming": 0,
+        "stockout": 0,
         "lowFlowNoIncoming": 0,
         "dormantStock": 0,
         "lowFlowNoShipment": 0,
+        "discontinuationCandidate": 0,
         "attention": 0,
         "unconfirmed": 0,
+        "danger": 0,
+        "caution": 0,
+        "watch": 0,
     }
     assert result["stockImport"]["hasData"] is False
     assert result["stockImport"]["importedAt"] is None

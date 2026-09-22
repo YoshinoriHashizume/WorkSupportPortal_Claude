@@ -39,12 +39,14 @@
         <p>{{ inventory_order_alert_banner.error_message }}</p>
       {% elif inventory_order_alert_banner.has_alerts %}
         <p>
-          低流動品（入荷なし） <strong>{{ inventory_order_alert_banner.low_flow_no_incoming }}</strong> 件 /
-          在庫死蔵品 <strong>{{ inventory_order_alert_banner.dormant_stock }}</strong> 件 /
-          低流動品（出荷なし） <strong>{{ inventory_order_alert_banner.low_flow_no_shipment }}</strong> 件 /
+          在庫切れリスク
+          危険 <strong>{{ inventory_order_alert_banner.danger }}</strong> 件 /
+          注意 <strong>{{ inventory_order_alert_banner.caution }}</strong> 件 /
           未確認 <strong>{{ inventory_order_alert_banner.unconfirmed }}</strong> 件
         </p>
-        <p class="inventory-order-alert-banner-condition muted">（{{ inventory_order_alert_banner.flow_condition_label }}）</p>
+        <p class="inventory-order-alert-banner-condition muted">
+          欠品（入荷なし） {{ inventory_order_alert_banner.stockout_no_incoming }} 件 / 欠品 {{ inventory_order_alert_banner.stockout }} 件 / 低流動品（入荷なし） {{ inventory_order_alert_banner.low_flow_no_incoming }} 件 / 在庫死蔵品 {{ inventory_order_alert_banner.dormant_stock }} 件（{{ inventory_order_alert_banner.stockout_condition_label }}）
+        </p>
       {% else %}
         <p>現在、対応が必要な品目はありません。</p>
       {% endif %}

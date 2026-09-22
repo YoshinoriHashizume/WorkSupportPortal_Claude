@@ -142,7 +142,7 @@ def test_a003_list_page_uses_injected_recommended_actions_for_rows_and_rules():
     context = _list_page(recommended_actions=overridden).execute(query_params={})
 
     assert context.all_rows[0]["recommended_action"] == "上書き文言"
-    assert context.flow_quadrant_rule_rows[0].action == "上書き文言"
+    assert next(r for r in context.flow_quadrant_rule_rows if r.quadrant == QUADRANT_LOW_FLOW_NO_INCOMING).action == "上書き文言"
     assert context.recommended_actions is overridden
 
 
@@ -191,7 +191,7 @@ def test_a007_wiring_injects_overridden_recommended_actions_into_list_payload(mo
     )
 
     assert payload["recommendedActions"]["low-flow-no-incoming"]["action"] == "上書き文言"
-    assert context.flow_quadrant_rule_rows[0].action == "上書き文言"
+    assert next(r for r in context.flow_quadrant_rule_rows if r.quadrant == QUADRANT_LOW_FLOW_NO_INCOMING).action == "上書き文言"
 
 
 @pytest.mark.django_db

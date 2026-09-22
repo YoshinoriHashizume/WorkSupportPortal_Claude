@@ -69,7 +69,24 @@ def test_i008_default_path_is_next_to_module_and_currently_absent_returns_defaul
     assert DEFAULT_RECOMMENDED_ACTIONS_PATH.name == "recommended_actions.json"
     # 既定パスにファイルがなければ既定を返す（ある場合は上書き後のコレクションになる）
     actions = load_recommended_actions()
-    assert len(actions) == 4
+    assert len(actions) == 7  # 07 で 7 区分
+
+
+# --- TC-FQR-A-004: 見本ファイルは 7 区分ぶんのキーを持つ ---
+
+
+def test_fqr_a004_example_file_has_all_seven_quadrant_keys():
+    from application.inventory_order_alert.domain.value_objects.flow_quadrant import FLOW_QUADRANT_KEYS, FLOW_QUADRANTS
+
+    example_path = DEFAULT_RECOMMENDED_ACTIONS_PATH.with_name("recommended_actions.example.json")
+    definition = json.loads(example_path.read_text(encoding="utf-8"))
+
+    assert [key for key in definition if not key.startswith("_")] == [
+        FLOW_QUADRANT_KEYS[quadrant] for quadrant in FLOW_QUADRANTS
+    ]
+    # 見本の文言は既定と一致させる（コピーしてそのまま使っても挙動が変わらない）
+    for quadrant in FLOW_QUADRANTS:
+        assert definition[FLOW_QUADRANT_KEYS[quadrant]] == DEFAULT_RECOMMENDED_ACTIONS.for_quadrant(quadrant).action
 
 
 # --- TC-SFV-I-009: 定義ファイルが不正 JSON なら警告ログを出して既定 ---

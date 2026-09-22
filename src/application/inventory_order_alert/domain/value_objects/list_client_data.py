@@ -4,6 +4,14 @@ from decimal import Decimal
 
 from application.inventory_order_alert.domain.value_objects.confirmation import STATUS_CHOICES, confirmation_status_key
 from application.inventory_order_alert.domain.value_objects.demand_forecast import BASIS_NONE
+from application.inventory_order_alert.domain.value_objects.ordering_profile import ORDERING_METHOD_KEYS, ORDERING_UNKNOWN
+from application.inventory_order_alert.domain.value_objects.stockout_risk import (
+    RISK_NONE,
+    STOCKOUT_RISK_KEYS,
+    STOCKOUT_RISK_LABELS,
+    STOCKOUT_RISKS,
+    row_stockout_risk,
+)
 from application.inventory_order_alert.domain.value_objects.flow_quadrant import (
     DEFAULT_EVALUATION_PERIOD,
     EVALUATION_PERIODS,
@@ -60,6 +68,10 @@ STOCK_COLUMNS = ("stock_qty", "mari_stock_qty")
 def _display_cell(row: dict[str, object], column: str, quadrant: str) -> str:
     if column == "flow_quadrant":
         return quadrant
+    if column == "stockout_risk":
+        risk = row_stockout_risk(row)
+        # 対象外は空。旧行（キーなし）も一覧では空にし、絞り込み・並び替えでは監視として扱う
+        return "" if risk == RISK_NONE or "stockout_risk" not in row else risk
     if column in STOCK_COLUMNS:
         return format_stock_quantity(
             row.get(column, ""),
@@ -86,6 +98,14 @@ def row_to_client_dict(row: dict[str, object]) -> dict[str, object]:
     client_row["flowQuadrantKey"] = str(row.get("flow_quadrant_key") or FLOW_QUADRANT_KEYS[quadrant])
     client_row["noIncomingRecord"] = bool(row.get("no_incoming_record"))
     client_row["flowStatus"] = str(row.get("flow_status") or "")
+    # 流動区分の判定根拠（07 REQ-FQR-F-005）。詳細ダイアログの流動区分セクションに出す。
+    # 理由は判定期間で変わるため 3 期間ぶん渡し、期間切替ではクライアントが引き直す（07 design §1-6）
+    client_row["flowReasons"] = [str(reason) for reason in (row.get("flow_reasons") or [])]
+    reasons_by_period = row.get("flow_reasons_by_period") or {}
+    client_row["flowReasonsByPeriod"] = {
+        period.key: [str(reason) for reason in (reasons_by_period.get(period.key) or [])]
+        for period in EVALUATION_PERIODS
+    }
     client_row["recommendedAction"] = str(row.get("recommended_action") or "")
     client_row["responsibleDepartment"] = str(row.get("responsible_department") or "")
     # 第 2 段階（05 design §6.2）: 需要予測。旧スナップショット（キーなし）は basis「なし」で値は空
@@ -93,6 +113,50 @@ def row_to_client_dict(row: dict[str, object]) -> dict[str, object]:
     client_row["unconfirmedOrderTrend"] = list(row.get("unconfirmed_order_trend") or [])
     client_row["reconciliationUnitKey"] = str(row.get("reconciliation_unit_key") or "")
     client_row["demandForecast"] = _demand_forecast_payload(row)
+    # 06: 在庫切れリスク（S-204）。旧行は監視
+    risk = row_stockout_risk(row)
+    client_row["stockoutRisk"] = risk
+    client_row["stockoutRiskKey"] = STOCKOUT_RISK_KEYS[risk]
+    client_row["stockoutRiskReasons"] = [str(reason) for reason in (row.get("stockout_risk_reasons") or [])]
+    client_row["daysUntilStockout"] = _optional_int(row.get("days_until_stockout"))
+    client_row["shortageQty"] = _optional_int(row.get("shortage_qty"))
+    client_row["replenishment"] = {
+        "qty": _optional_int(row.get("replenishment_qty")) or 0,
+        "laterQty": _optional_int(row.get("replenishment_later_qty")) or 0,
+        "staleQty": _optional_int(row.get("replenishment_stale_qty")) or 0,
+        "earliestDue": str(row.get("replenishment_earliest_due") or ""),
+        "hasOverdue": bool(row.get("replenishment_has_overdue")),
+        "unknown": bool(row.get("replenishment_unknown")),
+    }
+    client_row["upstreamOrder"] = {
+        "qty": _optional_int(row.get("upstream_order_qty")) or 0,
+        "overdue": bool(row.get("upstream_order_overdue")),
+        "earliestDue": str(row.get("upstream_order_earliest_due") or ""),
+    }
+    # 工程の連鎖（直下 → 上流）と各工程の発注残（詳細ダイアログ用。06 design §4.1a）
+    orders = [o for o in (row.get("open_purchase_orders") or []) if isinstance(o, dict)]
+    client_row["processChain"] = [
+        {
+            "level": _optional_int(stage.get("level")) or 0,
+            "itemCd": str(stage.get("item_cd") or ""),
+            "vendCd": str(stage.get("vend_cd") or ""),
+            "vendName": str(stage.get("vend_name") or ""),
+            "leadTimeDays": _optional_int(stage.get("lead_time_days")) or 0,
+            "leadTimeSource": str(stage.get("lead_time_source") or ""),
+            "openOrders": [
+                {"dueDate": str(o.get("due_date") or ""), "remainingQty": _optional_int(o.get("remaining_qty")) or 0}
+                for o in orders
+                if str(o.get("item_cd") or "") == str(stage.get("item_cd") or "") and str(o.get("vend_cd") or "") == str(stage.get("vend_cd") or "")
+            ],
+        }
+        for stage in (row.get("process_chain") or [])
+        if isinstance(stage, dict)
+    ]
+    client_row["leadTimeDays"] = _optional_int(row.get("lead_time_days"))
+    client_row["leadTimeSource"] = str(row.get("lead_time_source") or "")
+    ordering_method = str(row.get("ordering_method") or ORDERING_UNKNOWN)
+    client_row["orderingMethod"] = ordering_method
+    client_row["orderingMethodKey"] = ORDERING_METHOD_KEYS.get(ordering_method, "unknown")
     # MARI 在庫は行の生値（mari_stock_qty）がソートに、display が表示に使われる。
     # camelCase の別名は増やさない（同じ値を二重に配信することになるため。design.md §6.4）。
     client_row["display"] = {
@@ -101,6 +165,11 @@ def row_to_client_dict(row: dict[str, object]) -> dict[str, object]:
         if column != "confirmation_status"
     }
     return client_row
+
+
+def _optional_int(value: object) -> int | None:
+    number = _optional_number(value)
+    return None if number is None else int(number)
 
 
 def _optional_number(value: object) -> float | None:
@@ -189,4 +258,6 @@ def build_list_client_payload(
         "flowQuadrantDepartments": {key: entry["departments"] for key, entry in actions_payload.items()},
         "flowQuadrantOrder": [FLOW_QUADRANT_KEYS[quadrant] for quadrant in FLOW_QUADRANTS],
         "recommendedActions": actions_payload,
+        "stockoutRiskOrder": [STOCKOUT_RISK_KEYS[risk] for risk in STOCKOUT_RISKS],
+        "stockoutRiskLabels": dict(STOCKOUT_RISK_LABELS),
     }

@@ -13,7 +13,9 @@ class ConfirmationStatus(models.TextChoices):
 class InventoryOrderAlertSettings(models.Model):
     id = models.PositiveSmallIntegerField(primary_key=True, default=1)
     warning_days = models.PositiveIntegerField(default=365)
-    recent_incoming_days = models.PositiveIntegerField(default=90)
+    # 直近入荷の窓（07 REQ-FQR-F-008、1〜90 日・既定 30）。欠品（T-209）の 2 区分の振り分けにのみ使う。
+    # 旧アラートレベル方式の同名カラム（既定 90）を再利用し、0013 で既定値と既存値を 30 に移行した
+    recent_incoming_days = models.PositiveIntegerField(default=30)
     recent_shipment_days = models.PositiveIntegerField(default=90)
     stale_incoming_days = models.PositiveIntegerField(default=180)
     balance_shipment_months = models.PositiveIntegerField(default=12)
@@ -25,6 +27,10 @@ class InventoryOrderAlertSettings(models.Model):
     # 旧アラートレベル方式の残置カラム（未使用）。重点は低流動品（入荷なし）に置き換わった（02 design §5.3、05 で改称）。
     critical_enabled = models.BooleanField(default=True)
     stock_stale_days = models.PositiveIntegerField(default=7)
+    # 在庫切れリスク（S-204）の閾値（06 design §5.2）。判定は取込時に行うため、変更は次回取込から反映する
+    safety_days = models.PositiveIntegerField(default=14)
+    default_lead_time_days = models.PositiveIntegerField(default=5)
+    watch_months = models.PositiveIntegerField(default=6)
     updated_at = models.DateTimeField(auto_now=True)
     updated_by = models.ForeignKey(
         settings.AUTH_USER_MODEL,

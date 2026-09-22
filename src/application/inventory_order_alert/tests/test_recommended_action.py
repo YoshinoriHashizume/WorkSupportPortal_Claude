@@ -1,7 +1,7 @@
-"""推奨アクション（T-207）と状況テンプレートのテスト（test-design.md TC-SFV-D-030〜038）。
+"""推奨アクション（T-207）と状況テンプレートのテスト（test-design.md TC-SFV-D-030〜038、TC-FQR-A-001〜004）。
 
 流動区分（S-203）ごとの 状況テンプレート / 推奨アクション / 責任部署（R-201）を
-`RecommendedAction` に束ね、4 区分ぶんを `RecommendedActions` で保持する（design §4.3）。
+`RecommendedAction` に束ね、**7 区分ぶん**を `RecommendedActions` で保持する（design §4.3、07 design §2.4）。
 """
 
 from __future__ import annotations
@@ -10,19 +10,25 @@ from dataclasses import FrozenInstanceError
 
 import pytest
 
+from application.inventory_order_alert.domain.value_objects import recommended_action as module
 from application.inventory_order_alert.domain.value_objects.flow_quadrant import (
+    DEFAULT_RECENT_INCOMING_DAYS,
     FLOW_QUADRANT_KEYS,
     FLOW_QUADRANTS,
+    QUADRANT_DISCONTINUATION_CANDIDATE,
     QUADRANT_DORMANT_STOCK,
     QUADRANT_LOW_FLOW_NO_INCOMING,
     QUADRANT_LOW_FLOW_NO_SHIPMENT,
     QUADRANT_NORMAL_FLOW,
+    QUADRANT_STOCKOUT,
+    QUADRANT_STOCKOUT_NO_INCOMING,
     EvaluationPeriod,
 )
 from application.inventory_order_alert.domain.value_objects.recommended_action import (
     DEFAULT_RECOMMENDED_ACTIONS,
     RecommendedAction,
     RecommendedActions,
+    describe_status_template,
     render_status,
 )
 
@@ -47,11 +53,11 @@ def _render(quadrant: str, *, last_incoming: str = LAST_INCOMING, last_ship: str
     )
 
 
-# --- TC-SFV-D-030: 既定の 4 区分がすべて定義されている ---
+# --- TC-SFV-D-030 / TC-FQR-A-001: 既定の 7 区分がすべて定義されている ---
 
 
-def test_d030_default_actions_cover_all_four_quadrants():
-    assert len(DEFAULT_RECOMMENDED_ACTIONS) == 4
+def test_d030_default_actions_cover_all_seven_quadrants():
+    assert len(DEFAULT_RECOMMENDED_ACTIONS) == 7
     assert tuple(action.quadrant for action in DEFAULT_RECOMMENDED_ACTIONS) == FLOW_QUADRANTS
     for quadrant in FLOW_QUADRANTS:
         assert DEFAULT_RECOMMENDED_ACTIONS.for_quadrant(quadrant).quadrant == quadrant
@@ -65,9 +71,12 @@ def test_d030_low_flow_no_incoming_action_mentions_supplier_and_production_conti
 
 def test_d030_default_departments_follow_r201():
     expected = {
+        QUADRANT_STOCKOUT_NO_INCOMING: ("調達G", "生産管理"),
+        QUADRANT_STOCKOUT: ("生産管理", "調達G"),
         QUADRANT_LOW_FLOW_NO_INCOMING: ("調達G", "営業G", "生産管理"),
         QUADRANT_DORMANT_STOCK: ("調達G",),
         QUADRANT_LOW_FLOW_NO_SHIPMENT: ("営業G",),
+        QUADRANT_DISCONTINUATION_CANDIDATE: ("営業G",),
         QUADRANT_NORMAL_FLOW: ("生産管理",),
     }
     for quadrant, departments in expected.items():
@@ -106,14 +115,33 @@ def test_d032_recommended_action_is_immutable():
         action.action = "X"  # type: ignore[misc]
 
 
-# --- TC-SFV-D-033: 4 区分に欠けがあるコレクションは拒否 ---
+# --- TC-SFV-D-033 / TC-FQR-A-001: 7 区分に欠けがあるコレクションは拒否 ---
 
 
 def test_d033_collection_missing_a_quadrant_is_rejected():
-    three = tuple(action for action in DEFAULT_RECOMMENDED_ACTIONS if action.quadrant != QUADRANT_NORMAL_FLOW)
-    assert len(three) == 3
+    six = tuple(action for action in DEFAULT_RECOMMENDED_ACTIONS if action.quadrant != QUADRANT_NORMAL_FLOW)
+    assert len(six) == 6
     with pytest.raises(ValueError):
-        RecommendedActions(three)
+        RecommendedActions(six)
+
+
+def test_fqr_a001_collection_missing_a_new_quadrant_is_rejected():
+    """07: 旧 4 区分だけのコレクションは 7 区分に満たないため拒否される。"""
+
+    legacy_four = tuple(
+        action
+        for action in DEFAULT_RECOMMENDED_ACTIONS
+        if action.quadrant
+        in (
+            QUADRANT_LOW_FLOW_NO_INCOMING,
+            QUADRANT_DORMANT_STOCK,
+            QUADRANT_LOW_FLOW_NO_SHIPMENT,
+            QUADRANT_NORMAL_FLOW,
+        )
+    )
+    assert len(legacy_four) == 4
+    with pytest.raises(ValueError):
+        RecommendedActions(legacy_four)
 
 
 def test_d033_collection_with_duplicate_quadrant_is_rejected():
@@ -213,3 +241,99 @@ def test_d038_render_status_dormant_stock_includes_both_dates():
     assert LAST_SHIP in text
     assert PERIOD_Y1.label in text
     assert "{" not in text and "}" not in text
+
+
+# --- TC-FQR-A-002: 新 3 区分の状況テンプレートと新プレースホルダ ---
+
+
+def test_fqr_a002_stockout_no_incoming_status_fills_recent_days_with_default():
+    text = _render(QUADRANT_STOCKOUT_NO_INCOMING)
+
+    assert f"最終入荷 {LAST_INCOMING}" in text
+    assert f"直近 {DEFAULT_RECENT_INCOMING_DAYS} 日入荷なし" in text
+    assert "{" not in text and "}" not in text
+
+
+def test_fqr_a002_discontinuation_candidate_status_has_no_demand_window():
+    """需要の判定は内示のみになったため、状況から「{demand_window}か月以上出荷なし」を外す（07 REQ-FQR-F-002）。"""
+    template = DEFAULT_RECOMMENDED_ACTIONS.for_quadrant(QUADRANT_DISCONTINUATION_CANDIDATE).status_template
+    assert template == "在庫なし・内示なし（最終出荷 {last_ship}）"
+
+    text = _render(QUADRANT_DISCONTINUATION_CANDIDATE)
+    assert text == f"在庫なし・内示なし（最終出荷 {LAST_SHIP}）"
+    assert "{" not in text and "}" not in text
+    assert not hasattr(module, "PLACEHOLDER_DEMAND_WINDOW")
+
+
+def test_fqr_a002_stockout_status_includes_both_dates():
+    text = _render(QUADRANT_STOCKOUT)
+
+    assert text == f"在庫なし・入荷はあるが在庫が残らない（最終入荷 {LAST_INCOMING}・最終出荷 {LAST_SHIP}）"
+    assert "{" not in text and "}" not in text
+
+
+def test_fqr_a002_render_status_accepts_non_default_thresholds():
+    text = render_status(
+        DEFAULT_RECOMMENDED_ACTIONS.for_quadrant(QUADRANT_STOCKOUT_NO_INCOMING),
+        period=PERIOD_Y1,
+        last_incoming=LAST_INCOMING,
+        last_ship=LAST_SHIP,
+        no_incoming_record=False,
+        recent_days=45,
+    )
+    assert "直近 45 日入荷なし" in text
+    assert "30" not in text
+
+    with pytest.raises(TypeError):
+        render_status(
+            DEFAULT_RECOMMENDED_ACTIONS.for_quadrant(QUADRANT_DISCONTINUATION_CANDIDATE),
+            period=PERIOD_Y1,
+            last_incoming=LAST_INCOMING,
+            last_ship=LAST_SHIP,
+            no_incoming_record=False,
+            demand_window_months=6,
+        )
+
+
+def test_fqr_a002_stockout_quadrants_do_not_use_the_period_placeholder():
+    """欠品 2 区分と打ち切り候補は判定期間によらない（S-203 補足）ため `{period}` を持たない。"""
+
+    for quadrant in (
+        QUADRANT_STOCKOUT_NO_INCOMING,
+        QUADRANT_STOCKOUT,
+        QUADRANT_DISCONTINUATION_CANDIDATE,
+    ):
+        assert "{period}" not in DEFAULT_RECOMMENDED_ACTIONS.for_quadrant(quadrant).status_template
+
+
+def test_fqr_a002_describe_status_template_fills_new_placeholders_for_the_legend():
+    template = DEFAULT_RECOMMENDED_ACTIONS.for_quadrant(QUADRANT_STOCKOUT_NO_INCOMING).status_template
+    text = describe_status_template(template)
+
+    assert "YYYY/MM/DD" in text
+    assert f"直近 {DEFAULT_RECENT_INCOMING_DAYS} 日入荷なし" in text
+    assert "{" not in text and "}" not in text
+
+    template = DEFAULT_RECOMMENDED_ACTIONS.for_quadrant(QUADRANT_DISCONTINUATION_CANDIDATE).status_template
+    assert describe_status_template(template) == "在庫なし・内示なし（最終出荷 YYYY/MM/DD）"
+
+
+# --- TC-FQR-A-004: 定義ファイルの上書きが新キーで効く ---
+
+
+@pytest.mark.parametrize(
+    "quadrant",
+    [QUADRANT_STOCKOUT_NO_INCOMING, QUADRANT_STOCKOUT, QUADRANT_DISCONTINUATION_CANDIDATE],
+)
+def test_fqr_a004_with_action_texts_accepts_new_quadrant_keys(quadrant):
+    key = FLOW_QUADRANT_KEYS[quadrant]
+    overridden = DEFAULT_RECOMMENDED_ACTIONS.with_action_texts({key: "上書き文言"})
+
+    after = overridden.for_quadrant(quadrant)
+    before = DEFAULT_RECOMMENDED_ACTIONS.for_quadrant(quadrant)
+    assert after.action == "上書き文言"
+    assert after.status_template == before.status_template
+    assert after.departments == before.departments
+    for other in FLOW_QUADRANTS:
+        if other != quadrant:
+            assert overridden.for_quadrant(other) == DEFAULT_RECOMMENDED_ACTIONS.for_quadrant(other)

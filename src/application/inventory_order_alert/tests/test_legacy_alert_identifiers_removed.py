@@ -44,6 +44,25 @@ LEGACY_AXIS_TERMS = (
 )
 LEGACY_ALIAS_HOLDER = "domain/value_objects/flow_quadrant.py"
 
+#: 07_flow-quadrant-refinement で廃止した識別子・文言（TC-FQR-C-007）。
+#: 「欠品（入荷即出荷）」「stockout-pass-through」は `LEGACY_QUADRANT_ALIASES` にのみ残す。
+LEGACY_FLOW_QUADRANT_REFINEMENT_TERMS = (
+    "欠品（入荷即出荷）",
+    "stockout-pass-through",
+    "stockoutPassThrough",
+    "QUADRANT_STOCKOUT_PASS_THROUGH",
+    "通過品",
+    "BASIS_ACTUAL",
+    "ACTUAL_BASIS_MONTHS",
+    "REASON_ACTUAL_BASIS",
+    "実績ベース",
+    "demand_window",
+    "{demand_window}",
+    "DEMAND_WINDOW_MONTHS",
+    # 旧 4 区分のランク（通常流動品 = 3）。7 区分では 6
+    "[QUADRANT_NORMAL_FLOW_KEY]: 3",
+)
+
 LEGACY_IDENTIFIERS = (
     "alert_level",
     "alertLevel",
@@ -90,6 +109,18 @@ def test_legacy_alert_identifier_is_absent(identifier):
 
 @pytest.mark.parametrize("term", LEGACY_QUADRANT_TERMS)
 def test_legacy_quadrant_term_is_absent(term):
+    hits = [
+        str(path.relative_to(SRC_ROOT))
+        for path in _scanned_files()
+        if not str(path).replace("\\", "/").endswith(LEGACY_ALIAS_HOLDER)
+        and term in path.read_text(encoding="utf-8")
+    ]
+
+    assert hits == []
+
+
+@pytest.mark.parametrize("term", LEGACY_FLOW_QUADRANT_REFINEMENT_TERMS)
+def test_fqr_c007_legacy_flow_quadrant_refinement_term_is_absent(term):
     hits = [
         str(path.relative_to(SRC_ROOT))
         for path in _scanned_files()

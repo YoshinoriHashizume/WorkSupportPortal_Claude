@@ -32,6 +32,9 @@ class SaveAppSettings(Protocol):
         *,
         warning_days: int,
         stock_stale_days: int,
+        safety_days: int = ...,
+        default_lead_time_days: int = ...,
+        watch_months: int = ...,
         updated_by: object | None = ...,
     ) -> AppSettings: ...
 
