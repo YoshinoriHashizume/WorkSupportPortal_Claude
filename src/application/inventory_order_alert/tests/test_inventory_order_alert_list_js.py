@@ -781,8 +781,24 @@ def test_forecast_line_is_built_from_unit_demand_forecast_and_planned_incoming()
     assert "forecast.currentMonthRemaining" in block  # 当月残（単位合計）
     assert "forecast.monthly" in block and "monthly[offset - 1]" in block  # 翌月〜翌々々月の内示
     assert "unconfirmedTrend" not in block and "getUnconfirmedOrderTrend" not in block
-    assert "plannedIncomingByMonth(processChain, currentMonth)" in block
+    assert "plannedIncomingByMonth(processChain, currentMonth)" in block  # 棒グラフ用に月別の予定入荷は持つ
     assert "offset <= 3" in block  # 翌月〜翌々々月の 3 点
+
+
+def test_forecast_line_does_not_add_planned_incoming_to_the_quantity():
+    """予測線は「在庫 − 内示」だけで描き、予定入荷は足さない（06 design §6.4a、2026/09/22 改訂）。
+
+    在庫切れ予測月（V-221）が発注残を含めないため、線に予定入荷を足すと
+    「線は持ち直しているのに在庫切れ予測の縦線が手前に立つ」表示になっていた。
+    """
+    source = JS_PATH.read_text(encoding="utf-8")
+    block = source.split("function buildForecastStockTrend(", 1)[1].split("function niceGridStep(", 1)[0]
+
+    assert "qty = qty - demandFor(offset);" in block
+    assert "+ (planned[month] || 0)" not in block
+    assert "+ (planned[currentMonth] || 0)" not in block
+    # 棒グラフ用に予定入荷の数量は点に持たせ続ける
+    assert "planned: planned[month] || 0" in block
     planned = source.split("function plannedIncomingByMonth(", 1)[1].split("function buildForecastStockTrend(", 1)[0]
     assert "processChain[0]" in planned  # 完成品直下の工程の発注残
     assert "key < currentMonth" in planned  # 納期超過は当月扱い
@@ -798,7 +814,9 @@ def test_forecast_series_is_drawn_dotted_with_planned_bars_and_stockout_marker()
     assert "ioa-anchored-stock-trend-bar--planned" in chart
     assert "ioa-anchored-stock-trend-stockout-line" in chart
     assert "ioa-anchored-stock-trend-now-line" in chart
-    assert "予測在庫(内示・発注残)" in chart and "予定入荷(発注残)" in chart
+    # 凡例は予測線の前提どおり「内示」のみ。予定入荷は棒として別に示す（2026/09/22 改訂）
+    assert "予測在庫(内示)" in chart and "予定入荷(発注残)" in chart
+    assert "予測在庫(内示・発注残)" not in chart
     assert "renderAnchoredStockChart(anchoredStockTrendSection, slimsAnchoredTrend, incomingTrend, forecastTrend, forecastInfo?.stockoutForecastMonth" in source
 
     css = (Path(__file__).resolve().parents[3] / "static" / "css" / "app.css").read_text(encoding="utf-8")

@@ -686,10 +686,12 @@
       return byMonth;
     }
 
-    // 予測在庫（V-218 予測部分）: 現在の在庫から 当月残 と 翌月〜翌々々月の需要 を引き、予定入荷を足した 3 点。
+    // 予測在庫（V-218 予測部分）: 現在の在庫から 当月残 と 翌月〜翌々々月の需要 を引いた 3 点。
     // 需要は需要予測（照合単位の合計。サーバの在庫切れ予測月と同じ根拠）。
     // 起点の在庫が単位合計なので、行単位の内示推移は使わない。需要なし・在庫未取得は空（06 design §6.4a、2026/09/18 改訂）。
     // 算出根拠は「内示」のみ（07 REQ-FQR-F-002。「なし」と廃止済みの旧根拠は描かない）。
+    // 予定入荷（発注残）は予測値に足さない（2026/09/22 改訂）。在庫切れ予測月（V-221）が発注残を含めないため、
+    // 足すと「線は持ち直しているのに在庫切れ予測の縦線が手前に立つ」表示になる。月別の数量は棒グラフ用に点へ持たせる。
     function buildForecastStockTrend(anchorQty, currentMonth, forecast, processChain) {
       if (anchorQty === null || !forecast || forecast.basis !== "内示" || !currentMonth) {
         return [];
@@ -702,11 +704,11 @@
         return Number(monthly[offset - 1]) || 0;
       };
       const planned = plannedIncomingByMonth(processChain, currentMonth);
-      let qty = Number(anchorQty) - demandFor(0) + (planned[currentMonth] || 0);
+      let qty = Number(anchorQty) - demandFor(0);
       const points = [];
       for (let offset = 1; offset <= 3; offset += 1) {
         const month = addMonthsToKey(currentMonth, offset);
-        qty = qty - demandFor(offset) + (planned[month] || 0);
+        qty = qty - demandFor(offset);
         points.push({ month, qty: Math.round(qty), planned: planned[month] || 0, demand: demandFor(offset) });
       }
       return points;
@@ -995,7 +997,7 @@
         '<span class="ioa-anchored-stock-trend-legend-item ioa-anchored-stock-trend-legend-item--slims">推定在庫(SLIMS起点)</span>' +
         '<span class="ioa-anchored-stock-trend-legend-item ioa-anchored-stock-trend-legend-item--incoming">入荷(MARI)</span>' +
         (forecast.length
-          ? '<span class="ioa-anchored-stock-trend-legend-item ioa-anchored-stock-trend-legend-item--forecast">予測在庫(内示・発注残)</span>' +
+          ? '<span class="ioa-anchored-stock-trend-legend-item ioa-anchored-stock-trend-legend-item--forecast">予測在庫(内示)</span>' +
             '<span class="ioa-anchored-stock-trend-legend-item ioa-anchored-stock-trend-legend-item--planned">予定入荷(発注残)</span>'
           : "");
       container.append(legend);

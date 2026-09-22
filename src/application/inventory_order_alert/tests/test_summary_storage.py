@@ -65,6 +65,57 @@ def test_store_and_load_latest_summary():
 
 
 @pytest.mark.django_db
+def test_store_summary_snapshot_keeps_only_the_latest_generation():
+    """集計スナップショットは最新 1 世代のみ保持する（機能仕様書 §7.2）。
+
+    運用は「取込 → リスクのある行を調べる → 処置」の繰り返しで過去世代を参照しないため、
+    取込のたびに古い世代を消して DB の肥大化を防ぐ。取込履歴（SlimsStockImport）は残す。
+    集計が失敗したときは消さない（REQ-MSV-F-009。test_build_summary_rows.py で検証）。
+    """
+    first = SlimsStockImport.objects.create(file_name="first.csv", row_count=1)
+    store_summary_snapshot(first, [_sample_row()], as_of_date=date(2026, 6, 17))
+    second = SlimsStockImport.objects.create(file_name="second.csv", row_count=1)
+    store_summary_snapshot(second, [_sample_row()], as_of_date=date(2026, 6, 18))
+
+    remaining = InventoryOrderAlertSummarySnapshot.objects.all()
+    assert remaining.count() == 1
+    assert remaining.first().import_record_id == second.id
+    # 取込履歴そのものは消さない（「最終取込」の表示に使う）
+    assert SlimsStockImport.objects.count() == 2
+
+
+@pytest.mark.django_db
+def test_store_summary_snapshot_keeps_previous_generation_when_aggregation_failed():
+    """集計が失敗したときは古い世代を消さない（REQ-MSV-F-009）。直前の成功したデータを壊さないため。"""
+    first = SlimsStockImport.objects.create(file_name="ok.csv", row_count=1)
+    store_summary_snapshot(first, [_sample_row()], as_of_date=date(2026, 6, 17))
+    failed = SlimsStockImport.objects.create(file_name="ng.csv", row_count=1)
+    store_summary_snapshot(failed, [], as_of_date=date(2026, 6, 18), aggregation_error="MARI 在庫の取得に失敗")
+
+    assert InventoryOrderAlertSummarySnapshot.objects.count() == 2
+    kept = InventoryOrderAlertSummarySnapshot.objects.get(import_record=first)
+    assert kept.rows[0]["item_cd"] == "43522-D1020-00"
+
+    # 次の取込が成功すれば、失敗分もろとも古い世代は消える
+    recovered = SlimsStockImport.objects.create(file_name="ok2.csv", row_count=1)
+    store_summary_snapshot(recovered, [_sample_row()], as_of_date=date(2026, 6, 19))
+
+    assert InventoryOrderAlertSummarySnapshot.objects.count() == 1
+    assert InventoryOrderAlertSummarySnapshot.objects.first().import_record_id == recovered.id
+
+
+@pytest.mark.django_db
+def test_store_summary_snapshot_can_be_called_twice_for_the_same_import():
+    """同じ取込に対する再保存（開発用パッチ等）で自分自身を消さない。"""
+    import_record = SlimsStockImport.objects.create(file_name="sample.csv", row_count=1)
+    store_summary_snapshot(import_record, [_sample_row()], as_of_date=date(2026, 6, 17))
+    store_summary_snapshot(import_record, [_sample_row(), _sample_row()], as_of_date=date(2026, 6, 17))
+
+    assert InventoryOrderAlertSummarySnapshot.objects.count() == 1
+    assert InventoryOrderAlertSummarySnapshot.objects.first().total_count == 2
+
+
+@pytest.mark.django_db
 def test_snapshot_roundtrip_keeps_mari_stock_qty():
     import_record = SlimsStockImport.objects.create(file_name="sample.csv", row_count=1)
     store_summary_snapshot(import_record, [_sample_row()], as_of_date=date(2026, 6, 17))

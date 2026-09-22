@@ -29,6 +29,12 @@ def store_summary_snapshot(
             "aggregation_error": aggregation_error,
         },
     )
+    # 最新 1 世代のみ保持する（機能仕様書 §7.2、2026/09/22）。運用は「取込 → リスクのある行を調べる → 処置」の
+    # 繰り返しで過去世代を参照しないため、取込のたびに古い世代を消して JSON の肥大化を防ぐ。
+    # 取込履歴（SlimsStockImport）・確認状態・確認メモは別テーブルで、ここでは消さない。
+    # ただし集計が失敗したときは消さない。直前の成功したスナップショットを壊さないため（REQ-MSV-F-009）。
+    if not aggregation_error:
+        InventoryOrderAlertSummarySnapshot.objects.exclude(pk=snapshot.pk).delete()
     return snapshot
 
 
