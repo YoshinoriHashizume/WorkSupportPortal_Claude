@@ -463,7 +463,7 @@ def _stage3_patches(**overrides):
         "fetch_vendor_by_component": {"X-9065": ("9065", "ミズタニ")},
         "fetch_last_incoming_by_item_vend": {("X-9065", "9065"): date(2025, 4, 2)},
         "fetch_open_purchase_orders_or_warn": ([("PO-1", "X-9065", "9065", date(2026, 8, 5), 100), ("PO-2", "OTHER", "9065", date(2026, 8, 5), 9)], ""),
-        "fetch_item_ordering_profiles_or_warn": ({"X-9065": (3, "4")}, ""),
+        "fetch_item_ordering_profiles_or_warn": ({"X-9065": (3, "4", None), "96160-00500": (None, None, 50)}, ""),
     }
     base.update(overrides)
     return base
@@ -479,8 +479,38 @@ def test_i004_build_summary_rows_attaches_open_orders_and_ordering_profile_witho
     assert row["lead_time_days"] == 3
     assert row["lead_time_source"] == "master"
     assert row["ordering_method"] == "手動発注"
-    for key in ("stockout_risk", "replenishment_qty", "days_until_stockout"):
+    for key in ("stockout_risk", "response_class", "replenishment_qty", "days_until_stockout"):
         assert key not in row
+
+
+def test_srr_i002_rows_carry_safety_stock_and_daily_unconfirmed_orders() -> None:
+    """TC-SRR-I-002: 安全在庫（内作品番）と日次の内示（基準日より後のみ・疎な配列）が行に付く。"""
+    rows = _build_rows_with(
+        {},
+        **_stage3_patches(
+            fetch_unconfirmed_orders_or_warn=(
+                [
+                    ("137", "96160-00500", date(2026, 6, 29), 40),  # 基準日ちょうど → 落ちる
+                    ("137", "96160-00500", date(2026, 6, 20), 10),  # 基準日より前 → 落ちる
+                    ("137", "96160-00500", date(2026, 7, 10), 60),
+                    ("137", "96160-00500", date(2026, 7, 10), 30),  # 同じ日は合算する
+                    ("137", "96160-00500", date(2026, 7, 5), 0),  # 数量 0 は落とす
+                ],
+                "",
+            )
+        ),
+    )
+
+    row = rows[0]
+    assert row["safety_stock"] == 50.0
+    assert row["unconfirmed_order_daily"] == [{"date": "2026-07-10", "qty": 90}]
+
+
+def test_srr_i003_item_master_failure_leaves_safety_stock_at_zero() -> None:
+    """TC-SRR-I-003: 安全在庫が取れなくても取込は止めず、安全在庫なし（0）で続行する。"""
+    rows = _build_rows_with({}, **_stage3_patches(fetch_item_ordering_profiles_or_warn=({}, "品目マスタの取得に失敗: ORA-00942")))
+
+    assert rows[0]["safety_stock"] == 0.0
 
 
 def test_i004_unresolved_level1_has_no_open_orders_and_default_profile() -> None:
@@ -551,7 +581,7 @@ def _chain_patches(**extra):
             [("PO-A", "X-9106", "9106", date(2026, 6, 15), 240), ("PO-B", "X-9133", "9133", date(2026, 10, 5), 10), ("PO-C", "OTHER", "9106", date(2026, 8, 5), 9)],
             "",
         ),
-        fetch_item_ordering_profiles_or_warn=({"X-9133": (0, "5"), "X-9213": (4, "5"), "X-9106": (5, "4")}, ""),
+        fetch_item_ordering_profiles_or_warn=({"X-9133": (0, "5", None), "X-9213": (4, "5", None), "X-9106": (5, "4", None)}, ""),
     )
     base.update(extra)
     return base
@@ -587,3 +617,71 @@ def test_chain_fetch_is_called_once_with_all_roots() -> None:
             p.stop()
 
     assert started["fetch_bom_chain_by_root"].call_count == 1
+
+
+# --- 09_stock-simulation-chart: TC-SSC-I-001〜005 ---
+
+
+def test_ssc_i001_rows_carry_daily_shipment_and_incoming() -> None:
+    """在庫シミュレーション（V-237）の過去側。基準日の30日前〜基準日の疎な配列。"""
+    rows = _build_rows_with(
+        {},
+        **_stage3_patches(
+            fetch_all_shipments=[
+                ("137", "10523-X0A02", date(2026, 6, 20), 10),   # 範囲内（基準日 6/29 の 9 日前）
+                ("137", "10523-X0A02", date(2026, 6, 20), 5),    # 同じ日は合算
+                ("137", "10523-X0A02", date(2026, 5, 29), 99),   # 31 日前 → 範囲外
+                ("137", "10523-X0A02", date(2026, 6, 29), 7),    # 基準日当日
+            ],
+            fetch_incoming_receipts=[("X-9065", "9065", date(2026, 6, 25), 40)],
+        ),
+    )
+
+    row = rows[0]
+    assert row["daily_shipment"] == [{"date": "2026-06-20", "qty": 15}, {"date": "2026-06-29", "qty": 7}]
+    assert row["daily_incoming"] == [{"date": "2026-06-25", "qty": 40}]
+
+
+def test_ssc_i002_rows_carry_planned_incoming_without_overdue() -> None:
+    """予定入荷（V-236）は納期 > 基準日 のみ・発注番号で重複除去済み。"""
+    rows = _build_rows_with(
+        {},
+        **_stage3_patches(
+            fetch_open_purchase_orders_or_warn=(
+                [
+                    ("PO-1", "X-9065", "9065", date(2026, 7, 10), 100),   # 未来 → 含む
+                    ("PO-2", "X-9065", "9065", date(2026, 7, 10), 40),    # 同じ納期は合算
+                    ("PO-3", "X-9065", "9065", date(2026, 6, 10), 70),    # 納期遅れ → 含まない
+                    ("PO-4", "X-9065", "9065", date(2026, 6, 29), 30),    # 基準日当日 → 含まない
+                    ("PO-5", "OTHER", "9065", date(2026, 7, 20), 9),      # 直下の工程でない → 含まない
+                ],
+                "",
+            )
+        ),
+    )
+
+    assert rows[0]["planned_incoming"] == [{"date": "2026-07-10", "qty": 140}]
+
+
+def test_ssc_i003_daily_series_does_not_add_oracle_queries() -> None:
+    """TC-SSC-I-003: 日次化で Oracle の問い合わせ回数は増えない。"""
+    patches = _shipped_pair_patches({}, **_stage3_patches())
+    started = {p.attribute: p.start() for p in patches}
+    try:
+        build_summary_rows(MagicMock(), date(2026, 6, 29))
+    finally:
+        for p in patches:
+            p.stop()
+
+    assert started["fetch_all_shipments"].call_count == 1
+    assert started["fetch_incoming_receipts"].call_count == 1
+    assert started["fetch_open_purchase_orders_or_warn"].call_count == 1
+
+
+def test_ssc_i004_monthly_trends_are_kept() -> None:
+    """月次推移（V-216/V-217）は推定在庫推移（V-218）のために残る。"""
+    rows = _build_rows_with({}, **_stage3_patches(fetch_all_shipments=[("137", "10523-X0A02", date(2026, 6, 20), 10)]))
+
+    row = rows[0]
+    assert len(row["shipment_trend"]) == 24
+    assert len(row["incoming_trend"]) == 24

@@ -118,11 +118,12 @@ def test_summary_api_counts_payload_uses_flow_quadrant_keys():
         "lowFlowNoShipment",
         "normalFlow",
         "unconfirmed",
-        # 06 在庫切れリスク
-        "danger",
-        "caution",
+        # 08 対応区分（TC-SRR-C-008）
+        "orderOverdue",
+        "deliveryCheck",
+        "orderNeeded",
         "watch",
-        "noneRisk",
+        "noneResponse",
     }
     assert result["counts"]["lowFlowNoIncoming"] == 1
 
@@ -283,8 +284,9 @@ def test_dashboard_summary_serializes_counts_and_stock_import():
         "discontinuationCandidate",
         "attention",
         "unconfirmed",
-        "danger",
-        "caution",
+        "orderOverdue",
+        "deliveryCheck",
+        "orderNeeded",
         "watch",
     }
     assert result["stockImport"]["hasData"] is True
@@ -305,8 +307,9 @@ def test_dashboard_summary_without_stock_data():
         "discontinuationCandidate": 0,
         "attention": 0,
         "unconfirmed": 0,
-        "danger": 0,
-        "caution": 0,
+        "orderOverdue": 0,
+        "deliveryCheck": 0,
+        "orderNeeded": 0,
         "watch": 0,
     }
     assert result["stockImport"]["hasData"] is False

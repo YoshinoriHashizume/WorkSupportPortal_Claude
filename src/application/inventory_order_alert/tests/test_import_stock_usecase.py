@@ -42,11 +42,11 @@ def test_a001_import_stock_passes_attach_demand_forecast_as_row_post_processing(
 
     ImportStock(fake_import).execute(b"item,loc,qty\nA,B,1", file_name="sample.csv")
 
-    # 06 で在庫切れリスクを合成したため、渡されるのは需要予測 → 在庫切れリスクの順に適用する後処理
+    # 08 で対応区分に作り直したため、渡されるのは需要予測 → 流動区分 → 対応区分の順に適用する後処理
     assert callable(captured["enrich_rows"])
     enriched = captured["enrich_rows"]([{"cust_code": "100", "item_cd": "X"}], AS_OF)
     assert enriched[0]["demand_forecast_basis"] == "なし"
-    assert enriched[0]["stockout_risk"] == "監視"
+    assert enriched[0]["response_class"] == "対象外"  # 内示なし → 在庫は動かない
 
 
 def test_a001_post_processing_attaches_demand_forecast_to_rows():
@@ -150,17 +150,14 @@ def test_a002_stock_import_info_defaults_to_no_warning():
     assert _stock_info().aggregation_warning == ""
 
 
-# --- 06_stockout-risk: TC-SOR-A-001〜002 ---
+# --- 08_stockout-risk-rework: TC-SRR-I-004（取込の順序） ---
 
 from application.inventory_order_alert.domain.value_objects.flow_facts import (  # noqa: E402
     FLOW_REASON_INCOMING_BELOW_DEMAND,
 )
 from application.inventory_order_alert.domain.value_objects.flow_quadrant import QUADRANT_STOCKOUT  # noqa: E402
 from application.inventory_order_alert.domain.value_objects.stockout_risk import (  # noqa: E402
-    REASON_STOCK_MISSING,
-    REASON_SUPPLY_DELAY,
-    RISK_CAUTION,
-    RISK_DANGER,
+    RESPONSE_ORDER_NEEDED,
 )
 
 
@@ -183,6 +180,8 @@ def _stage3_row() -> dict[str, object]:
             {"month": "2026-11", "qty": 100},
             {"month": "2026-12", "qty": 100},
         ],
+        # 08: 対応区分は日次の内示だけを見る（月次の `unconfirmed_order_trend` は需要予測が使う）
+        "unconfirmed_order_daily": [{"date": "2026-10-01", "qty": 100}],
         "open_purchase_orders": [],
         "open_purchase_orders_unknown": False,
         "lead_time_days": 0,
@@ -202,20 +201,22 @@ def _run_import(load_settings):
     return captured["stored"]
 
 
-def test_a001_import_stock_composes_demand_forecast_then_stockout_risk():
+def test_i004_import_stock_composes_demand_forecast_then_response_class():
     [row] = _run_import(AppSettings)
 
-    # 内示 100/月（当月残 0）、在庫 90 → 10 月に負 → 在庫切れ 2026-10（猶予 14 日 ≤ 既定 LT 5 + 安全 14）、発注残なし → 危険
+    # 在庫 90・内示 10/01 に 100 → 10/01 に負 → 在庫切れ 2026/10/01。既定 LT 5 日 → 発注期限 2026/09/26（未来）→ 要発注
     assert row["demand_forecast_basis"] == BASIS_UNCONFIRMED
     assert row["stockout_forecast_month"] == "2026-10"
-    assert row["stockout_risk"] == RISK_DANGER
-    assert "発注忘れの可能性" in row["stockout_risk_reasons"]
-    assert "仕入先の生産可否を先に確認" in row["stockout_risk_reasons"]
+    assert row["response_class"] == RESPONSE_ORDER_NEEDED
+    assert row["stockout_date"] == "2026/10/01"
+    assert row["order_deadline"] == "2026/09/26"
+    assert "在庫切れ 2026/10/01" in row["response_reasons"]
+    assert "リードタイム未設定" in row["response_reasons"]
     assert row["lead_time_days"] == 5  # 既定リードタイム
 
 
 def test_fqr_i001_import_reapplies_flow_quadrant_after_demand_forecast():
-    """在庫なし・内示ありの行は 需要予測 → 流動区分の引き直し → 在庫切れリスク の順で 欠品 になる（07 design §3.1）。"""
+    """在庫なし・内示ありの行は 需要予測 → 流動区分の引き直し → 対応区分 の順で 欠品 になる（07 design §3.1）。"""
     row = _stage3_row() | {
         "stock_qty": "",
         "last_incoming_date": "2026/09/10",
@@ -234,8 +235,9 @@ def test_fqr_i001_import_reapplies_flow_quadrant_after_demand_forecast():
     assert enriched["flow_quadrant"] == QUADRANT_STOCKOUT
     assert enriched["flow_quadrant_key"] == "stockout"
     assert enriched["flow_reasons"] == [FLOW_REASON_INCOMING_BELOW_DEMAND]
-    # 在庫なしの行は対象外にせず、理由の先頭に「在庫なし」が付く（07 design §2.6）
-    assert enriched["stockout_risk_reasons"][:2] == [REASON_STOCK_MISSING, REASON_SUPPLY_DELAY]
+    # 在庫未取得は 0 として日次で計算する（REQ-SRR-F-002）。10/01 の内示 100 で切れる
+    assert enriched["response_class"] == RESPONSE_ORDER_NEEDED
+    assert enriched["stockout_date"] == "2026/10/01"
 
 
 def test_fqr_i001_import_keeps_four_quadrants_for_rows_with_stock():
@@ -269,12 +271,13 @@ def test_fqr_f008_recent_incoming_days_setting_changes_the_stockout_split():
     assert run(lambda: AppSettings(recent_incoming_days=60))["flow_quadrant"] == QUADRANT_STOCKOUT
 
 
-def test_a002_settings_from_wiring_change_the_boundary():
-    # 安全日数 1・既定 LT 1 なら 猶予 14 日 > 2 日 → 注意
-    [row] = _run_import(lambda: AppSettings(safety_days=1, default_lead_time_days=1))
+def test_a002_default_lead_time_setting_moves_the_order_deadline():
+    """既定リードタイム（設定値）は発注期限（V-233）に効く。安全日数・監視期間は 08 で撤去した。"""
+    [row] = _run_import(lambda: AppSettings(default_lead_time_days=1))
 
-    assert row["stockout_risk"] == RISK_CAUTION
     assert row["lead_time_days"] == 1
+    assert row["stockout_date"] == "2026/10/01"
+    assert row["order_deadline"] == "2026/09/30"  # 在庫切れ日 − 1 日
 
 
 def test_a002_import_stock_without_settings_loader_uses_defaults():
@@ -286,4 +289,4 @@ def test_a002_import_stock_without_settings_loader_uses_defaults():
 
     ImportStock(fake_import).execute(b"x", file_name="sample.csv")
 
-    assert captured["stored"][0]["stockout_risk"] == RISK_DANGER
+    assert captured["stored"][0]["order_deadline"] == "2026/09/26"  # 既定リードタイム 5 日

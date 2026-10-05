@@ -1,4 +1,4 @@
-﻿from __future__ import annotations
+from __future__ import annotations
 
 from pathlib import Path
 
@@ -65,8 +65,9 @@ def test_TC_SHC_X_012_list_js_renders_anchored_stock_chart_with_zero_baseline():
 
 def test_TC_SHC_X_013_anchored_stock_trend_is_not_clamped_to_zero():
     source = JS_PATH.read_text(encoding="utf-8")
-    build_block = source.split("function buildAnchoredStockTrend", 1)[1].split("\n  function ", 1)[0]
-    render_block = source.split("function renderAnchoredStockChart", 1)[1].split("\n  function ", 1)[0]
+    # 関数は IIFE 内の 4 スペースインデント。区切りを誤るとファイル末尾まで拾ってしまう（2026-09-30 修正）
+    build_block = source.split("function buildAnchoredStockTrend", 1)[1].split("\n    function ", 1)[0]
+    render_block = source.split("function renderAnchoredStockChart", 1)[1].split("\n    function ", 1)[0]
 
     # マイナスのまま表示する（クランプしない）合意事項（requirements.md §1.5）。
     assert "Math.max(0," not in build_block
@@ -132,7 +133,7 @@ def test_TC_SHC_X_020_fill_detail_sections_does_not_build_mari_anchored_trend():
     assert "mariAnchor" not in fill_block
     assert "mariAnchoredTrend" not in fill_block
     assert (
-        "renderAnchoredStockChart(anchoredStockTrendSection, slimsAnchoredTrend, incomingTrend, forecastTrend"
+        "renderAnchoredStockChart(anchoredStockTrendSection, slimsAnchoredTrend, incomingTrend)"
         in fill_block
     )
 
@@ -157,8 +158,8 @@ def test_TC_SHC_X_022_chart_scale_includes_incoming_quantities():
     )[0]
 
     assert "incomingQtys" in render_block
-    # 値域は 実績＋予測（points）と入荷・予定入荷の棒を含む（2026/09/18 予測部分の追加）
-    assert "Math.max(1, ...points.map((point) => Number(point.qty) || 0), ...incomingQtys, ...plannedQtys)" in render_block
+    # 値域は実績（points）と入荷の棒を含む（09 で予測部分を撤去）
+    assert "Math.max(1, ...points.map((point) => Number(point.qty) || 0), ...incomingQtys)" in render_block
 
 
 def test_TC_SHC_X_023_legend_shows_incoming_item():
@@ -289,8 +290,8 @@ def test_list_client_js_counts_use_new_quadrant_names():
     assert "lowFlowNoShipment" in source
     assert "supplyRisk" not in source
     assert "excessStockRisk" not in source
-    # 06: 件数サマリは在庫切れリスク
-    assert "危険 ${counts.danger} 件" in source
+    # 08: 件数サマリは対応区分
+    assert "発注遅れ ${counts.orderOverdue} 件" in source
     assert "供給リスク品" not in source
     assert "在庫過剰リスク品" not in source
 
@@ -377,9 +378,9 @@ def test_inventory_order_alert_list_js_updates_table_counts_label():
     source = JS_PATH.read_text(encoding="utf-8")
     assert "ioa-table-counts-left" in source
     assert "ioa-table-counts-right" in source
-    # 06: 件数サマリは在庫切れリスク（危険 / 注意 / 監視 / 対象外）
-    assert "危険 ${counts.danger ?? 0} 件" in source
-    assert "対象外 ${counts.noneRisk ?? 0} 件" in source
+    # 08: 件数サマリは対応区分（発注遅れ / 納期確認 / 要発注 / 要監視 / 対象外）
+    assert "発注遅れ ${counts.orderOverdue ?? 0} 件" in source
+    assert "対象外 ${counts.noneResponse ?? 0} 件" in source
     assert "供給リスク品" not in source
     assert "在庫過剰リスク品" not in source
     assert "supplyRisk" not in source
@@ -445,19 +446,26 @@ def test_inventory_order_alert_list_js_fills_detail_dialog_sections():
     block = source.split("function initLocationDialog(", 1)[1].split("function initAlertRulesDialog", 1)[0]
 
     assert "ioa-detail-item" in block
-    assert "ioa-detail-flow" in block
-    assert "ioa-detail-department" in block
     assert "ioa-detail-condition" not in block
-    # 05 design §6.4: 状況 / 推奨アクション / 判定期間
-    assert "ioa-detail-flow-status" in block
-    assert "ioa-detail-recommended-action" in block
-    assert "ioa-detail-evaluation-period" in block
-    assert "getFlowStatus" in block
-    assert "getRecommendedAction" in block
-    assert "getEvaluationPeriodLabel" in block
-    assert "getFlowConditionLabel" not in block
+    # 10 REQ-DDC-F-008: 流動区分の区分は詳細ダイアログから撤去した（一覧の列・絞り込みには残る）
+    for class_name in (
+        "ioa-detail-flow-quadrant",
+        "ioa-detail-flow-status",
+        "ioa-detail-flow-reasons",
+        "ioa-detail-evaluation-period",
+        "ioa-detail-recommended-action",
+        "ioa-detail-department",
+    ):
+        assert class_name not in block, f"{class_name} が詳細ダイアログの JS に残っている"
+    # 品番情報の中身
     assert "ioa-detail-stock-slims" in block
     assert "ioa-detail-stock-mari" in block
+    # 流動区分由来の文言を引くヘルパーはもう詳細ダイアログから呼ばない（REQ-DDC-F-008）
+    for helper in ("getFlowStatus", "getRecommendedAction", "getEvaluationPeriodLabel", "getFlowConditionLabel"):
+        assert helper not in block, f"{helper} が詳細ダイアログの JS に残っている"
+    # 判定サマリと月別内示は残る
+    assert "renderAssessment" in block
+    assert "renderMonthlyDemand" in block
 
 
 def test_inventory_order_alert_list_js_import_overlay_has_spinner_css():
@@ -714,114 +722,34 @@ def test_stage2_list_client_js_keeps_urgency_text_for_detail_dialog_only():
     assert "ioa-flow-urgency" not in cell
 
 
-def test_stage2_list_js_fills_demand_forecast_section():
-    source = JS_PATH.read_text(encoding="utf-8")
-    block = source.split("function renderDemandForecast(", 1)[1].split("function updateGonenLink(", 1)[0]
-
-    for class_name in ("ioa-detail-demand-basis", "ioa-detail-months-of-stock", "ioa-detail-stockout-month"):
-        assert class_name in source
-    assert "getDemandForecast" in block
-    assert "getUnconfirmedOrderTrend" in block
-    assert "parseAnchorQty" in block
-    assert "renderDemandForecast(custCode, row.dataset.itemCd" in source
 
 
-# --- 06_stockout-risk: TC-SOR-X-009 ---
-
-
-def test_sor_x009_list_client_js_handles_stockout_risk():
+def test_srr_c005_list_client_js_handles_response_class():
     source = CLIENT_JS_PATH.read_text(encoding="utf-8")
 
-    assert 'STOCKOUT_RISK_RANK = { danger: 0, caution: 1, watch: 2, none: 3 }' in source
-    assert "function rowStockoutRiskKey(row)" in source
-    assert 'column === "stockout_risk"' in source
-    assert 'column === "days_until_stockout"' in source
-    assert "nullsLastSortValue(row.daysUntilStockout" in source
-    assert "`stockout-${riskKey}`" in source  # 行の色は在庫切れリスクのみ
-    assert 'params.set("stockout_risk"' in source
+    assert 'RESPONSE_CLASS_RANK = { "order-overdue": 0, "delivery-check": 1, "order-needed": 2, watch: 3, none: 4 }' in source
+    assert "function rowResponseClassKey(row)" in source
+    assert 'column === "response_class"' in source
+    assert 'column === "stockout_date" || column === "order_deadline"' in source
+    assert "`response-${responseKey}`" in source  # 行の色は対応区分のみ
+    assert 'params.set("response_class"' in source
     assert 'params.set("ordering_method"' in source
-    assert '"#ioa-stockout-risk"' in source and '"#ioa-ordering-method"' in source
-    assert "getStockoutRisk(custCode, itemCd)" in source
+    assert '"#ioa-response-class"' in source and '"#ioa-ordering-method"' in source
+    assert "getResponseClass(custCode, itemCd)" in source
     # 判定はサーバ値のみ。JS で発注残やリードタイムを比較しない
-    cell = source.split('if (column.key === "stockout_risk")', 1)[1].split("return `<td", 1)[0]
-    assert "leadTime" not in cell and "replenishment" not in cell
+    cell = source.split('if (column.key === "response_class")', 1)[1].split("return `<td", 1)[0]
+    assert "leadTime" not in cell and "overdueOrderQty" not in cell
 
 
-def test_sor_x009_list_js_fills_stockout_risk_section():
-    source = JS_PATH.read_text(encoding="utf-8")
-    block = source.split("function renderStockoutRisk(", 1)[1].split("function renderDemandForecast(", 1)[0] if "function renderDemandForecast(" in source.split("function renderStockoutRisk(", 1)[1] else source.split("function renderStockoutRisk(", 1)[1]
-
-    assert "getStockoutRisk" in block
-    for class_name in ("ioa-detail-stockout-risk", "ioa-detail-stockout-replenishment", "ioa-detail-stockout-lead-time"):
-        assert class_name in source
-    assert "renderStockoutRisk(custCode, row.dataset.itemCd" in source
 
 
-def test_sor_x011_detail_replenishment_mentions_stale_overdue_and_deadline():
-    """詳細の補充見込みは 長期納期超過 N を除外 / 補充期限より後 N を添える（2026/09/21）。"""
-    source = JS_PATH.read_text(encoding="utf-8")
-    block = source.split("const rep = info.replenishment || {};", 1)[1].split("setDetailText(riskFields.replenishment", 1)[0]
+def test_srr_c009_replenishment_terms_are_gone_from_the_js():
+    """補充見込み・猶予日数・長期納期超過は 08 で撤去した（TC-SRR-C-009）。"""
+    for path in (JS_PATH, CLIENT_JS_PATH):
+        source = path.read_text(encoding="utf-8")
+        for term in ("replenishment", "daysUntilStockout", "shortageQty", "stockoutRiskKey", "補充見込み", "長期納期超過", "猶予日数"):
+            assert term not in source, f"{path.name} に {term} が残っている"
 
-    assert "rep.staleQty" in block
-    assert "長期納期超過" in block
-    assert "補充期限より後" in block
-    assert "在庫切れ予測月より後" not in block
-
-
-# --- 2026/09/18: 推定在庫推移グラフの予測部分（点線） ---
-
-
-def test_forecast_line_is_built_from_unit_demand_forecast_and_planned_incoming():
-    """予測の需要は demandForecast（照合単位の合計。在庫切れ予測月と同じ根拠）。行単位の内示推移は使わない（design §6.4a、2026/09/18 改訂）。"""
-    source = JS_PATH.read_text(encoding="utf-8")
-    block = source.split("function buildForecastStockTrend(", 1)[1].split("function renderAnchoredStockChart(", 1)[0]
-
-    # TC-FQR-C-007: 予測は basis が「内示」のときだけ描く（「なし」と旧値「実績ベース」は空）
-    assert 'forecast.basis !== "内示"' in block
-    assert "forecast.currentMonthRemaining" in block  # 当月残（単位合計）
-    assert "forecast.monthly" in block and "monthly[offset - 1]" in block  # 翌月〜翌々々月の内示
-    assert "unconfirmedTrend" not in block and "getUnconfirmedOrderTrend" not in block
-    assert "plannedIncomingByMonth(processChain, currentMonth)" in block  # 棒グラフ用に月別の予定入荷は持つ
-    assert "offset <= 3" in block  # 翌月〜翌々々月の 3 点
-
-
-def test_forecast_line_does_not_add_planned_incoming_to_the_quantity():
-    """予測線は「在庫 − 内示」だけで描き、予定入荷は足さない（06 design §6.4a、2026/09/22 改訂）。
-
-    在庫切れ予測月（V-221）が発注残を含めないため、線に予定入荷を足すと
-    「線は持ち直しているのに在庫切れ予測の縦線が手前に立つ」表示になっていた。
-    """
-    source = JS_PATH.read_text(encoding="utf-8")
-    block = source.split("function buildForecastStockTrend(", 1)[1].split("function niceGridStep(", 1)[0]
-
-    assert "qty = qty - demandFor(offset);" in block
-    assert "+ (planned[month] || 0)" not in block
-    assert "+ (planned[currentMonth] || 0)" not in block
-    # 棒グラフ用に予定入荷の数量は点に持たせ続ける
-    assert "planned: planned[month] || 0" in block
-    planned = source.split("function plannedIncomingByMonth(", 1)[1].split("function buildForecastStockTrend(", 1)[0]
-    assert "processChain[0]" in planned  # 完成品直下の工程の発注残
-    assert "key < currentMonth" in planned  # 納期超過は当月扱い
-
-
-def test_forecast_series_is_drawn_dotted_with_planned_bars_and_stockout_marker():
-    source = JS_PATH.read_text(encoding="utf-8")
-    chart = source.split("function renderAnchoredStockChart(", 1)[1].split("function fillDetailSections(", 1)[0]
-
-    assert "const points = slims.concat(forecast);" in chart
-    assert 'polyline.style.strokeDasharray = "4 3";' in chart
-    assert "ioa-anchored-stock-trend-line--forecast" in chart
-    assert "ioa-anchored-stock-trend-bar--planned" in chart
-    assert "ioa-anchored-stock-trend-stockout-line" in chart
-    assert "ioa-anchored-stock-trend-now-line" in chart
-    # 凡例は予測線の前提どおり「内示」のみ。予定入荷は棒として別に示す（2026/09/22 改訂）
-    assert "予測在庫(内示)" in chart and "予定入荷(発注残)" in chart
-    assert "予測在庫(内示・発注残)" not in chart
-    assert "renderAnchoredStockChart(anchoredStockTrendSection, slimsAnchoredTrend, incomingTrend, forecastTrend, forecastInfo?.stockoutForecastMonth" in source
-
-    css = (Path(__file__).resolve().parents[3] / "static" / "css" / "app.css").read_text(encoding="utf-8")
-    for class_name in ("ioa-anchored-stock-trend-line--forecast", "ioa-anchored-stock-trend-bar--planned", "ioa-anchored-stock-trend-stockout-line", "ioa-anchored-stock-trend-legend-item--forecast"):
-        assert class_name in css
 
 
 # --- TC-FQR-C-006: 7 区分のランク・理由表示（07_flow-quadrant-refinement） ---
@@ -863,14 +791,23 @@ def test_fqr_c005a_client_js_reads_flow_reasons_by_period():
     assert "flowSelectionKey(state)" in block  # 既定は選択中の判定期間
 
 
-def test_fqr_c006_detail_dialog_lists_flow_reasons():
+def test_ddc_f008_flow_quadrant_section_is_removed_from_the_detail_dialog():
+    """10 REQ-DDC-F-008: 流動区分の区分は詳細ダイアログから撤去（2026-09-30 ユーザー指示）。
+
+    流動区分（S-203）自体は一覧の列・絞り込み・件数サマリ・CSV に残る。
+    """
     source = JS_PATH.read_text(encoding="utf-8")
-
-    assert "ioa-detail-flow-reasons" in source
-    assert "getFlowReasons?.(" in source
-
     template = (Path(__file__).resolve().parents[3] / "templates" / "inventory_order_alert" / "list.html").read_text(encoding="utf-8")
-    assert "ioa-detail-flow-reasons" in template
+
+    for class_name in (
+        "ioa-detail-flow-quadrant",
+        "ioa-detail-flow-status",
+        "ioa-detail-flow-reasons",
+        "ioa-detail-evaluation-period",
+    ):
+        assert class_name not in source
+        assert class_name not in template
+    assert "renderFlowReasons" not in source
 
 
 def test_fqr_c005b_rules_dialog_explains_the_evaluation_period_basis():
@@ -890,3 +827,193 @@ def test_fqr_c006_css_has_badges_for_the_new_quadrants():
 
     for key in ("stockout-no-incoming", "stockout", "discontinuation-candidate"):
         assert f"ioa-flow-quadrant--{key}" in css
+
+
+# --- 09_stock-simulation-chart: TC-SSC-J-001〜005 ---
+
+
+def test_ssc_j003_forecast_part_of_the_monthly_chart_is_removed():
+    """V-218 の予測部分は撤去した（09 REQ-SSC-F-001）。在庫シミュレーション（V-237）へ移した。"""
+    source = JS_PATH.read_text(encoding="utf-8")
+
+    for name in (
+        "buildForecastStockTrend",
+        "plannedIncomingByMonth",
+        "addMonthsToKey",
+        "drawPlannedBars",
+        "drawForecastSeries",
+        "drawStockoutMarker",
+        "予測在庫(内示)",
+        "予定入荷(発注残)",
+    ):
+        assert name not in source, f"{name} が残っている"
+
+
+def test_ssc_j004_monthly_chart_takes_no_forecast_arguments():
+    source = JS_PATH.read_text(encoding="utf-8")
+    chart = source.split("function renderAnchoredStockChart(", 1)[1].split("function fillDetailSections(", 1)[0]
+
+    assert source.count("function renderAnchoredStockChart(sectionEl, slimsSeries, incomingSeries) {") == 1
+    assert "forecastSeries" not in chart
+    assert "stockoutMonth" not in chart
+    assert "const points = slims;" in chart
+
+
+def test_ssc_j001_build_stock_simulation_only_accumulates():
+    """JS は累積するだけ。重複除去・工程の絞り込み・判定はサーバ側（09 design §1・§5.3）。"""
+    source = JS_PATH.read_text(encoding="utf-8")
+    block = source.split("function buildStockSimulation(", 1)[1].split("// 在庫推移（実績。V-218）", 1)[0]
+
+    # 過去は遡り、未来は進む
+    assert "qty = qty + (ship[key] || 0) - (incoming[key] || 0);" in block
+    assert "qty = qty - (demand[key] || 0) + (planned[key] || 0);" in block
+    # 判定ロジックは持ち込まない
+    for term in ("order_cd", "orderCd", "level", "remainingQty", "leadTime", "safetyStock"):
+        assert term not in block, f"{term} が JS に漏れている"
+
+
+def test_ssc_j005_stockout_date_is_not_recalculated_in_js():
+    """在庫切れ日・発注期限・安全在庫はサーバの判定値をそのまま描く。"""
+    source = JS_PATH.read_text(encoding="utf-8")
+    block = source.split("function renderStockSimulation(", 1)[1].split("async function openLocationDialog(", 1)[0]
+
+    assert "info?.stockoutDate" in block
+    assert "info?.orderDeadline" in block
+    assert "info?.safetyStock" in block
+    assert "info?.overdueOrderQty" in block
+
+
+def test_ssc_j002_simulation_chart_draws_marks():
+    source = JS_PATH.read_text(encoding="utf-8")
+    block = source.split("function renderStockSimulationChart(", 1)[1].split("function renderStockSimulation(", 1)[0]
+
+    # 縦線 3 本（取込日・発注期限・在庫切れ）と安全在庫の水平線
+    assert 'drawVerticalLine(marks.asOfDate, "ioa-stock-simulation-now-line", "取込日")' in block
+    assert 'drawVerticalLine(marks.orderDeadline, "ioa-stock-simulation-deadline-line", "発注期限")' in block
+    assert 'drawVerticalLine(marks.stockoutDate, "ioa-stock-simulation-stockout-line", "在庫切れ")' in block
+    assert "ioa-stock-simulation-safety-line" in block
+    # 棒: 予定入荷と納期遅れ（納期遅れは線に足さない）
+    assert "ioa-stock-simulation-planned-bar" in block
+    assert "ioa-stock-simulation-overdue-bar" in block
+    assert "線には足していません" in block
+    # 折れ線は取込日までが実線、以降が点線
+    assert "ioa-stock-simulation-line--actual" in block
+    assert "ioa-stock-simulation-line--outlook" in block
+
+
+def test_ssc_j006_date_axis_shows_every_day_without_the_year():
+    """横軸は範囲内の全日を「月/日」で出す。年は重なるので出さない（2026-09-30 ユーザー指示）。"""
+    source = JS_PATH.read_text(encoding="utf-8")
+    block = source.split("function renderStockSimulationChart(", 1)[1].split("function renderStockSimulation(", 1)[0]
+
+    # "2026-09-18" → "09/18"（slice(5)）。年 2 桁の slice(2) は使わない
+    assert 'point.date.slice(5).replace("-", "/")' in block
+    assert "point.date.slice(2)" not in block
+    # 間引かずに全日ラベルを出す（month-first だけ強調）
+    assert "ioa-stock-simulation-date-label" in block
+    assert "ioa-stock-simulation-date-label--month-first" in block
+    assert "ioa-stock-simulation-month-separator" in block
+
+
+def test_ssc_j007_chart_scrolls_horizontally_with_a_fixed_axis():
+    """全日付を出すと横に長いので、本体は横スクロール・Y 軸は左に固定する。"""
+    source = JS_PATH.read_text(encoding="utf-8")
+    block = source.split("function renderStockSimulationChart(", 1)[1].split("function renderStockSimulation(", 1)[0]
+
+    assert "SIMULATION_DAY_WIDTH" in source
+    assert "const plotWidth = series.length * SIMULATION_DAY_WIDTH;" in block
+    assert 'scroller.className = "ioa-stock-simulation-scroll";' in block
+    assert 'axisWrap.className = "ioa-stock-simulation-axis";' in block
+    # 取込日あたりまでスクロールしておく
+    assert "scroller.scrollLeft" in block
+
+    css = (Path(__file__).resolve().parents[3] / "static" / "css" / "app.css").read_text(encoding="utf-8")
+    # `.ioa-stock-simulation-scroll` は min-width の指定とスクロールの指定の 2 か所に出る
+    blocks = [part.split("}", 1)[0] for part in css.split(".ioa-stock-simulation-scroll {")[1:]]
+    assert any("overflow-x: auto" in part for part in blocks)
+    for class_name in ("ioa-stock-simulation-axis", "ioa-stock-simulation-date-label--month-first", "ioa-stock-simulation-month-separator"):
+        assert class_name in css
+
+
+def test_ssc_j001_client_js_serves_the_simulation_materials():
+    source = CLIENT_JS_PATH.read_text(encoding="utf-8")
+    block = source.split("getResponseClass(custCode, itemCd)", 1)[1].split("getFlowQuadrantLabel", 1)[0]
+
+    for key in ("dailyShipment", "dailyIncoming", "unconfirmedOrderDaily", "plannedIncoming", "asOfDate"):
+        assert key in block
+
+
+def test_ssc_j001_simulation_uses_the_fixed_range_from_the_server():
+    """左右の端はサーバが決めた固定値を使う（品目ごとに変えない）。"""
+    source = JS_PATH.read_text(encoding="utf-8")
+    block = source.split("function buildStockSimulation(", 1)[1].split("// 在庫推移（実績。V-218）", 1)[0]
+
+    assert "series.rangeStart" in block
+    assert "series.rangeEnd" in block
+    # 動きのあった日から端を決めていない
+    assert "if (day && day < first)" not in block
+
+
+# --- 10_detail-dialog-cleanup: TC-DDC-J-001〜004 ---
+
+
+def test_ddc_j001_no_headline_wording_in_the_js():
+    """見出し文は domain が組み立てる。JS に文言を書かない（REQ-DDC-NF-003）。"""
+    source = JS_PATH.read_text(encoding="utf-8")
+
+    for phrase in ("在庫が切れます", "までに発注が必要", "在庫は切れません", "在庫は足ります", "は過ぎています", "を下回ります"):
+        assert phrase not in source, f"文言 {phrase} が JS に漏れている"
+
+
+def test_ddc_j002_render_assessment_only_fills_in_server_values():
+    source = JS_PATH.read_text(encoding="utf-8")
+    block = source.split("function renderAssessment(", 1)[1].split("function renderStockAndOrders(", 1)[0]
+
+    assert "summary?.headline" in block
+    assert "summary?.nextAction" in block
+    assert "summary?.deadlineText" in block
+    assert "summary?.reasons" in block
+    # 判定も文言の組み立てもしない
+    for term in ("stockoutDate", "orderDeadline", "leadTime", "Math."):
+        assert term not in block, f"{term} が判定サマリの描画に漏れている"
+
+
+def test_ddc_j003_demand_forecast_rendering_is_removed():
+    source = JS_PATH.read_text(encoding="utf-8")
+
+    assert "function renderDemandForecast(" not in source
+    assert "function renderResponseClass(" not in source
+    for class_name in ("ioa-detail-months-of-stock", "ioa-detail-stockout-month", "ioa-detail-demand-basis", "ioa-detail-demand-empty"):
+        assert class_name not in source
+    # 月別内示は材料として残す
+    assert "ioa-detail-demand-monthly" in source
+    assert "function renderMonthlyDemand(" in source
+
+
+def test_ddc_j004_process_chain_and_stock_rendering_remain():
+    source = JS_PATH.read_text(encoding="utf-8")
+
+    assert "function renderProcessChain(" in source
+    assert "function renderStockAndOrders(" in source
+    block = source.split("function renderStockAndOrders(", 1)[1].split("function renderMonthlyDemand(", 1)[0]
+    assert "renderProcessChain(info.processChain)" in block
+    assert "riskFields.plannedIncoming" in block
+    assert "在庫の計算に入れていません" in block
+
+
+def test_ddc_j002_client_js_passes_the_summary_through():
+    source = CLIENT_JS_PATH.read_text(encoding="utf-8")
+    block = source.split("getResponseClass(custCode, itemCd)", 1)[1].split("getFlowQuadrantLabel", 1)[0]
+
+    assert "row.assessmentSummary" in block
+
+
+def test_ddc_simulation_note_does_not_repeat_the_summary():
+    """在庫シミュレーション下の注記に在庫切れ日・発注期限を繰り返さない（2026-09-30 ユーザー指示）。"""
+    source = JS_PATH.read_text(encoding="utf-8")
+    block = source.split("function renderStockSimulationChart(", 1)[1].split("function renderStockSimulation(", 1)[0]
+    note_block = block.split("if (note) {", 1)[1].split("}", 1)[0]
+
+    for term in ("在庫切れ日", "発注期限", "納期遅れの発注残", "安全在庫"):
+        assert term not in note_block, f"注記に {term} が残っている（判定サマリと重複）"
+    assert "取り込み直すと表示されます" in note_block

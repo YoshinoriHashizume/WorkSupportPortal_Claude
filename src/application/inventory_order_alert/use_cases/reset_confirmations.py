@@ -22,6 +22,12 @@ def _counts_to_response(counts: RowCounts) -> dict[str, int]:
         "unconfirmed": counts.unconfirmed,
         "inProgress": counts.in_progress,
         "confirmed": counts.confirmed,
+        # 08 対応区分（S-204）
+        "orderOverdue": counts.order_overdue,
+        "deliveryCheck": counts.delivery_check,
+        "orderNeeded": counts.order_needed,
+        "watch": counts.watch,
+        "noneResponse": counts.none_response,
     }
 
 

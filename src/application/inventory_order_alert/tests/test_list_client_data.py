@@ -234,7 +234,7 @@ def test_TC_IOA_DOM_07G_row_to_client_dict_includes_display_and_keys():
     client_row = row_to_client_dict(row)
     assert client_row["cust_code"] == "112"
     assert client_row["item_cd"] == "90249-10112"
-    assert client_row["alertRowClass"] == "stockout-watch"
+    assert client_row["alertRowClass"] == "response-none"
     assert client_row["confirmationStatusKey"] == "unconfirmed"
     assert client_row["display"]["stock_qty"] == "100"
     assert client_row["display"]["flow_quadrant"] == QUADRANT_LOW_FLOW_NO_INCOMING
@@ -264,7 +264,7 @@ def test_TC_IOA_DOM_07H_build_list_client_payload():
     assert len(payload["rows"]) == 2
     assert payload["rows"][0]["item_cd"] == "90249-10112"
     assert payload["defaultPageSize"] == 50
-    assert payload["defaultSortSpecs"] == [{"column": "stockout_risk", "direction": "asc"}]
+    assert payload["defaultSortSpecs"] == [{"column": "response_class", "direction": "asc"}]
     assert len(payload["sortableColumns"]) >= 10
     assert payload["filterOptions"]["custOptions"][0]["value"] == "112"
     assert payload["itemCdOptions"] == ["90249-10112", "ITEM-2"]
@@ -328,23 +328,123 @@ def test_stage2_payload_row_without_forecast_keys_has_none_basis():
     assert row["demandForecast"]["monthly"] == [0, 0, 0]
 
 
-def test_sor_x010_payload_replenishment_includes_stale_qty():
-    """補充見込みに長期納期超過の残数（`replenishment_stale_qty`）を写す。旧行は 0（2026/09/21）。"""
-    row = _stage2_row(replenishment_qty=5, replenishment_later_qty=0, replenishment_stale_qty=400, replenishment_has_overdue=True)
+def test_srr_payload_drops_replenishment_block():
+    """補充見込み系は 08 で撤去した（08 design §2.3/§2.4）。"""
+    row = _stage2_row(replenishment_qty=5, replenishment_stale_qty=400)
 
-    assert _payload([row])["rows"][0]["replenishment"] == {
-        "qty": 5,
-        "laterQty": 0,
-        "staleQty": 400,
-        "earliestDue": "",
-        "hasOverdue": True,
-        "unknown": False,
-    }
-    assert _payload([_row()])["rows"][0]["replenishment"]["staleQty"] == 0
+    client_row = _payload([row])["rows"][0]
+
+    assert "replenishment" not in client_row
+    assert "upstreamOrder" not in client_row
+    assert "daysUntilStockout" not in client_row
+    assert "shortageQty" not in client_row
 
 
 def test_stage2_payload_lists_sort_only_columns_separately():
     payload = _payload([_row()])
 
-    assert payload["sortOnlyColumns"] == [{"key": "months_of_stock", "label": "在庫月数"}, {"key": "days_until_stockout", "label": "猶予日数"}]
+    assert payload["sortOnlyColumns"] == [{"key": "months_of_stock", "label": "在庫月数"}]
     assert "months_of_stock" not in [column["key"] for column in payload["sortableColumns"]]
+
+
+# --- 09_stock-simulation-chart: TC-SSC-P-001/002 ---
+
+
+def test_ssc_p001_payload_carries_daily_series_for_the_simulation():
+    row = _row(
+        daily_shipment=[{"date": "2026-09-10", "qty": 20}],
+        daily_incoming=[{"date": "2026-09-12", "qty": 50}],
+        planned_incoming=[{"date": "2026-10-05", "qty": 50}],
+        unconfirmed_order_daily=[{"date": "2026-10-01", "qty": 60}],
+    )
+
+    client_row = _payload([row])["rows"][0]
+
+    assert client_row["dailyShipment"] == [{"date": "2026-09-10", "qty": 20}]
+    assert client_row["dailyIncoming"] == [{"date": "2026-09-12", "qty": 50}]
+    assert client_row["plannedIncoming"] == [{"date": "2026-10-05", "qty": 50}]
+    assert client_row["unconfirmedOrderDaily"] == [{"date": "2026-10-01", "qty": 60}]
+
+
+def test_ssc_p002_old_snapshot_rows_get_empty_series():
+    """旧スナップショット（キーなし）は空配列。例外にしない。"""
+    client_row = _payload([_row()])["rows"][0]
+
+    for key in ("dailyShipment", "dailyIncoming", "plannedIncoming", "unconfirmedOrderDaily"):
+        assert client_row[key] == []
+
+
+def test_ssc_p002_broken_entries_are_dropped():
+    row = _row(daily_shipment=[{"date": "", "qty": 5}, {"date": "2026-09-10", "qty": 0}, "garbage", {"date": "2026-09-11", "qty": 3}])
+
+    assert _payload([row])["rows"][0]["dailyShipment"] == [{"date": "2026-09-11", "qty": 3}]
+
+
+def test_ssc_payload_carries_the_fixed_simulation_range():
+    """品目によって端が変わらないよう、描画範囲はサーバが決める（REQ-SSC-F-002）。"""
+    from datetime import date
+
+    payload = build_list_client_payload(
+        all_rows=[_row()],
+        filter_options=build_filter_options([_row()]),
+        confirmation_status_choices=list(STATUS_CHOICES),
+        as_of_date=date(2026, 9, 18),
+    )
+
+    assert payload["asOfDate"] == "2026-09-18"
+    assert payload["simulationRange"] == {"start": "2026-08-19", "end": "2026-12-31"}
+
+
+def test_ssc_payload_range_is_empty_without_a_base_date():
+    payload = _payload([_row()])
+
+    assert payload["asOfDate"] == ""
+    assert payload["simulationRange"] == {"start": "", "end": ""}
+
+
+# --- 10_detail-dialog-cleanup: TC-DDC-P-001〜003 ---
+
+
+def test_ddc_p001_payload_carries_the_assessment_summary():
+    from datetime import date
+
+    row = _row(
+        response_class="要発注",
+        stockout_date="2026/10/10",
+        order_deadline="2026/10/05",
+        response_reasons=["在庫切れ 2026/10/10", "発注期限 2026/10/05"],
+    )
+    payload = build_list_client_payload(
+        all_rows=[row],
+        filter_options=build_filter_options([row]),
+        confirmation_status_choices=list(STATUS_CHOICES),
+        as_of_date=date(2026, 9, 18),
+    )
+
+    summary = payload["rows"][0]["assessmentSummary"]
+    assert summary["headline"] == "この品番は 2026/10/10 に在庫が切れます。2026/10/05 までに発注が必要です"
+    assert summary["nextAction"] == "生産管理: 発注期限までに発注する"
+    assert summary["deadlineText"] == "2026/10/05（あと 17 日）"
+    assert summary["reasons"] == ["在庫切れ 2026/10/10", "発注期限 2026/10/05"]
+
+
+def test_ddc_p002_old_snapshot_row_gets_the_safe_headline():
+    from datetime import date
+
+    payload = build_list_client_payload(
+        all_rows=[_row()],
+        filter_options=build_filter_options([_row()]),
+        confirmation_status_choices=list(STATUS_CHOICES),
+        as_of_date=date(2026, 9, 18),
+    )
+
+    summary = payload["rows"][0]["assessmentSummary"]
+    assert summary["headline"] == "在庫は切れません"
+    assert summary["deadlineText"] == ""
+
+
+def test_ddc_p002_without_a_base_date_the_summary_is_empty():
+    """基準日がなければ残り日数を出せないので空にする（例外にしない）。"""
+    summary = _payload([_row()])["rows"][0]["assessmentSummary"]
+
+    assert summary == {"headline": "", "nextAction": "", "deadlineText": "", "reasons": []}

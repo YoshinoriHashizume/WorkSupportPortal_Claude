@@ -71,6 +71,48 @@ LEGACY_IDENTIFIERS = (
     "save_alert_settings",
 )
 
+#: 08_stockout-risk-rework で廃止した識別子（TC-SRR-C-009）。
+#: 旧称「在庫切れリスク」からの写像 `LEGACY_RESPONSE_CLASS_ALIASES` は `stockout_risk.py` にのみ残すため除外する。
+#: 撤去の経緯を書いた日本語コメントは残ってよいので、ここでは識別子だけを見る（利用者に見える文言は別のケースで見る）。
+LEGACY_STOCKOUT_RISK_IDENTIFIERS = (
+    "stockoutRisk",
+    "stockout_risk_key",
+    "stockout_risk_reasons",
+    "STOCKOUT_RISK_RANK",
+    "STOCKOUT_RISK_KEYS",
+    "STOCKOUT_RISK_LABELS",
+    "STOCKOUT_RISKS",
+    "RISK_DANGER",
+    "RISK_CAUTION",
+    "RISK_WATCH",
+    "RISK_NONE",
+    "assess_stockout_risk",
+    "attach_stockout_risk",
+    "StockoutRiskSettings",
+    "to_stockout_risk_settings",
+    # 補充見込み系（V-226 / V-229 / V-230）
+    "replenishment",
+    "ReplenishmentOutlook",
+    "upstream_order_qty",
+    "upstreamOrder",
+    # 猶予日数（V-228）・不足数量
+    "days_until_stockout",
+    "daysUntilStockout",
+    "shortage_qty",
+    "shortageQty",
+    # 安全日数・監視期間
+    "safety_days",
+    "safetyDays",
+    "watch_months",
+    "watchMonths",
+)
+LEGACY_RESPONSE_ALIAS_HOLDER = "domain/value_objects/stockout_risk.py"
+
+#: 画面に出る旧称。テンプレート・CSS・JS の**利用者に見える文言**から消えていること。
+LEGACY_STOCKOUT_RISK_LABELS = ("在庫切れリスク", "補充見込み", "補充期限", "長期納期超過", "猶予日数", "不足数量", "安全日数", "監視期間")
+#: 上の文言を見るのは利用者に届くファイルだけ（Python の設計メモには経緯として残ってよい）。
+USER_FACING_PARTS = ("templates/", "static/")
+
 #: 仕様書・旧名を含むのが正当なマイグレーション・
 #: 「旧識別子が存在しないこと」を書くために旧名を引用するテストは除外する。
 EXCLUDED_PARTS = ("docs", "__pycache__", "migrations", "tests")
@@ -140,6 +182,44 @@ def test_legacy_axis_term_is_absent(term):
     ]
 
     assert hits == []
+
+
+@pytest.mark.parametrize("identifier", LEGACY_STOCKOUT_RISK_IDENTIFIERS)
+def test_srr_c009_legacy_stockout_risk_identifier_is_absent(identifier):
+    """TC-SRR-C-009: 撤去した概念の識別子が残っていないこと。"""
+    hits = [
+        str(path.relative_to(SRC_ROOT))
+        for path in _scanned_files()
+        if not str(path).replace("\\", "/").endswith(LEGACY_RESPONSE_ALIAS_HOLDER)
+        and identifier in path.read_text(encoding="utf-8")
+    ]
+
+    assert hits == []
+
+
+@pytest.mark.parametrize("label", LEGACY_STOCKOUT_RISK_LABELS)
+def test_srr_c009_legacy_label_is_absent_from_user_facing_files(label):
+    """TC-SRR-C-009: 旧称が画面（テンプレート・JS・CSS）に残っていないこと。"""
+    hits = [
+        str(path.relative_to(SRC_ROOT))
+        for path in _scanned_files()
+        if any(part in str(path).replace("\\", "/") for part in USER_FACING_PARTS)
+        and label in path.read_text(encoding="utf-8")
+    ]
+
+    assert hits == []
+
+
+def test_srr_c009_legacy_response_class_names_live_only_in_the_alias_map():
+    """旧区分名（危険 / 注意 / 監視）は互換写像と改訂メモの中だけに残す。"""
+    text = (SRC_ROOT / "application/inventory_order_alert" / LEGACY_RESPONSE_ALIAS_HOLDER).read_text(encoding="utf-8")
+    start = text.index("LEGACY_RESPONSE_CLASS_ALIASES = {")
+    end = text.index("}", start)
+    docstring_end = text.index('"""', text.index('"""') + 3)
+    outside = text[docstring_end:start] + text[end:]
+
+    for term in ('"危険"', '"注意"', '"監視"', '"danger"', '"caution"'):
+        assert term not in outside
 
 
 def test_flow_quadrant_module_mentions_legacy_names_only_in_alias_map():

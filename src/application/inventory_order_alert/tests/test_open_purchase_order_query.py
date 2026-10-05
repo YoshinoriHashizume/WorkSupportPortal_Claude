@@ -97,28 +97,29 @@ def test_i002_or_warn_wraps_oracle_error():
 # --- TC-SOR-I-003: 品目マスタクエリ ---
 
 
-def test_i003_item_master_query_uses_chunked_in_clause():
-    connection, cursor = _connection(["ITEM_CD", "FIXED_LT", "MRP_ODR_TYP"], [("X-9065", 3, "4")])
+def test_srr_i001_item_master_query_returns_safety_stock_in_the_same_query():
+    """TC-SRR-I-001: 安全在庫（V-231）は既存の M_ITEM 問い合わせに列を足して取る。回数は増えない。"""
+    connection, cursor = _connection(["ITEM_CD", "FIXED_LT", "MRP_ODR_TYP", "SAFETY_STOCK"], [("X-9065", 3, "4", 50)])
 
     profiles = fetch_item_ordering_profiles(connection, ["X-9065", "", "Y-9209"])
 
     sql = " ".join(cursor.execute.call_args[0][0].upper().split())
     assert "M_ITEM" in sql
-    assert "FIXED_LT" in sql and "MRP_ODR_TYP" in sql
+    assert "FIXED_LT" in sql and "MRP_ODR_TYP" in sql and "SAFETY_STOCK" in sql
     assert "IN (" in sql
     assert cursor.execute.call_count == 1
-    assert profiles == {"X-9065": (3, "4")}
+    assert profiles == {"X-9065": (3, "4", 50)}
 
 
 def test_i003_item_master_query_is_skipped_for_no_items():
-    connection, cursor = _connection(["ITEM_CD", "FIXED_LT", "MRP_ODR_TYP"], [])
+    connection, cursor = _connection(["ITEM_CD", "FIXED_LT", "MRP_ODR_TYP", "SAFETY_STOCK"], [])
 
     assert fetch_item_ordering_profiles(connection, []) == {}
     assert cursor.execute.call_count == 0
 
 
 def test_i003_item_master_chunks_over_900_items():
-    connection, cursor = _connection(["ITEM_CD", "FIXED_LT", "MRP_ODR_TYP"], [])
+    connection, cursor = _connection(["ITEM_CD", "FIXED_LT", "MRP_ODR_TYP", "SAFETY_STOCK"], [])
 
     fetch_item_ordering_profiles(connection, [f"ITEM-{index:04d}" for index in range(1000)])
 

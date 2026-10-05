@@ -39,9 +39,10 @@
         <p>{{ inventory_order_alert_banner.error_message }}</p>
       {% elif inventory_order_alert_banner.has_alerts %}
         <p>
-          在庫切れリスク
-          危険 <strong>{{ inventory_order_alert_banner.danger }}</strong> 件 /
-          注意 <strong>{{ inventory_order_alert_banner.caution }}</strong> 件 /
+          対応区分
+          発注遅れ <strong>{{ inventory_order_alert_banner.order_overdue }}</strong> 件 /
+          要発注 <strong>{{ inventory_order_alert_banner.order_needed }}</strong> 件 /
+          納期確認 <strong>{{ inventory_order_alert_banner.delivery_check }}</strong> 件 /
           未確認 <strong>{{ inventory_order_alert_banner.unconfirmed }}</strong> 件
         </p>
         <p class="inventory-order-alert-banner-condition muted">

@@ -28,9 +28,9 @@ from application.inventory_order_alert.domain.value_objects.recommended_action i
 from application.inventory_order_alert.domain.value_objects.slims_stock import SlimsStockLocationLine
 from application.inventory_order_alert.domain.value_objects.ordering_profile import ORDERING_METHOD_KEYS, ORDERING_UNKNOWN
 from application.inventory_order_alert.domain.value_objects.stockout_risk import (
-    STOCKOUT_RISK_KEYS,
-    row_stockout_risk,
-    stockout_risk_sort_rank,
+    RESPONSE_CLASS_KEYS,
+    response_class_sort_rank,
+    row_response_class,
 )
 from application.inventory_order_alert.domain.value_objects.stock_join import attach_stock_fields
 
@@ -151,7 +151,7 @@ def filter_summary_rows(rows: list[dict[str, object]], query: ListQuery) -> list
             continue
         if query.attention_only and quadrant == QUADRANT_NORMAL_FLOW:
             continue
-        if query.stockout_risk and STOCKOUT_RISK_KEYS[row_stockout_risk(row)] != query.stockout_risk:
+        if query.response_class and RESPONSE_CLASS_KEYS[row_response_class(row)] != query.response_class:
             continue
         if query.ordering_method and ORDERING_METHOD_KEYS.get(str(row.get("ordering_method") or ORDERING_UNKNOWN), "unknown") != query.ordering_method:
             continue
@@ -161,14 +161,29 @@ def filter_summary_rows(rows: list[dict[str, object]], query: ListQuery) -> list
     return filtered
 
 
-def sort_summary_rows(rows: list[dict[str, object]]) -> list[dict[str, object]]:
-    """既定の並び: 在庫切れリスク → 猶予日数（空は末尾）→ 流動区分ランク → 出荷数量降順（06 design §6.4）。"""
+def _date_order(value: object) -> tuple[int, int]:
+    """日付文字列を並び替えキーにする。空は末尾（08 design §2.5）。"""
+    text = str(value or "").strip()
+    if not text:
+        return (1, 0)
+    try:
+        return (0, parse_optional_ymd(text).toordinal())
+    except ValueError:
+        return (1, 0)
 
-    def sort_key(row: dict[str, object]) -> tuple[int, int, int, int, int]:
+
+def sort_summary_rows(rows: list[dict[str, object]]) -> list[dict[str, object]]:
+    """既定の並び: 対応区分 → 発注期限（空は末尾）→ 在庫切れ日 → 流動区分ランク → 出荷数量降順（08 design §2.5）。"""
+
+    def sort_key(row: dict[str, object]) -> tuple:
         quadrant = str(row.get("flow_quadrant") or QUADRANT_NORMAL_FLOW)
         qty = int(row.get("post_shipment_total_qty") or 0)
-        days = row.get("days_until_stockout")
-        has_days = isinstance(days, (int, float)) and not isinstance(days, bool)
-        return (stockout_risk_sort_rank(row), 0 if has_days else 1, int(days) if has_days else 0, flow_quadrant_sort_rank(quadrant), -qty)
+        return (
+            response_class_sort_rank(row),
+            _date_order(row.get("order_deadline")),
+            _date_order(row.get("stockout_date")),
+            flow_quadrant_sort_rank(quadrant),
+            -qty,
+        )
 
     return sorted(rows, key=sort_key)

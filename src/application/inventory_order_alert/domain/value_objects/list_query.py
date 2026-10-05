@@ -6,7 +6,11 @@ from datetime import date
 from application.inventory_order_alert.domain.value_objects.app_settings import AppSettings
 from application.inventory_order_alert.domain.value_objects.dates import parse_optional_ymd
 from application.inventory_order_alert.domain.value_objects.ordering_profile import ORDERING_METHOD_KEYS
-from application.inventory_order_alert.domain.value_objects.stockout_risk import STOCKOUT_RISK_KEYS, STOCKOUT_RISK_LABELS
+from application.inventory_order_alert.domain.value_objects.stockout_risk import (
+    LEGACY_RESPONSE_CLASS_ALIASES,
+    RESPONSE_CLASS_KEYS,
+    RESPONSE_CLASS_LABELS,
+)
 from application.inventory_order_alert.domain.value_objects.flow_quadrant import (
     DEFAULT_EVALUATION_PERIOD,
     EVALUATION_PERIODS,
@@ -27,8 +31,8 @@ class ListQuery:
     flow_selection: FlowSelection = REFERENCE_FLOW_SELECTION
     flow_quadrant: str = ""
     attention_only: bool = False
-    #: 在庫切れリスク（S-204）のキー（danger / caution / watch / none）。空は絞り込みなし
-    stockout_risk: str = ""
+    #: 対応区分（S-204）のキー（order-overdue / delivery-check / order-needed / watch / none）。空は絞り込みなし
+    response_class: str = ""
     #: 発注方式（V-227）のキー（manual / mrp / unknown）。空は絞り込みなし
     ordering_method: str = ""
 
@@ -62,14 +66,15 @@ def parse_flow_quadrant(params: dict[str, str]) -> str:
     return ""
 
 
-def parse_stockout_risk(params: dict[str, str]) -> str:
-    """在庫切れリスクの絞り込みキー。ラベル（危険 等）も受け付ける。未知は空。"""
-    value = params.get("stockout_risk", "").strip()
-    if value in STOCKOUT_RISK_LABELS:
+def parse_response_class(params: dict[str, str]) -> str:
+    """対応区分の絞り込みキー。ラベル（要発注 等）と旧キー（danger 等）も受け付ける。未知は空。"""
+    value = params.get("response_class", "").strip() or params.get("stockout_risk", "").strip()
+    if value in RESPONSE_CLASS_LABELS:
         return value
-    if value in STOCKOUT_RISK_KEYS:
-        return STOCKOUT_RISK_KEYS[value]
-    return ""
+    if value in RESPONSE_CLASS_KEYS:
+        return RESPONSE_CLASS_KEYS[value]
+    legacy = LEGACY_RESPONSE_CLASS_ALIASES.get(value)
+    return RESPONSE_CLASS_KEYS[legacy] if legacy else ""
 
 
 def parse_ordering_method(params: dict[str, str]) -> str:
@@ -90,7 +95,7 @@ def parse_list_query(params: dict[str, str], *, today: date | None = None) -> Li
         flow_selection=parse_flow_selection(params),
         flow_quadrant=parse_flow_quadrant(params),
         attention_only=params.get("attentionOnly", "false").lower() in {"true", "1", "on"},
-        stockout_risk=parse_stockout_risk(params),
+        response_class=parse_response_class(params),
         ordering_method=parse_ordering_method(params),
     )
 

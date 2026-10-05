@@ -176,9 +176,7 @@ def test_api_settings_get_returns_current_settings(client, admin_user):
     assert set(payload["settings"]) == {
         "warningDays",
         "stockStaleDays",
-        "safetyDays",
         "defaultLeadTimeDays",
-        "watchMonths",
         "recentIncomingDays",
     }
 

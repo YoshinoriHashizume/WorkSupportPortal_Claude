@@ -27,10 +27,8 @@ class InventoryOrderAlertSettings(models.Model):
     # 旧アラートレベル方式の残置カラム（未使用）。重点は低流動品（入荷なし）に置き換わった（02 design §5.3、05 で改称）。
     critical_enabled = models.BooleanField(default=True)
     stock_stale_days = models.PositiveIntegerField(default=7)
-    # 在庫切れリスク（S-204）の閾値（06 design §5.2）。判定は取込時に行うため、変更は次回取込から反映する
-    safety_days = models.PositiveIntegerField(default=14)
+    # 対応区分（S-204）の既定リードタイム（08 design §2.4）。判定は取込時に行うため、変更は次回取込から反映する
     default_lead_time_days = models.PositiveIntegerField(default=5)
-    watch_months = models.PositiveIntegerField(default=6)
     updated_at = models.DateTimeField(auto_now=True)
     updated_by = models.ForeignKey(
         settings.AUTH_USER_MODEL,

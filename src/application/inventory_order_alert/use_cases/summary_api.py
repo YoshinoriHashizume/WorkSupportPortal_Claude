@@ -63,11 +63,12 @@ def _counts_payload(counts: RowCounts) -> dict[str, int]:
         "lowFlowNoShipment": counts.low_flow_no_shipment,
         "normalFlow": counts.normal_flow,
         "unconfirmed": counts.unconfirmed,
-        # 06 在庫切れリスク
-        "danger": counts.danger,
-        "caution": counts.caution,
+        # 08 対応区分（S-204）
+        "orderOverdue": counts.order_overdue,
+        "deliveryCheck": counts.delivery_check,
+        "orderNeeded": counts.order_needed,
         "watch": counts.watch,
-        "noneRisk": counts.none_risk,
+        "noneResponse": counts.none_response,
     }
 
 
@@ -186,8 +187,9 @@ def dashboard_summary_payload(
             "discontinuationCandidate": context.discontinuation_candidate,
             "attention": context.attention,
             "unconfirmed": context.unconfirmed,
-            "danger": context.danger,
-            "caution": context.caution,
+            "orderOverdue": context.order_overdue,
+            "deliveryCheck": context.delivery_check,
+            "orderNeeded": context.order_needed,
             "watch": context.watch,
         },
         "stockImport": {

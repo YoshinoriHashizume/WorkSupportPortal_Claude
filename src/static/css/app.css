@@ -1268,7 +1268,7 @@ body.portal-app-page .portal-alert-rules-select {
   font-weight: 600;
   white-space: nowrap;
 }
-/* 在庫なしの 3 区分（T-209/T-210）はバッジで目立たせる。行の色は在庫切れリスクのみ（07 design §5.1）。 */
+/* 在庫なしの 3 区分（T-209/T-210）はバッジで目立たせる。行の色は対応区分のみ（08 design §5）。 */
 .inventory-order-alert-page .ioa-flow-quadrant--stockout-no-incoming,
 .inventory-order-alert-page .ioa-flow-quadrant--stockout,
 .inventory-order-alert-page .ioa-flow-quadrant--discontinuation-candidate {
@@ -1293,47 +1293,54 @@ body.portal-app-page .portal-alert-rules-select {
   margin: 0;
   padding-left: 1.2em;
 }
-/* 在庫切れリスク（S-204）のセル・バッジ（06 design §6.4）。 */
-.inventory-order-alert-page .ioa-stockout-risk {
+/* 対応区分（S-204）のセル・バッジ（08 design §5）。 */
+.inventory-order-alert-page .ioa-response-class {
   display: inline-block;
   padding: 0 8px;
   border-radius: 999px;
   font-weight: 700;
   white-space: nowrap;
 }
-.inventory-order-alert-page .ioa-stockout-risk--danger {
+.inventory-order-alert-page .ioa-response-class--order-overdue {
   background: #c62828;
   color: #fff;
 }
-.inventory-order-alert-page .ioa-stockout-risk--caution {
+.inventory-order-alert-page .ioa-response-class--delivery-check {
   background: #f59e0b;
   color: #1f2937;
 }
-.inventory-order-alert-page .ioa-stockout-risk--watch {
+.inventory-order-alert-page .ioa-response-class--order-needed {
+  background: #fbbf24;
+  color: #1f2937;
+}
+.inventory-order-alert-page .ioa-response-class--watch {
   background: #e2e8f0;
   color: #334155;
 }
-/* 行の背景色は 確認状態 > 在庫切れリスク のみ（06 design §6.4、2026/09/18 改訂）。監視・対象外は色なし。 */
-.alert-row--stockout-danger,
-body.inventory-order-alert-page .ioa-table tbody tr.alert-row--stockout-danger.ioa-data-row {
+/* 行の背景色は 確認状態 > 対応区分 のみ（08 design §5）。要監視・対象外は色なし。 */
+.alert-row--response-order-overdue,
+body.inventory-order-alert-page .ioa-table tbody tr.alert-row--response-order-overdue.ioa-data-row {
   background: #fde8e8;
 }
-.alert-row--stockout-caution,
-body.inventory-order-alert-page .ioa-table tbody tr.alert-row--stockout-caution.ioa-data-row {
+.alert-row--response-delivery-check,
+body.inventory-order-alert-page .ioa-table tbody tr.alert-row--response-delivery-check.ioa-data-row,
+.alert-row--response-order-needed,
+body.inventory-order-alert-page .ioa-table tbody tr.alert-row--response-order-needed.ioa-data-row {
   background: #fff8e1;
 }
-.inventory-order-alert-page .ioa-table tbody tr.alert-row--stockout-danger.ioa-data-row:hover {
+.inventory-order-alert-page .ioa-table tbody tr.alert-row--response-order-overdue.ioa-data-row:hover {
   background: #fecaca;
 }
-.inventory-order-alert-page .ioa-table tbody tr.alert-row--stockout-caution.ioa-data-row:hover {
+.inventory-order-alert-page .ioa-table tbody tr.alert-row--response-delivery-check.ioa-data-row:hover,
+.inventory-order-alert-page .ioa-table tbody tr.alert-row--response-order-needed.ioa-data-row:hover {
   background: #fde68a;
 }
-.inventory-order-alert-page .ioa-table tbody tr.alert-row--stockout-watch.ioa-data-row:hover,
-.inventory-order-alert-page .ioa-table tbody tr.alert-row--stockout-none.ioa-data-row:hover {
+.inventory-order-alert-page .ioa-table tbody tr.alert-row--response-watch.ioa-data-row:hover,
+.inventory-order-alert-page .ioa-table tbody tr.alert-row--response-none.ioa-data-row:hover {
   background: #f1f5f9;
 }
 
-body.inventory-order-alert-page .ioa-detail-stockout-risk-fields {
+body.inventory-order-alert-page .ioa-detail-response-class-fields {
   grid-template-columns: 11em minmax(0, 1fr);
 }
 body.inventory-order-alert-page .ioa-detail-process-chain-wrap {
@@ -1848,23 +1855,24 @@ body.inventory-order-alert-page .ioa-detail-section-title {
   font-weight: 700;
   color: #334155;
 }
-/* 詳細ダイアログの区分（品目 / 流動区分 / 在庫 / 出荷推移 / メモ）。design.md §6.3・§6.5 */
+/* 詳細ダイアログの区分（品目 / 在庫と発注残 / 在庫内訳 / 実績グラフ / メモ）。design.md §6.3・§6.5
+   流動区分の区分は 2026-09-30 に撤去（10 REQ-DDC-F-008）。 */
 body.inventory-order-alert-page .ioa-detail-item-section,
-body.inventory-order-alert-page .ioa-detail-flow-section,
+body.inventory-order-alert-page .ioa-detail-stock-fields-section,
 body.inventory-order-alert-page .ioa-detail-stock-section,
 body.inventory-order-alert-page .ioa-detail-anchored-stock-trend-section,
 body.inventory-order-alert-page .ioa-detail-memo-section {
   display: grid;
   gap: 8px;
 }
-/* 品目 / 流動区分 はカード枠で囲んで横並びにする（詳細ダイアログ上部の余白を詰める）。 */
+/* 品目 / 在庫と発注残 はカード枠で囲んで横並びにする。 */
 body.inventory-order-alert-page .ioa-detail-columns {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 12px;
 }
 body.inventory-order-alert-page .ioa-detail-columns > .ioa-detail-item-section,
-body.inventory-order-alert-page .ioa-detail-columns > .ioa-detail-flow-section {
+body.inventory-order-alert-page .ioa-detail-columns > .ioa-detail-stock-fields-section {
   align-content: start;
   padding: 12px;
   border: 1px solid #cbd5e1;
@@ -1915,45 +1923,6 @@ body.inventory-order-alert-page .ioa-anchored-stock-trend-zero-line {
 body.inventory-order-alert-page .ioa-anchored-stock-trend-line {
   fill: none;
   stroke-width: 1.5;
-}
-body.inventory-order-alert-page .ioa-anchored-stock-trend-line--forecast {
-  fill: none;
-  stroke: #7c3aed;
-  stroke-width: 1.6;
-}
-body.inventory-order-alert-page .ioa-anchored-stock-trend-point--forecast {
-  fill: #7c3aed;
-}
-body.inventory-order-alert-page .ioa-anchored-stock-trend-bar--planned {
-  fill: #c4b5fd;
-  fill-opacity: 0.6;
-  stroke: #7c3aed;
-  stroke-dasharray: 2 2;
-}
-body.inventory-order-alert-page .ioa-anchored-stock-trend-now-line {
-  stroke: #94a3b8;
-  stroke-width: 1;
-}
-body.inventory-order-alert-page .ioa-anchored-stock-trend-stockout-line {
-  stroke: #c62828;
-  stroke-width: 1.2;
-  stroke-dasharray: 3 3;
-}
-body.inventory-order-alert-page .ioa-anchored-stock-trend-stockout-label {
-  fill: #c62828;
-  font-size: 9px;
-}
-body.inventory-order-alert-page .ioa-anchored-stock-trend-legend-item--forecast::before {
-  background: #7c3aed;
-}
-body.inventory-order-alert-page .ioa-anchored-stock-trend-legend-item--forecast::before {
-  background: repeating-linear-gradient(90deg, #7c3aed 0 3px, transparent 3px 5px);
-}
-body.inventory-order-alert-page .ioa-anchored-stock-trend-legend-item--planned::before {
-  width: 9px;
-  height: 9px;
-  background: #c4b5fd;
-  border: 1px dashed #7c3aed;
 }
 body.inventory-order-alert-page .ioa-anchored-stock-trend-line--slims {
   stroke: #4f46e5;
@@ -3469,4 +3438,180 @@ body.portal-app-page.shipment-trend-page .st-alert-rules-actions {
 .asset-inventory-page .aiv-asp-import-message.is-error {
   background: #fee2e2;
   color: #991b1b;
+}
+
+/* 在庫シミュレーション（V-237）の日次グラフ（09 design §5.4）。 */
+/* 全日付を出すため本体は横スクロール。Y 軸は左に固定する（2026-09-30 ユーザー指示）。
+   `.ioa-location-content` は display:grid のため、グリッド項目の既定 min-width:auto によって
+   横長の SVG がダイアログごと押し広げてしまう。min-width:0 を与えて内側の overflow-x に閉じ込め、
+   **スクロールバーがグラフだけに出る**ようにする（2026-09-30 修正）。 */
+body.inventory-order-alert-page .ioa-location-content > * {
+  min-width: 0;
+}
+body.inventory-order-alert-page .ioa-detail-stock-simulation-section,
+body.inventory-order-alert-page .ioa-detail-stock-simulation-chart,
+body.inventory-order-alert-page .ioa-stock-simulation-scroll {
+  min-width: 0;
+  max-width: 100%;
+}
+body.inventory-order-alert-page .ioa-detail-stock-simulation-chart {
+  margin-top: 6px;
+  position: relative;
+  padding-left: 46px;
+}
+body.inventory-order-alert-page .ioa-stock-simulation-axis {
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: 46px;
+  background: #fff;
+  z-index: 2;
+  pointer-events: none;
+}
+body.inventory-order-alert-page .ioa-stock-simulation-axis-svg {
+  display: block;
+}
+body.inventory-order-alert-page .ioa-stock-simulation-scroll {
+  overflow-x: auto;
+  overflow-y: hidden;
+}
+body.inventory-order-alert-page .ioa-stock-simulation-svg {
+  display: block;
+}
+body.inventory-order-alert-page .ioa-stock-simulation-axis-label {
+  font-size: 9px;
+  fill: #64748b;
+}
+/* 横軸の日付。年は出さず「月/日」だけ（重なりを避けるため） */
+body.inventory-order-alert-page .ioa-stock-simulation-date-label {
+  font-size: 8px;
+  fill: #94a3b8;
+  text-anchor: middle;
+}
+body.inventory-order-alert-page .ioa-stock-simulation-date-label--month-first {
+  fill: #334155;
+  font-weight: 700;
+}
+body.inventory-order-alert-page .ioa-stock-simulation-month-separator {
+  stroke: #cbd5e1;
+  stroke-width: 1;
+}
+body.inventory-order-alert-page .ioa-stock-simulation-grid-line {
+  stroke: #e2e8f0;
+  stroke-width: 1;
+}
+body.inventory-order-alert-page .ioa-stock-simulation-zero-line {
+  stroke: #94a3b8;
+  stroke-width: 1;
+  stroke-dasharray: 3 3;
+}
+body.inventory-order-alert-page .ioa-stock-simulation-line {
+  fill: none;
+  stroke-width: 1.6;
+}
+/* 取込日まで＝実績（実線）、以降＝見通し（点線） */
+body.inventory-order-alert-page .ioa-stock-simulation-line--actual {
+  stroke: #4f46e5;
+}
+body.inventory-order-alert-page .ioa-stock-simulation-line--outlook {
+  stroke: #7c3aed;
+  stroke-dasharray: 4 3;
+}
+/* 予定入荷（V-236）。納期の日に立てる */
+body.inventory-order-alert-page .ioa-stock-simulation-planned-bar {
+  fill: #c4b5fd;
+  fill-opacity: 0.6;
+  stroke: #7c3aed;
+  stroke-dasharray: 2 2;
+}
+/* 納期遅れの発注残。線には加算しないので色を分ける（REQ-SSC-F-003） */
+body.inventory-order-alert-page .ioa-stock-simulation-overdue-bar {
+  fill: #fecaca;
+  fill-opacity: 0.7;
+  stroke: #c62828;
+  stroke-dasharray: 2 2;
+}
+body.inventory-order-alert-page .ioa-stock-simulation-now-line {
+  stroke: #94a3b8;
+  stroke-width: 1;
+}
+body.inventory-order-alert-page .ioa-stock-simulation-now-line-label {
+  fill: #64748b;
+  font-size: 9px;
+}
+body.inventory-order-alert-page .ioa-stock-simulation-stockout-line {
+  stroke: #c62828;
+  stroke-width: 1.2;
+  stroke-dasharray: 3 3;
+}
+body.inventory-order-alert-page .ioa-stock-simulation-stockout-line-label {
+  fill: #c62828;
+  font-size: 9px;
+}
+body.inventory-order-alert-page .ioa-stock-simulation-deadline-line {
+  stroke: #d97706;
+  stroke-width: 1.2;
+  stroke-dasharray: 3 3;
+}
+body.inventory-order-alert-page .ioa-stock-simulation-deadline-line-label {
+  fill: #d97706;
+  font-size: 9px;
+}
+/* 安全在庫（V-231）の水準線 */
+body.inventory-order-alert-page .ioa-stock-simulation-safety-line {
+  stroke: #64748b;
+  stroke-width: 1;
+  stroke-dasharray: 6 3;
+}
+body.inventory-order-alert-page .ioa-stock-simulation-safety-label {
+  fill: #64748b;
+  font-size: 8px;
+}
+
+/* 判定サマリ（T-211）。詳細ダイアログ先頭の結論（10 design §3.2）。 */
+body.inventory-order-alert-page .ioa-detail-assessment-section {
+  border: 1px solid #cbd5e1;
+  border-left-width: 4px;
+  border-radius: 6px;
+  padding: 10px 14px;
+  margin-bottom: 14px;
+  background: #f8fafc;
+}
+body.inventory-order-alert-page .ioa-detail-assessment-headline {
+  margin: 0 0 8px;
+  font-size: 15px;
+  font-weight: 700;
+  line-height: 1.5;
+  color: #1f2937;
+}
+/* 対応区分ごとに左の縁と見出しの色を変える（一覧の行の色と揃える） */
+body.inventory-order-alert-page .ioa-detail-assessment-section:has(.ioa-detail-assessment-headline--order-overdue) {
+  border-left-color: #c62828;
+  background: #fef2f2;
+}
+body.inventory-order-alert-page .ioa-detail-assessment-headline--order-overdue {
+  color: #9c0006;
+}
+body.inventory-order-alert-page .ioa-detail-assessment-section:has(.ioa-detail-assessment-headline--order-needed),
+body.inventory-order-alert-page .ioa-detail-assessment-section:has(.ioa-detail-assessment-headline--delivery-check) {
+  border-left-color: #d97706;
+  background: #fffbeb;
+}
+body.inventory-order-alert-page .ioa-detail-assessment-headline--order-needed,
+body.inventory-order-alert-page .ioa-detail-assessment-headline--delivery-check {
+  color: #9c6500;
+}
+body.inventory-order-alert-page .ioa-detail-assessment-section:has(.ioa-detail-assessment-headline--watch) {
+  border-left-color: #64748b;
+}
+body.inventory-order-alert-page .ioa-detail-assessment-section:has(.ioa-detail-assessment-headline--none) {
+  border-left-color: #94a3b8;
+}
+body.inventory-order-alert-page .ioa-detail-assessment-fields {
+  grid-template-columns: 9em minmax(0, 1fr);
+  margin: 0;
+}
+body.inventory-order-alert-page .ioa-detail-assessment-reasons {
+  margin: 0;
+  padding-left: 1.2em;
 }

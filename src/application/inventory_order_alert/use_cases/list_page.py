@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from datetime import date
 from dataclasses import dataclass
 
 from application.inventory_order_alert.domain.value_objects.confirmation import STATUS_CHOICES, confirmation_status_key
@@ -45,7 +46,7 @@ from application.inventory_order_alert.domain.value_objects.recommended_action i
 )
 from application.inventory_order_alert.domain.value_objects.row_display import row_alert_class
 from application.inventory_order_alert.domain.value_objects.ordering_profile import ORDERING_METHOD_KEYS, ORDERING_METHODS
-from application.inventory_order_alert.domain.value_objects.stockout_risk import STOCKOUT_RISK_KEYS, STOCKOUT_RISKS
+from application.inventory_order_alert.domain.value_objects.stockout_risk import RESPONSE_CLASS_KEYS, RESPONSE_CLASSES
 
 
 @dataclass(frozen=True)
@@ -87,15 +88,17 @@ class ListPageContext:
     #: 判定期間セレクタの選択肢（1/3/5 年）。05 design §6.3
     evaluation_periods: list[EvaluationPeriod]
     flow_quadrant_filter: str
-    #: 06: 在庫切れリスク・発注方式の絞り込み（キー）。選択肢はテンプレートが固定で持つ
-    stockout_risk_filter: str
+    #: 08: 対応区分・発注方式の絞り込み（キー）。選択肢はテンプレートが固定で持つ
+    response_class_filter: str
     ordering_method_filter: str
-    stockout_risk_options: list[tuple[str, str]]
+    response_class_options: list[tuple[str, str]]
     ordering_method_options: list[tuple[str, str]]
     flow_quadrant_rule_rows: list[FlowQuadrantRuleRow]
     #: 一覧ペイロード（`build_list_client_payload`）に渡す推奨アクション定義（上書き適用済み）
     recommended_actions: RecommendedActions
     test_data_warning: bool
+    #: 09: 在庫シミュレーション（V-237）の起点になる基準日
+    as_of_date: date | None = None
 
 
 def _rows_for_template(rows: list[dict[str, object]]) -> list[dict[str, object]]:
@@ -168,8 +171,8 @@ class ListPage:
 
         # 判定期間は利用者の選択で決まるため、読込時の既定判定条件から引き直す（05 design §3.1）。
         list_query = parse_list_query(query_params)
+        as_of_date = (summary.as_of_date if summary else None) or list_query.as_of_date
         if all_rows:
-            as_of_date = (summary.as_of_date if summary else None) or list_query.as_of_date
             all_rows = apply_flow_quadrants_to_rows(
                 all_rows,
                 as_of_date=as_of_date,
@@ -202,7 +205,7 @@ class ListPage:
                     filter_params=list_filter,
                     flow_selection=list_query.flow_selection,
                     flow_quadrant=list_query.flow_quadrant,
-                    stockout_risk=list_query.stockout_risk,
+                    response_class=list_query.response_class,
                     ordering_method=list_query.ordering_method,
                     page=1,
                     sort_specs=single_column_sort_specs(table_params, column),
@@ -219,7 +222,7 @@ class ListPage:
                     filter_params=list_filter,
                     flow_selection=list_query.flow_selection,
                     flow_quadrant=list_query.flow_quadrant,
-                    stockout_risk=list_query.stockout_risk,
+                    response_class=list_query.response_class,
                     ordering_method=list_query.ordering_method,
                     page=paginated.page - 1,
                 )
@@ -229,7 +232,7 @@ class ListPage:
                     filter_params=list_filter,
                     flow_selection=list_query.flow_selection,
                     flow_quadrant=list_query.flow_quadrant,
-                    stockout_risk=list_query.stockout_risk,
+                    response_class=list_query.response_class,
                     ordering_method=list_query.ordering_method,
                     page=paginated.page + 1,
                 )
@@ -264,9 +267,9 @@ class ListPage:
             flow_selection=list_query.flow_selection,
             evaluation_periods=list(EVALUATION_PERIODS),
             flow_quadrant_filter=list_query.flow_quadrant,
-            stockout_risk_filter=list_query.stockout_risk,
+            response_class_filter=list_query.response_class,
             ordering_method_filter=list_query.ordering_method,
-            stockout_risk_options=[(STOCKOUT_RISK_KEYS[risk], risk) for risk in STOCKOUT_RISKS],
+            response_class_options=[(RESPONSE_CLASS_KEYS[response], response) for response in RESPONSE_CLASSES],
             ordering_method_options=[(ORDERING_METHOD_KEYS[method], method) for method in ORDERING_METHODS],
             flow_quadrant_rule_rows=build_flow_quadrant_rule_rows(
                 self._recommended_actions, period_label=list_query.flow_selection.period_label
@@ -276,4 +279,5 @@ class ListPage:
                 stock_info.file_name if stock_info else "",
                 all_rows,
             ),
+            as_of_date=as_of_date,
         )

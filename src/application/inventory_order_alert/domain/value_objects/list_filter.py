@@ -169,7 +169,7 @@ def build_display_query_string(
     filter_params: ListFilterParams,
     flow_selection: FlowSelection = REFERENCE_FLOW_SELECTION,
     flow_quadrant: str = "",
-    stockout_risk: str = "",
+    response_class: str = "",
     ordering_method: str = "",
     page: int | None = None,
     sort_specs: tuple[SortSpec, ...] | None = None,
@@ -186,8 +186,8 @@ def build_display_query_string(
     }
     if flow_quadrant in FLOW_QUADRANT_LABELS:
         query["flow_quadrant"] = flow_quadrant
-    if stockout_risk:
-        query["stockout_risk"] = stockout_risk
+    if response_class:
+        query["response_class"] = response_class
     if ordering_method:
         query["ordering_method"] = ordering_method
     if filter_params.cust_code:

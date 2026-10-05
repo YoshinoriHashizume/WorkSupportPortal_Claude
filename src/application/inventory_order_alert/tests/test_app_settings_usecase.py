@@ -132,9 +132,7 @@ def test_settings_payload_exposes_all_keys():
     assert settings_payload(AppSettings()) == {
         "warningDays": 365,
         "stockStaleDays": 7,
-        "safetyDays": 14,
         "defaultLeadTimeDays": 5,
-        "watchMonths": 6,
         # 07 第 2 段階: 直近入荷の窓（REQ-FQR-F-008）
         "recentIncomingDays": 30,
     }
@@ -165,7 +163,7 @@ def test_app_settings_usecase_rejects_invalid_payload():
         use_case.save({"stockStaleDays": 999})
 
 
-# --- 06_stockout-risk: TC-SOR-D-054 設定 VO（安全日数・既定リードタイム・監視期間） ---
+# --- 設定 VO（既定リードタイム）。安全日数・監視期間は 08 で撤去した（08 design §2.4） ---
 
 import pytest  # noqa: E402
 
@@ -175,37 +173,33 @@ from application.inventory_order_alert.domain.value_objects.app_settings import 
 )
 
 
-def test_d054_stockout_risk_settings_defaults():
+def test_d054_default_lead_time_setting_default():
     settings = AppSettings()
 
-    assert settings.safety_days == 14
     assert settings.default_lead_time_days == 5
-    assert settings.watch_months == 6
-    risk = settings.to_stockout_risk_settings()
-    assert (risk.safety_days, risk.default_lead_time_days, risk.watch_months) == (14, 5, 6)
+    # 撤去した設定は残っていない
+    for name in ("safety_days", "watch_months", "to_stockout_risk_settings"):
+        assert not hasattr(settings, name)
 
 
-@pytest.mark.parametrize(
-    "kwargs",
-    [{"safety_days": 0}, {"safety_days": 61}, {"default_lead_time_days": 0}, {"default_lead_time_days": 61}, {"watch_months": 0}, {"watch_months": 13}],
-)
+@pytest.mark.parametrize("kwargs", [{"default_lead_time_days": 0}, {"default_lead_time_days": 61}])
 def test_d054_out_of_range_values_are_rejected(kwargs):
     with pytest.raises(ValueError):
         AppSettings(**kwargs)
 
 
 def test_d054_settings_payload_round_trip():
-    payload = settings_payload(AppSettings(safety_days=30, default_lead_time_days=7, watch_months=3))
+    payload = settings_payload(AppSettings(default_lead_time_days=7))
 
-    assert payload["safetyDays"] == 30
     assert payload["defaultLeadTimeDays"] == 7
-    assert payload["watchMonths"] == 3
+    assert "safetyDays" not in payload
+    assert "watchMonths" not in payload
 
-    parsed = parse_settings_payload({"safetyDays": 21, "watchMonths": 9}, current=AppSettings())
-    assert (parsed.safety_days, parsed.default_lead_time_days, parsed.watch_months) == (21, 5, 9)
+    parsed = parse_settings_payload({"defaultLeadTimeDays": 21}, current=AppSettings())
+    assert parsed.default_lead_time_days == 21
 
     with pytest.raises(ValueError):
-        parse_settings_payload({"safetyDays": 99}, current=AppSettings())
+        parse_settings_payload({"defaultLeadTimeDays": 99}, current=AppSettings())
 
 
 # --- 07_flow-quadrant-refinement 第 2 段階: 直近入荷の窓（REQ-FQR-F-008） ---

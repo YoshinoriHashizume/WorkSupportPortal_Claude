@@ -47,6 +47,7 @@ def list_page(request: HttpRequest) -> HttpResponse:
             filter_options=context.filter_options,
             confirmation_status_choices=context.confirmation_status_choices,
             recommended_actions=context.recommended_actions,
+            as_of_date=context.as_of_date,
         )
         if context.has_list_data
         else None
@@ -86,9 +87,9 @@ def list_page(request: HttpRequest) -> HttpResponse:
             "flow_selection": context.flow_selection,
             "evaluation_periods": context.evaluation_periods,
             "flow_quadrant_filter": context.flow_quadrant_filter,
-            "stockout_risk_filter": context.stockout_risk_filter,
+            "response_class_filter": context.response_class_filter,
             "ordering_method_filter": context.ordering_method_filter,
-            "stockout_risk_options": context.stockout_risk_options,
+            "response_class_options": context.response_class_options,
             "ordering_method_options": context.ordering_method_options,
             "flow_quadrant_rule_rows": context.flow_quadrant_rule_rows,
             "test_data_warning": context.test_data_warning,

@@ -13,11 +13,12 @@ from application.inventory_order_alert.domain.value_objects.flow_quadrant import
     normalize_flow_quadrant,
 )
 from application.inventory_order_alert.domain.value_objects.stockout_risk import (
-    RISK_CAUTION,
-    RISK_DANGER,
-    RISK_NONE,
-    RISK_WATCH,
-    row_stockout_risk,
+    RESPONSE_DELIVERY_CHECK,
+    RESPONSE_NONE,
+    RESPONSE_ORDER_NEEDED,
+    RESPONSE_ORDER_OVERDUE,
+    RESPONSE_WATCH,
+    row_response_class,
 )
 from application.inventory_order_alert.domain.value_objects.row_display import (
     CONFIRMATION_CONFIRMED,
@@ -45,15 +46,22 @@ class RowCounts:
     unconfirmed: int = 0
     in_progress: int = 0
     confirmed: int = 0
-    #: 在庫切れリスク（S-204）の件数（06 design §6.4）。旧行は監視
-    danger: int = 0
-    caution: int = 0
+    #: 対応区分（S-204）の件数（08 design §2.2）。旧行・キーのない行は対象外
+    order_overdue: int = 0
+    delivery_check: int = 0
+    order_needed: int = 0
     watch: int = 0
-    none_risk: int = 0
+    none_response: int = 0
 
     @property
-    def by_stockout_risk(self) -> dict[str, int]:
-        return {RISK_DANGER: self.danger, RISK_CAUTION: self.caution, RISK_WATCH: self.watch, RISK_NONE: self.none_risk}
+    def by_response_class(self) -> dict[str, int]:
+        return {
+            RESPONSE_ORDER_OVERDUE: self.order_overdue,
+            RESPONSE_DELIVERY_CHECK: self.delivery_check,
+            RESPONSE_ORDER_NEEDED: self.order_needed,
+            RESPONSE_WATCH: self.watch,
+            RESPONSE_NONE: self.none_response,
+        }
 
     @property
     def attention(self) -> int:
@@ -88,7 +96,7 @@ def _count_status(rows: list[dict[str, object]], status: str) -> int:
 
 def count_rows(rows: list[dict[str, object]]) -> RowCounts:
     quadrants = [_row_flow_quadrant(row) for row in rows]
-    risks = [row_stockout_risk(row) for row in rows]
+    responses = [row_response_class(row) for row in rows]
     return RowCounts(
         total=len(rows),
         stockout_no_incoming=quadrants.count(QUADRANT_STOCKOUT_NO_INCOMING),
@@ -101,8 +109,9 @@ def count_rows(rows: list[dict[str, object]]) -> RowCounts:
         unconfirmed=_count_status(rows, "未確認"),
         in_progress=_count_status(rows, CONFIRMATION_IN_PROGRESS),
         confirmed=_count_status(rows, CONFIRMATION_CONFIRMED),
-        danger=risks.count(RISK_DANGER),
-        caution=risks.count(RISK_CAUTION),
-        watch=risks.count(RISK_WATCH),
-        none_risk=risks.count(RISK_NONE),
+        order_overdue=responses.count(RESPONSE_ORDER_OVERDUE),
+        delivery_check=responses.count(RESPONSE_DELIVERY_CHECK),
+        order_needed=responses.count(RESPONSE_ORDER_NEEDED),
+        watch=responses.count(RESPONSE_WATCH),
+        none_response=responses.count(RESPONSE_NONE),
     )

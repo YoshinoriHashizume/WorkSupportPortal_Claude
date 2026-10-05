@@ -1,4 +1,7 @@
-"""在庫切れリスクの一覧側（件数・ソート・フィルタ・ペイロード・CSV）のテスト（TC-SOR-D-060〜064）。"""
+"""対応区分（S-204）の行への付与と一覧側（件数・並び・フィルタ・ペイロード・CSV）のテスト。
+
+test-design.md TC-SRR-A-001〜005 / TC-SRR-C-001〜006。
+"""
 
 from __future__ import annotations
 
@@ -20,10 +23,12 @@ from application.inventory_order_alert.domain.value_objects.list_rows import fil
 from application.inventory_order_alert.domain.value_objects.row_counts import count_rows
 from application.inventory_order_alert.domain.value_objects.row_display import row_alert_class
 from application.inventory_order_alert.domain.value_objects.stockout_risk import (
-    RISK_CAUTION,
-    RISK_DANGER,
-    RISK_NONE,
-    RISK_WATCH,
+    RESPONSE_DELIVERY_CHECK,
+    RESPONSE_NONE,
+    RESPONSE_ORDER_NEEDED,
+    RESPONSE_ORDER_OVERDUE,
+    RESPONSE_WATCH,
+    attach_response_class,
 )
 from application.inventory_order_alert.domain.value_objects.table_display import (
     SORT_ONLY_COLUMNS,
@@ -32,10 +37,21 @@ from application.inventory_order_alert.domain.value_objects.table_display import
     sort_rows,
 )
 
-TODAY = date(2026, 9, 17)
+TODAY = date(2026, 9, 18)
 
 
-def _row(risk: str | None, *, item_cd: str = "X", days: int | None = 10, quadrant: str = QUADRANT_NORMAL_FLOW, qty: int = 0, status: str = "未確認", **extra):
+def _row(
+    response: str | None,
+    *,
+    item_cd: str = "X",
+    quadrant: str = QUADRANT_NORMAL_FLOW,
+    qty: int = 0,
+    status: str = "未確認",
+    stockout_date: str = "",
+    order_deadline: str = "",
+    **extra,
+):
+    """判定済みの行（取込時に `attach_response_class` が付けた形）を作る。"""
     row: dict[str, object] = {
         "cust_code": "100",
         "cust_name": "得意先",
@@ -48,18 +64,24 @@ def _row(risk: str | None, *, item_cd: str = "X", days: int | None = 10, quadran
         "last_incoming_date": "",
         "last_ship_date": "2026/06/15",
     }
-    if risk is not None:
+    if response is not None:
         row.update(
             {
-                "stockout_risk": risk,
-                "stockout_risk_reasons": ["発注忘れの可能性", "リードタイム内"] if risk == RISK_DANGER else [],
-                "days_until_stockout": days,
-                "shortage_qty": 200,
-                "replenishment_qty": 0,
-                "replenishment_later_qty": 30,
-                "replenishment_earliest_due": "",
-                "replenishment_has_overdue": False,
-                "replenishment_unknown": False,
+                "response_class": response,
+                "response_class_key": {
+                    RESPONSE_ORDER_OVERDUE: "order-overdue",
+                    RESPONSE_DELIVERY_CHECK: "delivery-check",
+                    RESPONSE_ORDER_NEEDED: "order-needed",
+                    RESPONSE_WATCH: "watch",
+                    RESPONSE_NONE: "none",
+                }[response],
+                "response_reasons": ["在庫切れ 2026/10/10", "発注期限 2026/10/02"] if response == RESPONSE_ORDER_OVERDUE else [],
+                "stockout_date": stockout_date,
+                "order_deadline": order_deadline,
+                "below_safety_stock": False,
+                "safety_stock": 0.0,
+                "overdue_order_qty": 0,
+                "overdue_order_count": 0,
                 "lead_time_days": 5,
                 "lead_time_source": "master",
                 "ordering_method": "手動発注",
@@ -69,159 +91,264 @@ def _row(risk: str | None, *, item_cd: str = "X", days: int | None = 10, quadran
     return row
 
 
-# --- TC-SOR-D-060: 件数サマリ ---
+# --- TC-SRR-A-001〜005: 行への付与 ---
 
 
-def test_d060_counts_by_stockout_risk():
-    rows = [_row(RISK_DANGER), _row(RISK_DANGER), _row(RISK_CAUTION), _row(RISK_WATCH), _row(RISK_NONE), _row(None)]
+def _unit_row(item_cd: str, *, internal: str = "IN-1", daily: list[dict[str, object]] | None = None, **extra):
+    row: dict[str, object] = {
+        "cust_code": "100",
+        "item_cd": item_cd,
+        "internal_item_cd": internal,
+        "level1_item_cd": "X-9065",
+        "level1_vend_cd": "9065",
+        "lead_time_days": 5,
+        "lead_time_source": "master",
+        "demand_forecast_stock_total": 100,
+        "unconfirmed_order_daily": daily if daily is not None else [{"date": "2026-10-10", "qty": 160}],
+        "open_purchase_orders": [],
+    }
+    row.update(extra)
+    return row
+
+
+def test_a001_one_assessment_per_reconciliation_unit():
+    """照合単位（同じ内作品番 × 仕入先）の行には同じ判定が入る。"""
+    rows = [_unit_row("ITEM-A"), _unit_row("ITEM-B")]
+
+    enriched = attach_response_class(rows, TODAY)
+
+    assert {row["response_class"] for row in enriched} == {RESPONSE_ORDER_NEEDED}
+    assert {row["stockout_date"] for row in enriched} == {"2026/10/10"}
+
+
+def test_a002_attached_keys():
+    [enriched] = attach_response_class([_unit_row("ITEM-A")], TODAY)
+
+    assert enriched["response_class"] == RESPONSE_ORDER_NEEDED
+    assert enriched["response_class_key"] == "order-needed"
+    assert enriched["response_reasons"][0] == "在庫切れ 2026/10/10"
+    assert enriched["stockout_date"] == "2026/10/10"
+    assert enriched["order_deadline"] == "2026/10/05"  # 在庫切れ日 − リードタイム 5 日
+    assert enriched["below_safety_stock"] is False
+    assert enriched["overdue_order_qty"] == 0
+
+
+def test_a003_legacy_keys_are_not_attached():
+    [enriched] = attach_response_class([_unit_row("ITEM-A")], TODAY)
+
+    for key in ("stockout_risk", "stockout_risk_reasons", "days_until_stockout", "shortage_qty", "replenishment_qty"):
+        assert key not in enriched
+
+
+def test_a004_rows_without_materials_fall_back_to_none():
+    """旧スナップショット（内示も発注残もない行）は例外にならず対象外。"""
+    [enriched] = attach_response_class([{"cust_code": "100", "item_cd": "ITEM-A"}], TODAY)
+
+    assert enriched["response_class"] == RESPONSE_NONE
+
+
+def test_a005_input_rows_are_not_mutated():
+    rows = [_unit_row("ITEM-A")]
+    original = dict(rows[0])
+
+    attach_response_class(rows, TODAY)
+
+    assert rows[0] == original
+
+
+# --- TC-SRR-C-001: 件数サマリ ---
+
+
+def test_c001_counts_by_response_class():
+    rows = [
+        _row(RESPONSE_ORDER_OVERDUE),
+        _row(RESPONSE_ORDER_OVERDUE),
+        _row(RESPONSE_DELIVERY_CHECK),
+        _row(RESPONSE_ORDER_NEEDED),
+        _row(RESPONSE_WATCH),
+        _row(RESPONSE_NONE),
+        _row(None),  # 旧スナップショット
+    ]
 
     counts = count_rows(rows)
 
-    assert (counts.danger, counts.caution, counts.watch, counts.none_risk) == (2, 1, 2, 1)
-    assert counts.by_stockout_risk == {"危険": 2, "注意": 1, "監視": 2, "対象外": 1}
-    assert counts.total == 6
+    assert (counts.order_overdue, counts.delivery_check, counts.order_needed, counts.watch, counts.none_response) == (2, 1, 1, 1, 2)
+    assert counts.by_response_class == {"発注遅れ": 2, "納期確認": 1, "要発注": 1, "要監視": 1, "対象外": 2}
+    assert counts.total == 7
 
 
-# --- TC-SOR-D-061: 既定ソート ---
+# --- TC-SRR-C-002: 既定の並び ---
 
 
-def test_d061_default_sort_is_risk_then_days_then_flow_quadrant():
+def test_c002_default_sort_is_response_then_deadline_then_stockout_date():
     rows = [
-        _row(RISK_NONE, item_cd="none"),
-        _row(RISK_WATCH, item_cd="watch", days=None),
-        _row(RISK_CAUTION, item_cd="caution-far", days=90),
-        _row(RISK_CAUTION, item_cd="caution-near", days=20),
-        _row(RISK_DANGER, item_cd="danger-normal", days=0, quadrant=QUADRANT_NORMAL_FLOW),
-        _row(RISK_DANGER, item_cd="danger-no-incoming", days=0, quadrant=QUADRANT_LOW_FLOW_NO_INCOMING),
+        _row(RESPONSE_NONE, item_cd="none"),
+        _row(RESPONSE_WATCH, item_cd="watch"),
+        _row(RESPONSE_ORDER_NEEDED, item_cd="needed-far", order_deadline="2026/12/01", stockout_date="2026/12/06"),
+        _row(RESPONSE_ORDER_NEEDED, item_cd="needed-near", order_deadline="2026/10/01", stockout_date="2026/10/06"),
+        _row(RESPONSE_ORDER_OVERDUE, item_cd="overdue-b", order_deadline="2026/09/15", stockout_date="2026/09/25"),
+        _row(RESPONSE_ORDER_OVERDUE, item_cd="overdue-a", order_deadline="2026/09/01", stockout_date="2026/09/20"),
         _row(None, item_cd="legacy"),
     ]
 
     ordered = [row["item_cd"] for row in sort_summary_rows(rows)]
 
-    assert ordered[:2] == ["danger-no-incoming", "danger-normal"]
-    assert ordered[2:4] == ["caution-near", "caution-far"]
-    assert set(ordered[4:6]) == {"watch", "legacy"}
-    assert ordered[-1] == "none"
+    assert ordered[:2] == ["overdue-a", "overdue-b"]
+    assert ordered[2:4] == ["needed-near", "needed-far"]
+    assert ordered[4] == "watch"
+    assert set(ordered[5:]) == {"none", "legacy"}
 
 
-def test_d061_table_display_sorts_by_stockout_risk_and_days():
-    rows = [_row(RISK_CAUTION, item_cd="a", days=None), _row(RISK_DANGER, item_cd="b", days=5), _row(RISK_CAUTION, item_cd="c", days=1)]
-
-    by_risk = sort_rows(rows, sort_specs=(SortSpec("stockout_risk", "asc"),))
-    assert [r["item_cd"] for r in by_risk] == ["b", "c", "a"]
-
-    by_days_desc = sort_rows(rows, sort_specs=(SortSpec("days_until_stockout", "desc"),))
-    assert [r["item_cd"] for r in by_days_desc] == ["b", "c", "a"]  # 空は末尾
-
-    assert SORTABLE_COLUMNS[0] == ("stockout_risk", "在庫切れリスク")
-    assert SORTABLE_COLUMNS[1] == ("flow_quadrant", "流動区分")
-    assert ("days_until_stockout", "猶予日数") in SORT_ONLY_COLUMNS
+# --- TC-SRR-C-005: 一覧の列と並べ替え ---
 
 
-# --- TC-SOR-D-062: フィルタ ---
+def test_c005_sortable_columns_and_date_sorting():
+    rows = [
+        _row(RESPONSE_ORDER_NEEDED, item_cd="a", stockout_date=""),
+        _row(RESPONSE_ORDER_OVERDUE, item_cd="b", stockout_date="2026/09/25"),
+        _row(RESPONSE_ORDER_NEEDED, item_cd="c", stockout_date="2026/10/06"),
+    ]
+
+    by_response = sort_rows(rows, sort_specs=(SortSpec("response_class", "asc"),))
+    assert [r["item_cd"] for r in by_response] == ["b", "c", "a"]  # 同順位は在庫切れ日、空は末尾
+
+    by_stockout_desc = sort_rows(rows, sort_specs=(SortSpec("stockout_date", "desc"),))
+    assert [r["item_cd"] for r in by_stockout_desc] == ["c", "b", "a"]  # 空は昇順・降順とも末尾
+
+    assert SORTABLE_COLUMNS[:4] == (
+        ("response_class", "対応区分"),
+        ("stockout_date", "在庫切れ日"),
+        ("order_deadline", "発注期限"),
+        ("flow_quadrant", "流動区分"),
+    )
+    assert ("months_of_stock", "在庫月数") in SORT_ONLY_COLUMNS
 
 
-def test_d062_filter_by_stockout_risk_and_ordering_method():
-    rows = [_row(RISK_DANGER, item_cd="d"), _row(RISK_CAUTION, item_cd="c", ordering_method="MRP 発注"), _row(None, item_cd="legacy")]
+# --- TC-SRR-C-003: フィルタ ---
 
-    query = parse_list_query({"stockout_risk": "danger"}, today=TODAY)
-    assert query.stockout_risk == "danger"
-    assert [r["item_cd"] for r in filter_summary_rows(rows, query)] == ["d"]
 
-    query = parse_list_query({"stockout_risk": "watch"}, today=TODAY)
-    assert [r["item_cd"] for r in filter_summary_rows(rows, query)] == ["legacy"]  # 旧行は監視
+def test_c003_filter_by_response_class_and_ordering_method():
+    rows = [
+        _row(RESPONSE_ORDER_NEEDED, item_cd="n"),
+        _row(RESPONSE_DELIVERY_CHECK, item_cd="d", ordering_method="MRP 発注"),
+        _row(None, item_cd="legacy"),
+    ]
+
+    query = parse_list_query({"response_class": "order-needed"}, today=TODAY)
+    assert query.response_class == "order-needed"
+    assert [r["item_cd"] for r in filter_summary_rows(rows, query)] == ["n"]
+
+    query = parse_list_query({"response_class": "none"}, today=TODAY)
+    assert [r["item_cd"] for r in filter_summary_rows(rows, query)] == ["legacy"]  # 旧行は対象外
 
     query = parse_list_query({"ordering_method": "manual"}, today=TODAY)
     assert query.ordering_method == "manual"
-    assert [r["item_cd"] for r in filter_summary_rows(rows, query)] == ["d"]
+    assert [r["item_cd"] for r in filter_summary_rows(rows, query)] == ["n"]
 
-    assert parse_list_query({"stockout_risk": "foo", "ordering_method": "bar"}, today=TODAY).stockout_risk == ""
-    assert parse_list_query({"stockout_risk": "危険"}, today=TODAY).stockout_risk == "danger"
+    assert parse_list_query({"response_class": "foo", "ordering_method": "bar"}, today=TODAY).response_class == ""
+    assert parse_list_query({"response_class": "要発注"}, today=TODAY).response_class == "order-needed"
+    # 旧キー・旧称も受ける（REQ-SRR-F-008）
+    assert parse_list_query({"stockout_risk": "danger"}, today=TODAY).response_class == "order-overdue"
+    assert parse_list_query({"stockout_risk": "注意"}, today=TODAY).response_class == "order-needed"
 
 
-# --- TC-SOR-D-063: ペイロード ---
+# --- ペイロード ---
 
 
-def test_d063_payload_carries_stockout_risk_fields():
-    rows = [_row(RISK_DANGER, item_cd="d", days=0), _row(None, item_cd="legacy")]
+def test_payload_carries_response_class_fields():
+    rows = [
+        _row(RESPONSE_ORDER_OVERDUE, item_cd="d", stockout_date="2026/10/10", order_deadline="2026/10/02", overdue_order_qty=300, overdue_order_count=2),
+        _row(None, item_cd="legacy"),
+    ]
     payload = build_list_client_payload(all_rows=rows, filter_options=build_filter_options(rows), confirmation_status_choices=list(STATUS_CHOICES))
 
-    danger = payload["rows"][0]
-    assert danger["stockoutRisk"] == "危険"
-    assert danger["stockoutRiskKey"] == "danger"
-    assert danger["stockoutRiskReasons"] == ["発注忘れの可能性", "リードタイム内"]
-    assert danger["daysUntilStockout"] == 0
-    assert danger["shortageQty"] == 200
-    assert danger["replenishment"] == {"qty": 0, "laterQty": 30, "staleQty": 0, "earliestDue": "", "hasOverdue": False, "unknown": False}
-    assert danger["leadTimeDays"] == 5
-    assert danger["leadTimeSource"] == "master"
-    assert danger["orderingMethod"] == "手動発注"
-    assert danger["orderingMethodKey"] == "manual"
-    assert danger["alertRowClass"] == "stockout-danger"
-    assert danger["display"]["stockout_risk"] == "危険"
+    overdue = payload["rows"][0]
+    assert overdue["responseClass"] == "発注遅れ"
+    assert overdue["responseClassKey"] == "order-overdue"
+    assert overdue["responseReasons"] == ["在庫切れ 2026/10/10", "発注期限 2026/10/02"]
+    assert overdue["stockoutDate"] == "2026/10/10"
+    assert overdue["orderDeadline"] == "2026/10/02"
+    assert overdue["overdueOrderQty"] == 300
+    assert overdue["overdueOrderCount"] == 2
+    assert overdue["belowSafetyStock"] is False
+    assert overdue["leadTimeDays"] == 5
+    assert overdue["orderingMethodKey"] == "manual"
+    assert overdue["alertRowClass"] == "response-order-overdue"
+    assert overdue["display"]["response_class"] == "発注遅れ"
 
     legacy = payload["rows"][1]
-    assert legacy["stockoutRisk"] == "監視"
-    assert legacy["stockoutRiskKey"] == "watch"
-    assert legacy["daysUntilStockout"] is None
-    assert legacy["display"]["stockout_risk"] == ""
+    assert legacy["responseClass"] == "対象外"
+    assert legacy["responseClassKey"] == "none"
+    assert legacy["display"]["response_class"] == ""
 
-    assert payload["stockoutRiskOrder"] == ["danger", "caution", "watch", "none"]
-    assert payload["stockoutRiskLabels"] == {"danger": "危険", "caution": "注意", "watch": "監視", "none": "対象外"}
-    assert {"key": "days_until_stockout", "label": "猶予日数"} in payload["sortOnlyColumns"]
-    assert payload["defaultSortSpecs"][0] == {"column": "stockout_risk", "direction": "asc"}
-
-
-def test_d063_row_alert_class_priority():
-    assert row_alert_class(_row(RISK_DANGER, quadrant=QUADRANT_LOW_FLOW_NO_INCOMING)) == "stockout-danger"
-    assert row_alert_class(_row(RISK_CAUTION)) == "stockout-caution"
-    # 監視・対象外は流動区分の色を使わない（2026/09/18 改訂: 行の色は在庫切れリスクのみ）
-    assert row_alert_class(_row(RISK_WATCH, quadrant=QUADRANT_DORMANT_STOCK)) == "stockout-watch"
-    assert row_alert_class(_row(RISK_NONE)) == "stockout-none"
-    assert row_alert_class(_row(None, quadrant=QUADRANT_DORMANT_STOCK)) == "stockout-watch"
-    assert row_alert_class(_row(RISK_DANGER, status="確認済み")) == "確認済"
+    assert payload["responseClassOrder"] == ["order-overdue", "delivery-check", "order-needed", "watch", "none"]
+    assert payload["responseClassLabels"] == {
+        "order-overdue": "発注遅れ",
+        "delivery-check": "納期確認",
+        "order-needed": "要発注",
+        "watch": "要監視",
+        "none": "対象外",
+    }
+    assert payload["defaultSortSpecs"][0] == {"column": "response_class", "direction": "asc"}
 
 
-# --- TC-SOR-D-064: CSV ---
+# --- TC-SRR-C-006: 行の色 ---
 
 
-def test_d064_csv_appends_stockout_columns_after_existing_28():
+def test_c006_row_alert_class_priority():
+    assert row_alert_class(_row(RESPONSE_ORDER_OVERDUE, quadrant=QUADRANT_LOW_FLOW_NO_INCOMING)) == "response-order-overdue"
+    assert row_alert_class(_row(RESPONSE_DELIVERY_CHECK)) == "response-delivery-check"
+    assert row_alert_class(_row(RESPONSE_ORDER_NEEDED)) == "response-order-needed"
+    # 要監視・対象外は流動区分の色を使わない（行の色は対応区分のみ）
+    assert row_alert_class(_row(RESPONSE_WATCH, quadrant=QUADRANT_DORMANT_STOCK)) == "response-watch"
+    assert row_alert_class(_row(RESPONSE_NONE)) == "response-none"
+    assert row_alert_class(_row(None, quadrant=QUADRANT_DORMANT_STOCK)) == "response-none"
+    assert row_alert_class(_row(RESPONSE_ORDER_OVERDUE, status="確認済み")) == "確認済"
+
+
+# --- TC-SRR-C-004: CSV ---
+
+
+def test_c004_csv_appends_response_class_columns():
     columns = [column for column, _label in EXPORT_COLUMNS]
-    assert len(columns) == 39
     assert columns[28:] == [
-        "stockout_risk",
-        "stockout_risk_reasons",
-        "days_until_stockout",
-        "replenishment_qty",
-        "replenishment_earliest_due",
-        "replenishment_has_overdue",
-        "shortage_qty",
+        "response_class",
+        "response_reasons",
+        "stockout_date",
+        "order_deadline",
+        "overdue_order_qty",
+        "below_safety_stock",
+        "safety_stock",
         "lead_time_days",
         "ordering_method",
-        "upstream_order_qty",
-        "upstream_order_overdue",
     ]
     assert [label for _c, label in EXPORT_COLUMNS[28:]] == [
-        "在庫切れリスク",
-        "在庫切れリスクの理由",
-        "猶予日数",
-        "補充見込み",
-        "補充見込みの最早納期",
-        "納期超過",
-        "不足数量",
+        "対応区分",
+        "対応区分の理由",
+        "在庫切れ日",
+        "発注期限",
+        "納期遅れの発注残数量",
+        "安全在庫割れ",
+        "安全在庫",
         "リードタイム",
         "発注方式",
-        "上流工程の発注残",
-        "上流工程の納期超過",
     ]
 
-    payload = render_export_csv([_row(RISK_DANGER, days=0, replenishment_has_overdue=True), _row(None)]).decode("utf-8-sig")
+    rows = [
+        _row(RESPONSE_ORDER_OVERDUE, stockout_date="2026/10/10", order_deadline="2026/10/02", overdue_order_qty=300, below_safety_stock=True),
+        _row(None),
+    ]
+    payload = render_export_csv(rows).decode("utf-8-sig")
     records = list(csv.DictReader(io.StringIO(payload)))
-    assert records[0]["在庫切れリスク"] == "危険"
-    assert records[0]["在庫切れリスクの理由"] == "発注忘れの可能性・リードタイム内"
-    assert records[0]["猶予日数"] == "0"
-    assert records[0]["納期超過"] == "あり"
+
+    assert records[0]["対応区分"] == "発注遅れ"
+    assert records[0]["対応区分の理由"] == "在庫切れ 2026/10/10・発注期限 2026/10/02"
+    assert records[0]["在庫切れ日"] == "2026/10/10"
+    assert records[0]["発注期限"] == "2026/10/02"
+    assert records[0]["納期遅れの発注残数量"] == "300"
+    assert records[0]["安全在庫割れ"] == "あり"
     assert records[0]["発注方式"] == "手動発注"
-    assert records[1]["在庫切れリスク"] == ""
-    assert records[1]["在庫切れリスクの理由"] == ""
-    assert records[1]["納期超過"] == ""
+    # 旧スナップショットは対象外として出る
+    assert records[1]["対応区分"] == "対象外"
+    assert records[1]["対応区分の理由"] == ""
+    assert records[1]["安全在庫割れ"] == ""

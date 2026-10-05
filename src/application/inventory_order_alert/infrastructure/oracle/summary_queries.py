@@ -1,10 +1,11 @@
 from __future__ import annotations
 
-from datetime import date
+from datetime import date, timedelta
 
 from application.sales.infrastructure.oracle.client import OracleQueryError, rows_as_dicts
 
-from application.inventory_order_alert.domain.value_objects.dates import add_calendar_months, to_date
+from application.inventory_order_alert.domain.value_objects.dates import add_calendar_months, parse_optional_ymd, to_date
+from application.inventory_order_alert.domain.value_objects.stock_simulation import PAST_DAYS_FOR_SIMULATION
 from application.inventory_order_alert.domain.value_objects.internal_item import resolve_cust_code, resolve_internal_item_cd
 from application.inventory_order_alert.domain.value_objects.ordering_profile import (
     ordering_method_from_code,
@@ -515,17 +516,20 @@ def fetch_open_purchase_orders_or_warn(connection: object) -> tuple[list[tuple[s
         return [], f"{OPEN_PURCHASE_ORDER_FETCH_ERROR_PREFIX}: {exc}"
 
 
-def fetch_item_ordering_profiles(connection: object, item_cds: list[str]) -> dict[str, tuple[object, object]]:
-    """品目マスタからリードタイム（V-225、日）と発注方式コード（V-227）を引く。900 件ずつ IN で分割。"""
+def fetch_item_ordering_profiles(connection: object, item_cds: list[str]) -> dict[str, tuple[object, object, object]]:
+    """品目マスタからリードタイム（V-225、日）・発注方式コード（V-227）・安全在庫（V-231）を引く。900 件ずつ IN で分割。
+
+    安全在庫は 08 で追加。既存の問い合わせに列を足すだけで、問い合わせ回数は増やさない（REQ-SRR-NF-001）。
+    """
     targets = sorted({str(item).strip() for item in item_cds if str(item or "").strip()})
     if not targets:
         return {}
-    profiles: dict[str, tuple[object, object]] = {}
+    profiles: dict[str, tuple[object, object, object]] = {}
     for batch in chunked(targets):
         placeholders = ", ".join(f":item_{index}" for index, _ in enumerate(batch))
         params = {f"item_{index}": item_cd for index, item_cd in enumerate(batch)}
         sql = f"""
-            SELECT TRIM(ITEM_CD) AS ITEM_CD, FIXED_LT, MRP_ODR_TYP
+            SELECT TRIM(ITEM_CD) AS ITEM_CD, FIXED_LT, MRP_ODR_TYP, SAFETY_STOCK
               FROM M_ITEM
              WHERE TRIM(ITEM_CD) IN ({placeholders})
         """
@@ -534,11 +538,11 @@ def fetch_item_ordering_profiles(connection: object, item_cds: list[str]) -> dic
         for row in rows_as_dicts(cursor):
             item_cd = str(row.get("item_cd") or "").strip()
             if item_cd:
-                profiles[item_cd] = (row.get("fixed_lt"), row.get("mrp_odr_typ"))
+                profiles[item_cd] = (row.get("fixed_lt"), row.get("mrp_odr_typ"), row.get("safety_stock"))
     return profiles
 
 
-def fetch_item_ordering_profiles_or_warn(connection: object, item_cds: list[str]) -> tuple[dict[str, tuple[object, object]], str]:
+def fetch_item_ordering_profiles_or_warn(connection: object, item_cds: list[str]) -> tuple[dict[str, tuple[object, object, object]], str]:
     try:
         return fetch_item_ordering_profiles(connection, item_cds), ""
     except OracleQueryError as exc:
@@ -557,6 +561,92 @@ def group_shipments_by_pair(
     for cust_code, cust_item_cd, ship_date, ship_qty in shipments:
         grouped.setdefault((cust_code, cust_item_cd), []).append((ship_date, ship_qty))
     return grouped
+
+
+def build_unconfirmed_order_daily(
+    lines: list[tuple[date, int]],
+    *,
+    as_of_date: date,
+) -> list[dict[str, object]]:
+    """内示明細を日ごとに合算した疎な配列にする（08 design §4.1）。
+
+    基準日より後の所要日だけを残す（基準日以前の内示は在庫に反映済みとみなす）。
+    数量 0 の日は落とす。並びは日付の昇順。
+    """
+    totals: dict[date, int] = {}
+    for required_date, qty in lines:
+        if required_date is None or required_date <= as_of_date:
+            continue
+        totals[required_date] = totals.get(required_date, 0) + int(qty or 0)
+    return [
+        {"date": day.isoformat(), "qty": totals[day]}
+        for day in sorted(totals)
+        if totals[day] > 0
+    ]
+
+
+def build_daily_series(
+    lines: list[tuple[date, int]],
+    *,
+    as_of_date: date,
+    past_days: int,
+) -> list[dict[str, object]]:
+    """日ごとに合算した疎な配列（09 design §4.1）。基準日の `past_days` 前 〜 基準日 の範囲のみ。
+
+    月次推移（`build_monthly_shipment_trend`）と**同じ入力**を日次で束ね直すだけなので、
+    Oracle への追加問い合わせは発生しない（REQ-SSC-NF-001）。
+    """
+    window_start = as_of_date - timedelta(days=past_days)
+    totals: dict[date, int] = {}
+    for day, qty in lines:
+        if day is None or not (window_start <= day <= as_of_date):
+            continue
+        totals[day] = totals.get(day, 0) + int(qty or 0)
+    return [{"date": day.isoformat(), "qty": totals[day]} for day in sorted(totals) if totals[day] > 0]
+
+
+def build_planned_incoming(
+    orders: list[dict[str, object]],
+    *,
+    as_of_date: date,
+    level1_item_cd: str,
+    level1_vend_cd: str,
+) -> list[dict[str, object]]:
+    """予定入荷（V-236）: 納期が基準日より後の発注残を、発注番号の重複を除いて納期ごとに合算する。
+
+    対象は完成品直下の工程のみ。納期遅れ（納期 ≤ 基準日）は**来ないもの**として含めない。
+    在庫切れ日（V-232）の計算と同じ規則にする（09 design §4.1）。
+    """
+    totals: dict[date, int] = {}
+    seen: set[str] = set()
+    for order in orders:
+        if (str(order.get("item_cd") or ""), str(order.get("vend_cd") or "")) != (level1_item_cd, level1_vend_cd):
+            continue
+        order_cd = str(order.get("order_cd") or "").strip()
+        if not order_cd or order_cd in seen:
+            continue
+        seen.add(order_cd)
+        due_text = str(order.get("due_date") or "").strip()
+        if not due_text:
+            continue
+        try:
+            due = parse_optional_ymd(due_text)
+        except (ValueError, TypeError):
+            continue
+        qty = int(order.get("remaining_qty") or 0)
+        if qty > 0 and due > as_of_date:
+            totals[due] = totals.get(due, 0) + qty
+    return [{"date": day.isoformat(), "qty": totals[day]} for day in sorted(totals)]
+
+
+def _safety_stock_value(raw: object) -> float:
+    """安全在庫（V-231）を数値にする。未設定・負値・解析不能は 0（＝未設定）。"""
+    if raw is None or raw == "":
+        return 0.0
+    try:
+        return max(float(raw), 0.0)
+    except (TypeError, ValueError):
+        return 0.0
 
 
 def build_summary_rows(
@@ -669,7 +759,8 @@ def build_summary_rows(
     chain_items: set[str] = set(level1_items)
     for comps in chain_by_root.values():
         chain_items.update(comp for _, comp in comps)
-    profiles, profiles_warning = fetch_item_ordering_profiles_or_warn(connection, sorted(chain_items))
+    # 安全在庫（V-231）は内作品番で引くため、同じ問い合わせの対象に内作品番も含める（08 design §4.1）
+    profiles, profiles_warning = fetch_item_ordering_profiles_or_warn(connection, sorted(chain_items | internal_items))
     if profiles_warning and warnings is not None:
         warnings.append(profiles_warning)
 
@@ -687,7 +778,7 @@ def build_summary_rows(
             vend_cd, vend_name = (level1_vend, level1_vend_name) if comp == level1_item else vendor_by_component.get(comp, ("", ""))
             if not vend_cd or vend_cd == "?":
                 continue
-            master_lt, _ = profiles.get(comp, (None, None))
+            master_lt, _, _ = profiles.get(comp, (None, None, None))
             days, source = resolve_lead_time_days(master_lt, default_days=0)
             # level は BOM の階層（1 = 完成品直下）。並列の工程は同じ階層に並ぶため、リードタイムは階層ごとの最大値を足す
             stages.append({"level": level, "item_cd": comp, "vend_cd": vend_cd, "vend_name": vend_name, "lead_time_days": days, "lead_time_source": source})
@@ -719,11 +810,25 @@ def build_summary_rows(
             incoming_by_pair.get((level1_item, level1_vend), []),
             as_of_date=as_of_date,
         )
+        unconfirmed_lines = unconfirmed_by_pair.get((resolved_cust_code, internal), []) if internal else []
         unconfirmed_order_trend = build_unconfirmed_order_trend(
-            unconfirmed_by_pair.get((resolved_cust_code, internal), []) if internal else [],
+            unconfirmed_lines,
             as_of_date=as_of_date,
         )
-        master_lt, master_method = profiles.get(level1_item, (None, None)) if level1_item else (None, None)
+        # 08: 日次の内示（REQ-SRR-F-002）。基準日より後の所要日だけを日ごとに合算した疎な配列
+        unconfirmed_order_daily = build_unconfirmed_order_daily(unconfirmed_lines, as_of_date=as_of_date)
+        # 09: 在庫シミュレーション（V-237）の過去側。月次と同じ入力を日次で束ね直すだけ（追加の問い合わせなし）
+        daily_shipment = build_daily_series(
+            shipments_by_pair.get((cust_code, cust_item_cd), []),
+            as_of_date=as_of_date,
+            past_days=PAST_DAYS_FOR_SIMULATION,
+        )
+        daily_incoming = build_daily_series(
+            incoming_by_pair.get((level1_item, level1_vend), []),
+            as_of_date=as_of_date,
+            past_days=PAST_DAYS_FOR_SIMULATION,
+        )
+        master_lt, master_method, _ = profiles.get(level1_item, (None, None, None)) if level1_item else (None, None, None)
         # 既定リードタイムの具体値は取込時の設定で決まるため、ここでは「未設定」を 0 で表す（domain 側で既定値に置換）
         lead_time_days, lead_time_source = resolve_lead_time_days(master_lt, default_days=0)
         process_chain = process_chain_for(internal, level1_item, level1_vend, level1_vend_name)
@@ -748,9 +853,18 @@ def build_summary_rows(
                 # 05 第 2 段階: 内作品番と内示推移(V-219)。需要予測の算出は use_case が domain を呼んで行う(design §6.7)
                 "internal_item_cd": internal,
                 "unconfirmed_order_trend": unconfirmed_order_trend,
+                # 08: 日次の在庫見通し（V-232/V-233）の材料
+                "unconfirmed_order_daily": unconfirmed_order_daily,
+                # 09: 在庫シミュレーション（V-237）の材料。過去側＝日次出荷/日次入荷、未来側＝予定入荷
+                "daily_shipment": daily_shipment,
+                "daily_incoming": daily_incoming,
+                "planned_incoming": build_planned_incoming(
+                    chain_orders, as_of_date=as_of_date, level1_item_cd=level1_item, level1_vend_cd=level1_vend
+                ),
+                "safety_stock": _safety_stock_value(profiles.get(internal, (None, None, None))[2]),
                 # 07: 適用終了日。打ち切り候補(T-210)の理由に使う(07 design §4.1)
                 "phase_out_date": _phase_out_text(phase_out_by_pair.get((resolved_cust_code, cust_item_cd))),
-                # 06: 発注残(生データ)・リードタイム・発注方式。在庫切れリスクの判定は use_case が domain を呼んで行う
+                # 06: 発注残(生データ)・リードタイム・発注方式。対応区分の判定は use_case が domain を呼んで行う
                 "open_purchase_orders": chain_orders,
                 "open_purchase_orders_unknown": open_orders_unknown,
                 "process_chain": process_chain,

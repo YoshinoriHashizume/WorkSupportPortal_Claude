@@ -14,8 +14,7 @@ _BANNER_ERROR_MESSAGE = "アラート件数を取得できませんでした。�
 #: 帯の件数は既定の判定期間（1 年）で固定する。利用者が一覧で選んだ判定期間には従わない（05 design §6.5）。
 BANNER_FLOW_SELECTION = REFERENCE_FLOW_SELECTION
 BANNER_FLOW_CONDITION_LABEL = f"判定期間 {BANNER_FLOW_SELECTION.period_label}"
-#: 在庫切れリスク（S-204）の件数はスナップショット保存値（取込時の設定）を数える。監視期間は表示上の既定値
-BANNER_WATCH_MONTHS_LABEL = "監視期間 6か月"
+#: 対応区分（S-204）の件数はスナップショット保存値（取込時に判定した値）を数える
 
 
 @dataclass(frozen=True)
@@ -28,9 +27,10 @@ class DashboardBannerContext:
     has_stock_data: bool
     stock_stale: bool
     error_message: str = ""
-    #: 在庫切れリスク（06）。危険 > 0 で赤系、注意のみで黄系
-    danger: int = 0
-    caution: int = 0
+    #: 対応区分（08 design §5）。発注遅れ > 0 で赤系、納期確認・要発注のみで黄系
+    order_overdue: int = 0
+    delivery_check: int = 0
+    order_needed: int = 0
     watch: int = 0
     #: 07 在庫なしの 3 区分（design §3.2）
     stockout_no_incoming: int = 0
@@ -51,11 +51,11 @@ class DashboardBannerContext:
 
     @property
     def has_alerts(self) -> bool:
-        return self.attention > 0 or self.danger > 0 or self.caution > 0
+        return self.attention > 0 or self.order_overdue > 0 or self.delivery_check > 0 or self.order_needed > 0
 
     @property
     def stockout_condition_label(self) -> str:
-        return f"{BANNER_FLOW_CONDITION_LABEL}・{BANNER_WATCH_MONTHS_LABEL}"
+        return BANNER_FLOW_CONDITION_LABEL
 
     @property
     def flow_condition_label(self) -> str:
@@ -65,12 +65,12 @@ class DashboardBannerContext:
     def tone(self) -> str:
         if self.error_message:
             return "neutral"
-        # 在庫切れリスクを優先（06 design §6.5）。危険 > 0 で赤系、注意のみで黄系
-        if self.danger > 0:
+        # 対応区分を優先（08 design §5）。発注遅れ > 0 で赤系、納期確認・要発注のみで黄系
+        if self.order_overdue > 0:
             return "critical"
-        if self.caution > 0:
+        if self.delivery_check > 0 or self.order_needed > 0:
             return "warning"
-        # 欠品（在庫なし・需要あり）は在庫切れリスクと同じ重さで赤系（07 design §3.2）
+        # 欠品（在庫なし・需要あり）は発注遅れと同じ重さで赤系（07 design §3.2）
         if self.stockout_no_incoming > 0 or self.stockout > 0:
             return "critical"
         if self.low_flow_no_incoming > 0:
@@ -135,7 +135,8 @@ class PortalDashboard:
             stock_as_of_label=stock_info.stock_as_of_label,
             has_stock_data=True,
             stock_stale=stock_stale,
-            danger=counts.danger,
-            caution=counts.caution,
+            order_overdue=counts.order_overdue,
+            delivery_check=counts.delivery_check,
+            order_needed=counts.order_needed,
             watch=counts.watch,
         )

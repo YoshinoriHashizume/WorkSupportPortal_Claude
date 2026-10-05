@@ -6,6 +6,7 @@ from typing import Iterable
 
 from application.inventory_order_alert.domain.value_objects.flow_quadrant import normalize_flow_quadrant
 from application.inventory_order_alert.domain.value_objects.format_display import format_cell_display
+from application.inventory_order_alert.domain.value_objects.stockout_risk import row_response_class
 
 EXPORT_COLUMNS: list[tuple[str, str]] = [
     ("cust_chrg_psn_cd", "担当者コード"),
@@ -38,18 +39,16 @@ EXPORT_COLUMNS: list[tuple[str, str]] = [
     ("stockout_forecast_month", "在庫切れ予測月"),
     ("demand_forecast_basis", "需要予測の算出根拠"),
     ("recommended_action", "推奨アクション"),
-    # 06 在庫切れリスク（REQ-SOR-F-012）: 末尾に追加
-    ("stockout_risk", "在庫切れリスク"),
-    ("stockout_risk_reasons", "在庫切れリスクの理由"),
-    ("days_until_stockout", "猶予日数"),
-    ("replenishment_qty", "補充見込み"),
-    ("replenishment_earliest_due", "補充見込みの最早納期"),
-    ("replenishment_has_overdue", "納期超過"),
-    ("shortage_qty", "不足数量"),
+    # 08 対応区分（REQ-SRR-F-006）: 06 の旧判定の列を置き換える
+    ("response_class", "対応区分"),
+    ("response_reasons", "対応区分の理由"),
+    ("stockout_date", "在庫切れ日"),
+    ("order_deadline", "発注期限"),
+    ("overdue_order_qty", "納期遅れの発注残数量"),
+    ("below_safety_stock", "安全在庫割れ"),
+    ("safety_stock", "安全在庫"),
     ("lead_time_days", "リードタイム"),
     ("ordering_method", "発注方式"),
-    ("upstream_order_qty", "上流工程の発注残"),
-    ("upstream_order_overdue", "上流工程の納期超過"),
 ]
 
 EXPORT_FIELDNAMES = [column for column, _label in EXPORT_COLUMNS]
@@ -66,11 +65,11 @@ def render_export_cell(row: dict[str, object], column: str) -> object:
     if column == "flow_quadrant":
         # 旧称が行に残っていても新区分名で出す（TC-SFV-D-062）
         return normalize_flow_quadrant(str(row.get(column) or ""))
-    if column == "stockout_risk":
-        return str(row.get(column) or "")
-    if column == "stockout_risk_reasons":
+    if column == "response_class":
+        return row_response_class(row)
+    if column == "response_reasons":
         return "・".join(str(reason) for reason in (row.get(column) or []))
-    if column in ("replenishment_has_overdue", "upstream_order_overdue"):
+    if column == "below_safety_stock":
         return "あり" if row.get(column) else ""
     return format_cell_display(row.get(column, ""), column)
 

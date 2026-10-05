@@ -255,8 +255,8 @@ def test_app_css_has_flow_cell_and_period_selector_styles_without_flow_selector(
         assert removed not in css
     # 行の背景色クラスは新キーに追随し、旧キーは残っていない。
     # 行の色は在庫切れリスクのみ。流動区分の色（セルの色見本・判定ルールの行色）は使わない（2026/09/18 改訂）
-    assert ".alert-row--stockout-danger" in css
-    assert ".alert-row--stockout-caution" in css
+    assert ".alert-row--response-order-overdue" in css
+    assert ".alert-row--response-order-needed" in css
     assert "ioa-flow-swatch" not in css
     assert "ioa-alert-rules-row--" not in css
     assert "supply-risk" not in css
@@ -349,7 +349,7 @@ def test_list_page_hides_import_meta_line(client, production_user):
     assert "BOM 基準日:" not in html
     assert "在庫行:" not in html
     assert "sample.csv" not in html
-    assert "監視 1 件" in html  # 06: 件数サマリは在庫切れリスク。旧行は監視
+    assert "対象外 1 件" in html  # 08: 件数サマリは対応区分。旧行は対象外
 
 
 @pytest.mark.django_db
@@ -414,8 +414,8 @@ def test_list_page_alert_counts_include_confirmed_rows(client, production_user):
     html = client.get("/app/production/inventory-order-alert").content.decode("utf-8")
 
     assert 'alert-row--確認済' in html
-    assert "監視 2 件" in html  # 06: 在庫切れリスク（旧行は監視）
-    assert "対象外 0 件" in html
+    assert "対象外 2 件" in html  # 08: 対応区分（旧行は対象外）
+    assert "発注遅れ 0 件" in html
     assert "確認済み 1 件" in html
     assert "未確認 1 件" in html
 
@@ -437,7 +437,7 @@ def test_list_page_in_progress_row_shows_blue_background(client, production_user
     html = client.get("/app/production/inventory-order-alert").content.decode("utf-8")
 
     assert 'alert-row--確認中' in html
-    assert "監視 1 件" in html
+    assert "対象外 1 件" in html
     assert ">確認中<" in html or "確認中</option>" in html
 
 
@@ -472,7 +472,7 @@ def test_list_page_shows_paginated_summary_rows(client, production_user):
     assert 'class="ioa-table-counts-right"' in html
     # 確認状態リセットは設定画面（SCR-02）へ移した。一覧には出さない。
     assert "ioa-confirmation-reset" not in html
-    assert "危険 0 件 / 注意 0 件 / 監視 21 件 / 対象外 0 件" in html
+    assert "発注遅れ 0 件 / 納期確認 0 件 / 要発注 0 件 / 要監視 0 件 / 対象外 21 件" in html
     assert "全件数:" not in html
     assert "確認済み 0 件 / 確認中 0 件 / 未確認 21 件" in html
     assert "CSV 取込時に Oracle から全件集計し" not in html
@@ -487,7 +487,7 @@ def test_list_page_shows_paginated_summary_rows(client, production_user):
     footer_pos = html.index('class="ioa-table-footer"')
     assert table_wrap_pos < footer_pos
     # 件数サマリは表の表示領域を優先し、フッタ行（表の下）に置く。
-    assert html.index("監視 21 件") > footer_pos
+    assert html.index("対象外 21 件") > footer_pos
     assert html.index("表示件数", footer_pos) < select_pos
     assert select_pos < html.index("前へ", footer_pos)
     assert html.index("前へ", footer_pos) < html.index("次へ", footer_pos)
@@ -529,7 +529,7 @@ def test_list_page_shows_alert_counts_on_left(client, production_user):
     counts_pos = html.index('class="ioa-table-counts"')
     left_pos = html.index('class="ioa-table-counts-left"', counts_pos)
     right_pos = html.index('class="ioa-table-counts-right"', counts_pos)
-    critical_pos = html.index("監視 1 件", left_pos)
+    critical_pos = html.index("対象外 1 件", left_pos)
     unconfirmed_pos = html.index("未確認", right_pos)
     assert left_pos < right_pos
     assert critical_pos < unconfirmed_pos
@@ -602,7 +602,7 @@ def test_list_page_includes_row_selection_markup(client, production_user):
     client.force_login(production_user)
     html = client.get("/app/production/inventory-order-alert").content.decode("utf-8")
 
-    assert 'class="alert-row alert-row--stockout-watch ioa-data-row"' in html
+    assert 'class="alert-row alert-row--response-none ioa-data-row"' in html
     assert 'data-flow-quadrant="low-flow-no-incoming"' in html
     assert 'data-cust-code="112"' in html
     assert 'data-item-cd="90249-10112"' in html
@@ -697,24 +697,32 @@ def test_list_page_server_rendered_row_marks_not_fetched_mari_stock(client, prod
 
 
 @pytest.mark.django_db
-def test_list_page_detail_dialog_has_four_sections(client, production_user):
+def test_list_page_detail_dialog_sections(client, production_user):
     import_record = SlimsStockImport.objects.create(file_name="sample.csv", row_count=1)
     store_summary_snapshot(import_record, [_sample_export_row()], as_of_date=date(2026, 6, 17))
 
     client.force_login(production_user)
     html = client.get("/app/production/inventory-order-alert").content.decode("utf-8")
 
-    # design.md §6.3 の 4 区分。
-    assert "ioa-detail-item-section" in html
-    assert "ioa-detail-flow-section" in html
-    assert "ioa-detail-stock-section" in html
+    # 10 REQ-DDC-F-002 の 4 区分（判定サマリ / 在庫シミュレーション / 品番情報 / メモ）。
+    assert "ioa-detail-assessment-section" in html
+    assert "ioa-detail-stock-simulation-section" in html
+    assert "ioa-detail-reference-section" in html
     assert "ioa-detail-memo-section" in html
-    assert "ioa-detail-department" in html
+    assert "品番情報" in html
+    # 品番情報の中身: 品目 / 在庫と発注残 / 在庫内訳 / 工程の連鎖 / 実績グラフ
+    assert "ioa-detail-item-section" in html
+    assert "ioa-detail-stock-fields-section" in html
+    assert "ioa-detail-stock-section" in html
     assert "ioa-detail-condition" not in html
-    # TC-SFV-X-011: 流動区分区分に 状況 / 推奨アクション / 判定期間
-    assert "ioa-detail-flow-status" in html
-    assert "ioa-detail-recommended-action" in html
-    assert "ioa-detail-evaluation-period" in html
+    # 推奨アクション・責任部署は判定サマリへ一本化（REQ-DDC-F-004）
+    assert "ioa-detail-department" not in html
+    assert "ioa-detail-recommended-action" not in html
+    # 流動区分の区分は撤去（REQ-DDC-F-008）。一覧の列・絞り込みには残る
+    for class_name in ("ioa-detail-flow-section", "ioa-detail-flow-quadrant", "ioa-detail-flow-status", "ioa-detail-evaluation-period"):
+        assert class_name not in html
+    # 区分の見出しは「参考」から「品番情報」へ改称した（REQ-DDC-F-008）
+    assert '<h4 class="ioa-detail-section-title">参考</h4>' not in html
     assert "ioa-detail-stock-slims" in html
     assert "ioa-detail-stock-mari" in html
     # 圧縮された 1 行のメタ表示は 4 区分に置き換えた。
@@ -1036,7 +1044,7 @@ def test_x009_counts_summary_uses_new_quadrant_names(client, production_user):
     html = client.get("/app/production/inventory-order-alert").content.decode("utf-8")
 
     # 06: 件数サマリは在庫切れリスク。流動区分は行の data 属性で確認する
-    assert "危険 0 件 / 注意 0 件 / 監視 4 件 / 対象外 0 件" in html
+    assert "発注遅れ 0 件 / 納期確認 0 件 / 要発注 0 件 / 要監視 0 件 / 対象外 4 件" in html
     for key in ("low-flow-no-incoming", "dormant-stock", "low-flow-no-shipment", "normal-flow"):
         assert f'data-flow-quadrant="{key}"' in html
 
@@ -1100,7 +1108,7 @@ def test_x013_export_csv_has_stage2_trailing_columns_and_values(client, producti
     assert response.status_code == 200
     columns = header.split(",")
     assert columns[24:28] == ["在庫月数", "在庫切れ予測月", "需要予測の算出根拠", "推奨アクション"]
-    assert columns[-1] == "上流工程の納期超過"
+    assert columns[-1] == "発注方式"
     assert columns.index("流動区分") < columns.index("判定軸") < columns.index("判定期間")
     import csv
     import io
@@ -1153,8 +1161,9 @@ def test_x015_urgency_is_only_in_row_data_and_detail_dialog(client, production_u
     assert 'data-months-of-stock="0.5"' in html
     assert 'data-stockout-forecast-month="2026-07"' in html
     assert 'data-demand-forecast-basis="内示"' in html
-    assert "ioa-detail-months-of-stock" in html
-    assert "ioa-detail-stockout-month" in html
+    # 10: 在庫月数・在庫切れ予測月は詳細ダイアログから撤去（一覧のソート項目としては残る。REQ-DDC-F-003/006）
+    assert "ioa-detail-months-of-stock" not in html
+    assert "ioa-detail-stockout-month" not in html
 
 
 @pytest.mark.django_db
@@ -1174,26 +1183,30 @@ def test_x015_row_data_carries_empty_stockout_month_when_stock_is_enough(client,
 
 
 @pytest.mark.django_db
-def test_x016_detail_dialog_has_demand_forecast_section_between_trend_and_memo(client, production_user):
+def test_ddc_x003_demand_forecast_section_is_removed(client, production_user):
+    """10: 需要予測区分は撤去。月別内示は「在庫と発注残」区分へ移した（REQ-DDC-F-003）。"""
     import_record = SlimsStockImport.objects.create(file_name="sample.csv", row_count=1)
     store_summary_snapshot(import_record, [_sample_export_row()], as_of_date=date(2026, 6, 17))
 
     client.force_login(production_user)
     html = client.get("/app/production/inventory-order-alert").content.decode("utf-8")
 
-    trend_pos = html.index("ioa-detail-anchored-stock-trend-section")
-    forecast_pos = html.index("ioa-detail-demand-forecast-section")
-    memo_pos = html.index("ioa-detail-memo-section")
-    assert trend_pos < forecast_pos < memo_pos
+    # 区分ごと撤去。在庫切れ予測月（V-221）は在庫切れ日（V-232）と根拠が違うため画面から外した
+    assert "ioa-detail-demand-forecast-section" not in html
     for class_name in (
         "ioa-detail-demand-basis",
-        "ioa-detail-demand-monthly",
         "ioa-detail-months-of-stock",
         "ioa-detail-stockout-month",
         "ioa-detail-demand-unit-breakdown",
         "ioa-detail-demand-empty",
     ):
-        assert class_name in html
+        assert class_name not in html
+    # 月別内示だけは材料として「在庫と発注残」に残る（品番情報の中）
+    reference_pos = html.index("ioa-detail-reference-section")
+    fields_pos = html.index("ioa-detail-stock-fields-section")
+    monthly_pos = html.index("ioa-detail-demand-monthly")
+    assert reference_pos < fields_pos < monthly_pos
+    assert "客先の出荷予定（月別）" in html
 
 
 @pytest.mark.django_db
@@ -1213,22 +1226,38 @@ def test_stage2_list_page_accepts_months_of_stock_sort(client, production_user):
     assert html.index('data-item-cd="ITEM-SOON"') < html.index('data-item-cd="ITEM-LATE"')
 
 
-# --- 06_stockout-risk: TC-SOR-X-001〜008 ---
+# --- 08_stockout-risk-rework: TC-SRR-C-004〜007 の画面側 ---
+
+RESPONSE_CLASS_KEY_BY_LABEL = {
+    "発注遅れ": "order-overdue",
+    "納期確認": "delivery-check",
+    "要発注": "order-needed",
+    "要監視": "watch",
+    "対象外": "none",
+}
 
 
-def _risk_row(risk: str, *, item_cd: str, reasons: list[str] | None = None, days: int | None = 0, quadrant_dates=("2025/04/02", "2026/06/15"), **extra) -> dict[str, object]:
+def _response_row(
+    response_class: str,
+    *,
+    item_cd: str,
+    reasons: list[str] | None = None,
+    stockout_date: str = "",
+    order_deadline: str = "",
+    quadrant_dates=("2025/04/02", "2026/06/15"),
+    **extra,
+) -> dict[str, object]:
     last_incoming, last_ship = quadrant_dates
     return _forecast_row(item_cd=item_cd, last_incoming_date=last_incoming, last_ship_date=last_ship) | {
-        "stockout_risk": risk,
-        "stockout_risk_key": {"危険": "danger", "注意": "caution", "監視": "watch", "対象外": "none"}[risk],
-        "stockout_risk_reasons": reasons or [],
-        "days_until_stockout": days,
-        "shortage_qty": 200,
-        "replenishment_qty": 0,
-        "replenishment_later_qty": 0,
-        "replenishment_earliest_due": "",
-        "replenishment_has_overdue": False,
-        "replenishment_unknown": False,
+        "response_class": response_class,
+        "response_class_key": RESPONSE_CLASS_KEY_BY_LABEL[response_class],
+        "response_reasons": reasons or [],
+        "stockout_date": stockout_date,
+        "order_deadline": order_deadline,
+        "below_safety_stock": False,
+        "safety_stock": 0.0,
+        "overdue_order_qty": 0,
+        "overdue_order_count": 0,
         "lead_time_days": 5,
         "lead_time_source": "master",
         "ordering_method": "手動発注",
@@ -1236,61 +1265,87 @@ def _risk_row(risk: str, *, item_cd: str, reasons: list[str] | None = None, days
     }
 
 
-def _store_risk_rows() -> None:
+def _store_response_rows() -> None:
     import_record = SlimsStockImport.objects.create(file_name="sample.csv", row_count=4)
     rows = [
-        _risk_row("危険", item_cd="ITEM-DANGER", reasons=["発注忘れの可能性", "リードタイム内"], days=0),
-        _risk_row("注意", item_cd="ITEM-CAUTION", reasons=["数量不足"], days=40, ordering_method="MRP 発注"),
-        _risk_row("監視", item_cd="ITEM-WATCH", days=None),
-        _risk_row("対象外", item_cd="ITEM-NONE", days=30, quadrant_dates=("2026/05/01", "2026/06/15")),
+        _response_row(
+            "発注遅れ",
+            item_cd="ITEM-OVERDUE",
+            reasons=["在庫切れ 2026/06/20", "発注期限 2026/06/15"],
+            stockout_date="2026/06/20",
+            order_deadline="2026/06/15",
+        ),
+        _response_row(
+            "要発注",
+            item_cd="ITEM-NEEDED",
+            reasons=["在庫切れ 2026/08/01", "発注期限 2026/07/27"],
+            stockout_date="2026/08/01",
+            order_deadline="2026/07/27",
+            ordering_method="MRP 発注",
+        ),
+        _response_row("要監視", item_cd="ITEM-WATCH", reasons=["安全在庫 50 を下回る"], below_safety_stock=True, safety_stock=50.0),
+        _response_row("対象外", item_cd="ITEM-NONE", quadrant_dates=("2026/05/01", "2026/06/15")),
     ]
     store_summary_snapshot(import_record, rows, as_of_date=date(2026, 6, 17))
 
 
 @pytest.mark.django_db
-def test_sor_x001_stockout_risk_column_is_first_and_cell_shows_label_only(client, production_user):
-    _store_risk_rows()
+def test_srr_x001_response_class_column_is_first_and_cell_shows_label_only(client, production_user):
+    _store_response_rows()
 
     client.force_login(production_user)
     html = client.get("/app/production/inventory-order-alert").content.decode("utf-8")
 
-    header_pos = html.index("在庫切れリスク")
+    header_pos = html.index("対応区分")
     assert header_pos < html.index("流動区分")
-    assert '<span class="ioa-stockout-risk ioa-stockout-risk--danger">危険</span>' in html
-    assert '<span class="ioa-stockout-risk ioa-stockout-risk--caution">注意</span>' in html
-    assert '<span class="ioa-stockout-risk ioa-stockout-risk--watch">監視</span>' in html
-    assert "ioa-stockout-risk--none" not in html  # 対象外は空
-    assert 'data-stockout-risk="danger"' in html
+    assert '<span class="ioa-response-class ioa-response-class--order-overdue">発注遅れ</span>' in html
+    assert '<span class="ioa-response-class ioa-response-class--order-needed">要発注</span>' in html
+    assert '<span class="ioa-response-class ioa-response-class--watch">要監視</span>' in html
+    assert "ioa-response-class--none" not in html  # 対象外は空
+    assert 'data-response-class="order-overdue"' in html
 
 
 @pytest.mark.django_db
-def test_sor_x002_row_class_prefers_stockout_risk_over_flow_quadrant(client, production_user):
-    _store_risk_rows()
+def test_srr_x005_list_shows_stockout_date_and_order_deadline_columns(client, production_user):
+    """TC-SRR-C-005: 在庫切れ日・発注期限が一覧の列として出る。"""
+    _store_response_rows()
 
     client.force_login(production_user)
     html = client.get("/app/production/inventory-order-alert").content.decode("utf-8")
 
-    assert 'class="alert-row alert-row--stockout-danger ioa-data-row"' in html
-    assert 'class="alert-row alert-row--stockout-caution ioa-data-row"' in html
-    # 監視・対象外は色なし（流動区分は行の色に使わない）
-    assert 'class="alert-row alert-row--stockout-watch ioa-data-row"' in html
-    assert 'class="alert-row alert-row--stockout-none ioa-data-row"' in html
+    # 列の並びは 対応区分 → 在庫切れ日 → 発注期限 → 流動区分（ソートリンクの出現順で見る）
+    assert html.index("sort=response_class") < html.index("sort=stockout_date") < html.index("sort=order_deadline") < html.index("sort=flow_quadrant")
+    assert "2026/06/20" in html and "2026/06/15" in html
+
+
+@pytest.mark.django_db
+def test_srr_x002_row_class_uses_response_class_only(client, production_user):
+    _store_response_rows()
+
+    client.force_login(production_user)
+    html = client.get("/app/production/inventory-order-alert").content.decode("utf-8")
+
+    assert 'class="alert-row alert-row--response-order-overdue ioa-data-row"' in html
+    assert 'class="alert-row alert-row--response-order-needed ioa-data-row"' in html
+    # 要監視・対象外は色なし（流動区分は行の色に使わない）
+    assert 'class="alert-row alert-row--response-watch ioa-data-row"' in html
+    assert 'class="alert-row alert-row--response-none ioa-data-row"' in html
     assert 'class="alert-row alert-row--low-flow-no-incoming ioa-data-row"' not in html
 
 
 @pytest.mark.django_db
-def test_sor_x003_counts_summary_is_by_stockout_risk(client, production_user):
-    _store_risk_rows()
+def test_srr_x003_counts_summary_is_by_response_class(client, production_user):
+    _store_response_rows()
 
     client.force_login(production_user)
     html = client.get("/app/production/inventory-order-alert").content.decode("utf-8")
 
-    assert "危険 1 件 / 注意 1 件 / 監視 1 件 / 対象外 1 件" in html
+    assert "発注遅れ 1 件 / 納期確認 0 件 / 要発注 1 件 / 要監視 1 件 / 対象外 1 件" in html
 
 
 @pytest.mark.django_db
 @patch("application.inventory_order_alert.interfaces.wiring.portal_dashboard_usecase")
-def test_sor_x004_dashboard_banner_shows_danger_and_caution(mock_usecase_factory, client, production_user):
+def test_srr_x007_dashboard_banner_shows_response_classes(mock_usecase_factory, client, production_user):
     from application.inventory_order_alert.use_cases.portal_dashboard import DashboardBannerContext
 
     mock_usecase_factory.return_value.execute.return_value = DashboardBannerContext(
@@ -1301,62 +1356,119 @@ def test_sor_x004_dashboard_banner_shows_danger_and_caution(mock_usecase_factory
         stock_as_of_label="2026年6月17日時点の在庫",
         has_stock_data=True,
         stock_stale=False,
-        danger=2,
-        caution=5,
+        order_overdue=2,
+        order_needed=5,
+        delivery_check=3,
         watch=10,
     )
     client.force_login(production_user)
     html = client.get("/app").content.decode("utf-8")
 
-    assert "在庫切れリスク" in html
-    assert "危険 <strong>2</strong> 件" in html
-    assert "注意 <strong>5</strong> 件" in html
-    assert "監視期間 6か月" in html
+    assert "対応区分" in html
+    assert "発注遅れ <strong>2</strong> 件" in html
+    assert "要発注 <strong>5</strong> 件" in html
+    assert "納期確認 <strong>3</strong> 件" in html
+    assert "監視期間" not in html  # 08 で撤去
     assert "判定期間 1年" in html
     assert "inventory-order-alert-banner--critical" in html
 
 
 @pytest.mark.django_db
-def test_sor_x005_detail_dialog_has_stockout_risk_section(client, production_user):
-    _store_risk_rows()
+def test_ddc_x002_detail_dialog_has_the_assessment_section_first(client, production_user):
+    _store_response_rows()
 
     client.force_login(production_user)
     html = client.get("/app/production/inventory-order-alert").content.decode("utf-8")
 
-    risk_pos = html.index("ioa-detail-stockout-risk-section")
-    forecast_pos = html.index("ioa-detail-demand-forecast-section")
-    assert risk_pos < forecast_pos
+    # 10: 判定サマリ → 在庫シミュレーション → 参考 → メモ の 4 区分（REQ-DDC-F-002。2026-09-30 に在庫と発注残を参考の中へ）
+    order = [
+        "ioa-detail-assessment-section",
+        "ioa-detail-stock-simulation-section",
+        "ioa-detail-reference-section",
+        "ioa-detail-stock-fields-section",
+        "ioa-detail-memo-section",
+    ]
+    positions = [html.index(name) for name in order]
+    assert positions == sorted(positions), order
+
     for class_name in (
-        "ioa-detail-stockout-risk",
-        "ioa-detail-stockout-risk-reasons",
-        "ioa-detail-stockout-days",
-        "ioa-detail-stockout-replenishment",
-        "ioa-detail-stockout-shortage",
+        "ioa-detail-assessment-headline",
+        "ioa-detail-assessment-class",
+        "ioa-detail-assessment-deadline",
+        "ioa-detail-assessment-next-action",
+        "ioa-detail-assessment-reasons",
+        "ioa-detail-planned-incoming",
+        "ioa-detail-overdue-orders",
+        "ioa-detail-safety-stock",
         "ioa-detail-stockout-lead-time",
         "ioa-detail-stockout-ordering-method",
     ):
         assert class_name in html
+    # 10 REQ-DDC-F-009: 品目マスタ由来の 3 項目は「品目」の中（在庫と発注残ではない）。
+    item_dl = html.split('<h5 class="ioa-detail-section-subtitle">品目</h5>', 1)[1].split("</dl>", 1)[0]
+    stock_dl = html.split('<h5 class="ioa-detail-section-subtitle">在庫と発注残</h5>', 1)[1].split("</dl>", 1)[0]
+    for class_name in ("ioa-detail-stockout-lead-time", "ioa-detail-stockout-ordering-method", "ioa-detail-safety-stock"):
+        assert class_name in item_dl, f"{class_name} が「品目」に無い"
+        assert class_name not in stock_dl, f"{class_name} が「在庫と発注残」に残っている"
+    # 仕入先品番の後・最終入荷日の前に並ぶ（マスタ属性 → 実績の日付）
+    assert item_dl.index("ioa-detail-item-level1-cd") < item_dl.index("ioa-detail-stockout-lead-time")
+    assert item_dl.index("ioa-detail-safety-stock") < item_dl.index("ioa-detail-item-last-incoming")
+    # 在庫と発注残に残るのは 在庫数 2 つ・届く予定・納期遅れ・月別内示
+    for class_name in ("ioa-detail-stock-slims", "ioa-detail-stock-mari", "ioa-detail-planned-incoming", "ioa-detail-overdue-orders", "ioa-detail-demand-monthly"):
+        assert class_name in stock_dl, f"{class_name} が「在庫と発注残」に無い"
+    # 旧「対応区分」区分の項目は判定サマリ／在庫と発注残へ吸収した
+    for class_name in ("ioa-detail-response-class-section", "ioa-detail-response-reasons", "ioa-detail-stockout-date", "ioa-detail-order-deadline"):
+        assert class_name not in html
+    # 撤去した項目は残らない
+    for class_name in ("ioa-detail-stockout-replenishment", "ioa-detail-stockout-shortage", "ioa-detail-stockout-days"):
+        assert class_name not in html
 
 
 @pytest.mark.django_db
-def test_sor_x006_filters_by_stockout_risk_and_ordering_method(client, production_user):
-    _store_risk_rows()
+def test_ddc_x004_recommended_action_and_department_are_only_in_the_assessment(client, production_user):
+    """推奨アクション・責任部署は判定サマリへ一本化した（REQ-DDC-F-004）。"""
+    _store_response_rows()
 
     client.force_login(production_user)
-    html = client.get("/app/production/inventory-order-alert?stockout_risk=danger&ordering_method=manual").content.decode("utf-8")
+    html = client.get("/app/production/inventory-order-alert").content.decode("utf-8")
 
-    assert '<option value="danger" selected>危険</option>' in html
+    assert "ioa-detail-recommended-action" not in html
+    assert "ioa-detail-department" not in html
+    assert "次にすること" in html
+
+
+@pytest.mark.django_db
+def test_ddc_x006_months_of_stock_stays_as_a_list_sort_option(client, production_user):
+    """一覧の機能は減らさない（REQ-DDC-F-006）。"""
+    _store_response_rows()
+
+    client.force_login(production_user)
+    html = client.get("/app/production/inventory-order-alert").content.decode("utf-8")
+
+    assert "在庫月数" in html  # 並び替えダイアログの選択肢として残る
+    assert "months_of_stock" in html
+
+
+@pytest.mark.django_db
+def test_srr_x004_filters_by_response_class_and_ordering_method(client, production_user):
+    _store_response_rows()
+
+    client.force_login(production_user)
+    html = client.get("/app/production/inventory-order-alert?response_class=order-overdue&ordering_method=manual").content.decode("utf-8")
+
+    assert '<option value="order-overdue" selected>発注遅れ</option>' in html
     assert '<option value="manual" selected>手動発注</option>' in html
-    assert 'id="ioa-stockout-risk"' in html
+    assert 'id="ioa-response-class"' in html
     assert 'id="ioa-ordering-method"' in html
     # ソート・ページングのリンクに絞り込みが引き継がれる
-    assert "stockout_risk=danger" in html
+    assert "response_class=order-overdue" in html
     assert "ordering_method=manual" in html
 
 
 @pytest.mark.django_db
-def test_sor_x007_csv_appends_stockout_risk_columns(client, production_user):
-    _store_risk_rows()
+def test_srr_x008_csv_appends_response_class_columns(client, production_user):
+    """TC-SRR-C-004: CSV に 対応区分 / 在庫切れ日 / 発注期限 / 納期遅れ数量 が出る。"""
+    _store_response_rows()
 
     client.force_login(production_user)
     body = client.get("/app/production/inventory-order-alert/export.csv").content.decode("utf-8-sig")
@@ -1365,16 +1477,27 @@ def test_sor_x007_csv_appends_stockout_risk_columns(client, production_user):
 
     records = list(csv.DictReader(io.StringIO(body)))
     header = body.splitlines()[0].split(",")
-    assert header[-11:] == ["在庫切れリスク", "在庫切れリスクの理由", "猶予日数", "補充見込み", "補充見込みの最早納期", "納期超過", "不足数量", "リードタイム", "発注方式", "上流工程の発注残", "上流工程の納期超過"]
-    danger = next(r for r in records if r["得意先品番"] == "ITEM-DANGER")
-    assert danger["在庫切れリスク"] == "危険"
-    assert danger["在庫切れリスクの理由"] == "発注忘れの可能性・リードタイム内"
-    assert danger["猶予日数"] == "0"
-    assert danger["発注方式"] == "手動発注"
+    assert header[-9:] == [
+        "対応区分",
+        "対応区分の理由",
+        "在庫切れ日",
+        "発注期限",
+        "納期遅れの発注残数量",
+        "安全在庫割れ",
+        "安全在庫",
+        "リードタイム",
+        "発注方式",
+    ]
+    overdue = next(r for r in records if r["得意先品番"] == "ITEM-OVERDUE")
+    assert overdue["対応区分"] == "発注遅れ"
+    assert overdue["対応区分の理由"] == "在庫切れ 2026/06/20・発注期限 2026/06/15"
+    assert overdue["在庫切れ日"] == "2026/06/20"
+    assert overdue["発注期限"] == "2026/06/15"
+    assert overdue["発注方式"] == "手動発注"
 
 
 @pytest.mark.django_db
-def test_sor_x008_legacy_snapshot_is_watch_and_renders(client, production_user):
+def test_srr_x009_legacy_snapshot_is_none_and_renders(client, production_user):
     import_record = SlimsStockImport.objects.create(file_name="sample.csv", row_count=1)
     store_summary_snapshot(import_record, [_sample_export_row()], as_of_date=date(2026, 6, 17))
 
@@ -1383,6 +1506,133 @@ def test_sor_x008_legacy_snapshot_is_watch_and_renders(client, production_user):
     html = response.content.decode("utf-8")
 
     assert response.status_code == 200
-    assert "監視 1 件" in html
-    assert 'data-stockout-risk="watch"' in html
-    assert "ioa-stockout-risk--watch" not in html  # 旧行（キーなし）はセルを空にする
+    assert "対象外 1 件" in html
+    assert 'data-response-class="none"' in html
+    assert "ioa-response-class--none" not in html  # 旧行（キーなし）はセルを空にする
+
+
+# --- 09_stock-simulation-chart: TC-SSC-X-001〜003 ---
+
+
+@pytest.mark.django_db
+def test_ssc_x001_detail_dialog_has_two_charts_in_order(client, production_user):
+    """グラフは「在庫推移（実績）」→「在庫シミュレーション」の順（REQ-SSC-F-001）。"""
+    _store_response_rows()
+
+    client.force_login(production_user)
+    html = client.get("/app/production/inventory-order-alert").content.decode("utf-8")
+
+    # 10: 在庫シミュレーション（根拠）→ 参考（実績グラフ）の順になった
+    simulation_pos = html.index("ioa-detail-stock-simulation-section")
+    actual_pos = html.index("ioa-detail-anchored-stock-trend-section")
+    assert simulation_pos < actual_pos
+    assert "在庫推移（実績）と入荷実績" in html
+    assert "在庫シミュレーション" in html
+
+
+@pytest.mark.django_db
+def test_ssc_x002_stock_simulation_section_elements(client, production_user):
+    _store_response_rows()
+
+    client.force_login(production_user)
+    html = client.get("/app/production/inventory-order-alert").content.decode("utf-8")
+
+    for class_name in (
+        "ioa-detail-stock-simulation-chart",
+        "ioa-detail-stock-simulation-empty",
+        "ioa-detail-stock-simulation-note",
+    ):
+        assert class_name in html
+
+
+@pytest.mark.django_db
+def test_ssc_x003_forecast_elements_are_gone_from_the_actual_chart(client, production_user):
+    """V-218 のグラフから予測の文言が消えていること。"""
+    _store_response_rows()
+
+    client.force_login(production_user)
+    html = client.get("/app/production/inventory-order-alert").content.decode("utf-8")
+
+    assert "推定在庫推移（参考値）と入荷実績・予測" not in html
+    assert "推定在庫推移を算出できません。" not in html
+
+
+@pytest.mark.django_db
+def test_ssc_x002_payload_carries_as_of_date_for_the_simulation(client, production_user):
+    """在庫シミュレーションの起点になる基準日がペイロードに載る。"""
+    _store_response_rows()
+
+    client.force_login(production_user)
+    html = client.get("/app/production/inventory-order-alert").content.decode("utf-8")
+
+    assert '&quot;asOfDate&quot;: &quot;2026-06-17&quot;' in html or '"asOfDate": "2026-06-17"' in html
+
+
+def test_ssc_x004_app_css_has_stock_simulation_styles():
+    css = (Path(__file__).resolve().parents[3] / "static" / "css" / "app.css").read_text(encoding="utf-8")
+
+    for class_name in (
+        "ioa-stock-simulation-line--actual",
+        "ioa-stock-simulation-line--outlook",
+        "ioa-stock-simulation-planned-bar",
+        "ioa-stock-simulation-overdue-bar",
+        "ioa-stock-simulation-stockout-line",
+        "ioa-stock-simulation-deadline-line",
+        "ioa-stock-simulation-safety-line",
+    ):
+        assert class_name in css
+    # 撤去した旧予測のスタイル
+    for class_name in ("ioa-anchored-stock-trend-line--forecast", "ioa-anchored-stock-trend-bar--planned"):
+        assert class_name not in css
+
+
+def test_static_assets_are_cache_busted_for_the_current_revision():
+    """JS/CSS を変えたらキャッシュバスター（?v=）も上げる。
+
+    2026-09-29: 09 の実装でここを上げ忘れ、ブラウザが古い JS を使い続けて
+    「グラフが 2 つに変わらない」状態になった。版を固定して再発を防ぐ。
+    """
+    templates = Path(__file__).resolve().parents[3] / "templates"
+    base = (templates / "base.html").read_text(encoding="utf-8")
+    ioa = (templates / "inventory_order_alert" / "list.html").read_text(encoding="utf-8")
+
+    assert "/static/css/app.css?v=20261005-item-master-fields" in base
+    assert "/static/js/inventory-order-alert-list.js?v=20261005-item-master-fields" in ioa
+    assert "/static/js/inventory-order-alert-list-client.js?v=20261005-item-master-fields" in ioa
+    # 旧版が残っていないこと
+    for stale in ("20260922-forecast-line-no-planned", "20260921-stale-overdue", "20260918-unit-forecast", "20260929-stock-simulation", "20260930-date-axis-scroll", "20260930-detail-cleanup", "20260930-chart-scroll-fix", "20260930-template-comment-fix"):
+        assert stale not in base and stale not in ioa
+
+
+def test_ddc_x002_app_css_has_assessment_styles():
+    css = (Path(__file__).resolve().parents[3] / "static" / "css" / "app.css").read_text(encoding="utf-8")
+
+    for class_name in (
+        "ioa-detail-assessment-section",
+        "ioa-detail-assessment-headline",
+        "ioa-detail-assessment-headline--order-overdue",
+        "ioa-detail-assessment-fields",
+        "ioa-detail-assessment-reasons",
+    ):
+        assert class_name in css
+
+
+def test_ddc_scrollbar_is_confined_to_the_simulation_chart():
+    """横スクロールバーはグラフだけに出す（2026-09-30 ユーザー指示）。
+
+    `.ioa-location-content` は display:grid のため、グリッド項目の既定 min-width:auto により
+    横長の SVG がダイアログごと押し広げ、ダイアログ側に横スクロールバーが出ていた。
+    min-width:0 で内側の overflow-x に閉じ込める。
+    """
+    css = (Path(__file__).resolve().parents[3] / "static" / "css" / "app.css").read_text(encoding="utf-8")
+
+    block = css.split(".ioa-location-content > *", 1)[1].split("}", 1)[0]
+    assert "min-width: 0" in block
+
+    # `.ioa-stock-simulation-scroll` は min-width の指定とスクロールの指定の 2 か所に出る。
+    # スクロールを持つ方のブロックを見る
+    blocks = [part.split("}", 1)[0] for part in css.split(".ioa-stock-simulation-scroll {")[1:]]
+    assert any("overflow-x: auto" in part for part in blocks)
+
+    shrink = css.split(".ioa-detail-stock-simulation-section,", 1)[1].split("}", 1)[0]
+    assert "min-width: 0" in shrink and "max-width: 100%" in shrink
