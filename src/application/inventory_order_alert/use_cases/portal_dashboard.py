@@ -11,31 +11,51 @@ from application.inventory_order_alert.domain.value_objects.row_counts import co
 
 _BANNER_ERROR_MESSAGE = "アラート件数を取得できませんでした。在庫発注アラート画面で再確認してください。"
 
-#: 帯の件数はこの判定条件で固定する。利用者が一覧で選んだ条件には従わない（design.md §6.4）。
+#: 帯の件数は既定の判定期間（1 年）で固定する。利用者が一覧で選んだ判定期間には従わない（05 design §6.5）。
 BANNER_FLOW_SELECTION = REFERENCE_FLOW_SELECTION
-BANNER_FLOW_CONDITION_LABEL = (
-    f"{BANNER_FLOW_SELECTION.axis_label}・{BANNER_FLOW_SELECTION.period_label}"
-)
+BANNER_FLOW_CONDITION_LABEL = f"判定期間 {BANNER_FLOW_SELECTION.period_label}"
+#: 対応区分（S-204）の件数はスナップショット保存値（取込時に判定した値）を数える
 
 
 @dataclass(frozen=True)
 class DashboardBannerContext:
-    supply_risk: int
+    low_flow_no_incoming: int
     dormant_stock: int
-    excess_stock_risk: int
+    low_flow_no_shipment: int
     unconfirmed: int
     stock_as_of_label: str
     has_stock_data: bool
     stock_stale: bool
     error_message: str = ""
+    #: 対応区分（08 design §5）。発注遅れ > 0 で赤系、納期確認・要発注のみで黄系
+    order_overdue: int = 0
+    delivery_check: int = 0
+    order_needed: int = 0
+    watch: int = 0
+    #: 07 在庫なしの 3 区分（design §3.2）
+    stockout_no_incoming: int = 0
+    stockout: int = 0
+    discontinuation_candidate: int = 0
 
     @property
     def attention(self) -> int:
-        return self.supply_risk + self.dormant_stock + self.excess_stock_risk
+        """通常流動品以外の合計（07 design §2.7）。"""
+        return (
+            self.stockout_no_incoming
+            + self.stockout
+            + self.low_flow_no_incoming
+            + self.dormant_stock
+            + self.low_flow_no_shipment
+            + self.discontinuation_candidate
+        )
 
     @property
     def has_alerts(self) -> bool:
-        return self.attention > 0
+        return self.attention > 0 or self.order_overdue > 0 or self.delivery_check > 0 or self.order_needed > 0
+
+    @property
+    def stockout_condition_label(self) -> str:
+        return BANNER_FLOW_CONDITION_LABEL
 
     @property
     def flow_condition_label(self) -> str:
@@ -45,18 +65,26 @@ class DashboardBannerContext:
     def tone(self) -> str:
         if self.error_message:
             return "neutral"
-        if self.supply_risk > 0:
+        # 対応区分を優先（08 design §5）。発注遅れ > 0 で赤系、納期確認・要発注のみで黄系
+        if self.order_overdue > 0:
             return "critical"
-        if self.dormant_stock > 0 or self.excess_stock_risk > 0:
+        if self.delivery_check > 0 or self.order_needed > 0:
+            return "warning"
+        # 欠品（在庫なし・需要あり）は発注遅れと同じ重さで赤系（07 design §3.2）
+        if self.stockout_no_incoming > 0 or self.stockout > 0:
+            return "critical"
+        if self.low_flow_no_incoming > 0:
+            return "critical"
+        if self.dormant_stock > 0 or self.low_flow_no_shipment > 0:
             return "warning"
         return "ok"
 
 
 def _empty_context(*, stock_as_of_label: str, has_stock_data: bool, error_message: str = "") -> DashboardBannerContext:
     return DashboardBannerContext(
-        supply_risk=0,
+        low_flow_no_incoming=0,
         dormant_stock=0,
-        excess_stock_risk=0,
+        low_flow_no_shipment=0,
         unconfirmed=0,
         stock_as_of_label=stock_as_of_label,
         has_stock_data=has_stock_data,
@@ -91,16 +119,24 @@ class PortalDashboard:
                 rows,
                 as_of_date=as_of_date,
                 query=ListQuery(as_of_date=as_of_date, flow_selection=BANNER_FLOW_SELECTION),
+                thresholds=app_settings.to_flow_thresholds(),
             )
         counts = count_rows(rows)
         stock_stale = is_stock_stale(stock_info.stock_as_of_date, app_settings.stock_stale_days)
 
         return DashboardBannerContext(
-            supply_risk=counts.supply_risk,
+            stockout_no_incoming=counts.stockout_no_incoming,
+            stockout=counts.stockout,
+            discontinuation_candidate=counts.discontinuation_candidate,
+            low_flow_no_incoming=counts.low_flow_no_incoming,
             dormant_stock=counts.dormant_stock,
-            excess_stock_risk=counts.excess_stock_risk,
+            low_flow_no_shipment=counts.low_flow_no_shipment,
             unconfirmed=counts.unconfirmed,
             stock_as_of_label=stock_info.stock_as_of_label,
             has_stock_data=True,
             stock_stale=stock_stale,
+            order_overdue=counts.order_overdue,
+            delivery_check=counts.delivery_check,
+            order_needed=counts.order_needed,
+            watch=counts.watch,
         )

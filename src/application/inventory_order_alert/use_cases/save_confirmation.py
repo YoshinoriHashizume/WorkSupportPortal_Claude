@@ -22,14 +22,24 @@ from application.inventory_order_alert.domain.value_objects.summary import Summa
 
 def _counts_to_response(counts: RowCounts) -> dict[str, int]:
     return {
-        "supplyRisk": counts.supply_risk,
+        # 07 在庫なしの 3 区分（design §3.2）
+        "stockoutNoIncoming": counts.stockout_no_incoming,
+        "stockout": counts.stockout,
+        "discontinuationCandidate": counts.discontinuation_candidate,
+        "lowFlowNoIncoming": counts.low_flow_no_incoming,
         "dormantStock": counts.dormant_stock,
-        "excessStockRisk": counts.excess_stock_risk,
+        "lowFlowNoShipment": counts.low_flow_no_shipment,
         "normalFlow": counts.normal_flow,
         "attention": counts.attention,
         "unconfirmed": counts.unconfirmed,
         "inProgress": counts.in_progress,
         "confirmed": counts.confirmed,
+        # 08 対応区分（S-204）
+        "orderOverdue": counts.order_overdue,
+        "deliveryCheck": counts.delivery_check,
+        "orderNeeded": counts.order_needed,
+        "watch": counts.watch,
+        "noneResponse": counts.none_response,
     }
 
 

@@ -28,6 +28,18 @@
                min="1" max="365" step="1" value="{{ stock_stale_days }}" required>
         <small>最終取込からこの日数を超えると警告バナーを表示します（1〜365）。</small>
       </label>
+
+      {# 07 REQ-FQR-F-008: 直近入荷の窓。判定期間（一覧で切り替え）とは別物なので用途を明記する #}
+      <label class="ioa-settings-field">
+        <span>直近入荷の日数</span>
+        <input type="number" id="ioa-setting-recent-incoming-days" name="recentIncomingDays"
+               min="1" max="90" step="1" value="{{ recent_incoming_days }}" required>
+        <small>
+          在庫のない品目を「欠品」と「欠品（入荷なし）」に分ける境目です（1〜90）。
+          最終入荷日がこの日数以内なら「欠品」、それより前なら「欠品（入荷なし）」になります。
+          一覧で切り替える判定期間とは別の設定です。
+        </small>
+      </label>
     </div>
 
     <div class="ioa-settings-actions">
@@ -82,6 +94,7 @@
         await put("/api/inventory-order-alert/settings", {
           warningDays: Number(document.getElementById("ioa-setting-warning-days").value),
           stockStaleDays: Number(document.getElementById("ioa-setting-stock-stale-days").value),
+          recentIncomingDays: Number(document.getElementById("ioa-setting-recent-incoming-days").value),
         });
         window.location.reload();
       } catch (error) {

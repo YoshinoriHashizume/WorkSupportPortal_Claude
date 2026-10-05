@@ -8,6 +8,7 @@ from application.inventory_order_alert.domain.value_objects.app_settings import 
     parse_settings_payload,
     settings_payload,
 )
+from application.inventory_order_alert.domain.value_objects.flow_quadrant import FlowThresholds
 from application.inventory_order_alert.infrastructure.persistence.settings_repository import (
     load_app_settings,
     save_app_settings,
@@ -131,6 +132,9 @@ def test_settings_payload_exposes_all_keys():
     assert settings_payload(AppSettings()) == {
         "warningDays": 365,
         "stockStaleDays": 7,
+        "defaultLeadTimeDays": 5,
+        # 07 第 2 段階: 直近入荷の窓（REQ-FQR-F-008）
+        "recentIncomingDays": 30,
     }
 
 
@@ -157,3 +161,79 @@ def test_app_settings_usecase_rejects_invalid_payload():
     use_case = AppSettingsUseCase(load_app_settings, save_app_settings)
     with pytest.raises(ValueError):
         use_case.save({"stockStaleDays": 999})
+
+
+# --- 設定 VO（既定リードタイム）。安全日数・監視期間は 08 で撤去した（08 design §2.4） ---
+
+import pytest  # noqa: E402
+
+from application.inventory_order_alert.domain.value_objects.app_settings import (  # noqa: E402
+    parse_settings_payload,
+    settings_payload,
+)
+
+
+def test_d054_default_lead_time_setting_default():
+    settings = AppSettings()
+
+    assert settings.default_lead_time_days == 5
+    # 撤去した設定は残っていない
+    for name in ("safety_days", "watch_months", "to_stockout_risk_settings"):
+        assert not hasattr(settings, name)
+
+
+@pytest.mark.parametrize("kwargs", [{"default_lead_time_days": 0}, {"default_lead_time_days": 61}])
+def test_d054_out_of_range_values_are_rejected(kwargs):
+    with pytest.raises(ValueError):
+        AppSettings(**kwargs)
+
+
+def test_d054_settings_payload_round_trip():
+    payload = settings_payload(AppSettings(default_lead_time_days=7))
+
+    assert payload["defaultLeadTimeDays"] == 7
+    assert "safetyDays" not in payload
+    assert "watchMonths" not in payload
+
+    parsed = parse_settings_payload({"defaultLeadTimeDays": 21}, current=AppSettings())
+    assert parsed.default_lead_time_days == 21
+
+    with pytest.raises(ValueError):
+        parse_settings_payload({"defaultLeadTimeDays": 99}, current=AppSettings())
+
+
+# --- 07_flow-quadrant-refinement 第 2 段階: 直近入荷の窓（REQ-FQR-F-008） ---
+
+
+def test_fqr_f008_recent_incoming_days_default_and_thresholds():
+    settings = AppSettings()
+
+    assert settings.recent_incoming_days == 30
+    assert settings.to_flow_thresholds().recent_incoming_days == 30
+    assert settings.to_flow_thresholds() == FlowThresholds(recent_incoming_days=30)
+
+
+@pytest.mark.parametrize("value", [0, 91])
+def test_fqr_f008_out_of_range_recent_incoming_days_is_rejected(value):
+    with pytest.raises(ValueError):
+        AppSettings(recent_incoming_days=value)
+
+
+def test_fqr_f008_settings_payload_round_trip():
+    payload = settings_payload(AppSettings(recent_incoming_days=45))
+
+    assert payload["recentIncomingDays"] == 45
+
+    parsed = parse_settings_payload({"recentIncomingDays": 60}, current=AppSettings())
+    assert parsed.recent_incoming_days == 60
+    # 未指定なら現在値を引き継ぐ
+    assert parse_settings_payload({}, current=AppSettings(recent_incoming_days=45)).recent_incoming_days == 45
+
+    with pytest.raises(ValueError):
+        parse_settings_payload({"recentIncomingDays": 91}, current=AppSettings())
+
+
+def test_fqr_f008_demand_window_months_is_not_a_setting():
+    """需要の窓は需要の判定を内示のみに改めた時点で撤去した（REQ-FQR-F-008）。"""
+    assert not hasattr(AppSettings(), "demand_window_months")
+    assert "demandWindowMonths" not in settings_payload(AppSettings())

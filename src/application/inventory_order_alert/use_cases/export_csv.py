@@ -8,6 +8,10 @@ from application.inventory_order_alert.domain.repositories.ports import LoadSumm
 from application.inventory_order_alert.domain.value_objects.export_csv import render_export_csv
 from application.inventory_order_alert.domain.value_objects.list_query import parse_list_query
 from application.inventory_order_alert.domain.value_objects.list_rows import apply_flow_quadrants_to_rows
+from application.inventory_order_alert.domain.value_objects.recommended_action import (
+    DEFAULT_RECOMMENDED_ACTIONS,
+    RecommendedActions,
+)
 
 _TZ = ZoneInfo("Asia/Tokyo")
 
@@ -22,8 +26,13 @@ class ExportCsvResult:
 
 
 class ExportCsv:
-    def __init__(self, load_summary: LoadSummary) -> None:
+    def __init__(
+        self,
+        load_summary: LoadSummary,
+        recommended_actions: RecommendedActions = DEFAULT_RECOMMENDED_ACTIONS,
+    ) -> None:
         self._load_summary = load_summary
+        self._recommended_actions = recommended_actions
 
     def execute(self, *, query_params: dict[str, str] | None = None) -> ExportCsvResult:
         summary = self._load_summary()
@@ -33,13 +42,18 @@ class ExportCsv:
         query = parse_list_query(query_params or {})
         as_of_date = summary.as_of_date or query.as_of_date
         # 出力は常に全件。絞り込み・ページングは反映しない（design.md §6.3）。
-        rows = apply_flow_quadrants_to_rows(summary.rows, as_of_date=as_of_date, query=query)
+        rows = apply_flow_quadrants_to_rows(
+            summary.rows,
+            as_of_date=as_of_date,
+            query=query,
+            recommended_actions=self._recommended_actions,
+        )
 
         selection = query.flow_selection
         rows = [
             {
                 **row,
-                "flow_axis": selection.axis_label,
+                # 判定軸列は互換のため残し、値は domain 側で常に空にする（05 design §7.3）
                 "evaluation_period": selection.period_label,
                 "no_incoming_record": (
                     NO_INCOMING_RECORD_LABEL if row.get("no_incoming_record") else ""

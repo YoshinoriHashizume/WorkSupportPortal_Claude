@@ -3,6 +3,7 @@ from __future__ import annotations
 from django.db import transaction
 from django.utils import timezone
 
+from application.inventory_order_alert.domain.repositories.ports import EnrichRows
 from application.inventory_order_alert.domain.value_objects.summary import StockImportInfo
 from application.inventory_order_alert.domain.value_objects.dates import format_stock_as_of_label
 from application.inventory_order_alert.domain.value_objects.slims_stock import SlimsStockLocationLine, parse_slims_stock_csv
@@ -16,6 +17,7 @@ def import_slims_csv_text(
     *,
     user: object | None = None,
     file_name: str = "",
+    enrich_rows: EnrichRows | None = None,
 ) -> StockImportInfo:
     lines = parse_slims_stock_csv(text)
     # 取込は「在庫保存 → Oracle 全件集計 → スナップショット保存」を全件差し替えで行うため、
@@ -39,7 +41,9 @@ def import_slims_csv_text(
                 for line in lines
             ]
         )
-        aggregation_error, confirmation_reset_count = run_summary_aggregation(import_record, lines)
+        aggregation_error, confirmation_reset_count, aggregation_warning = run_summary_aggregation(
+            import_record, lines, enrich_rows=enrich_rows
+        )
     stock_date = timezone.localdate(import_record.imported_at)
     snapshot = InventoryOrderAlertSummarySnapshot.objects.filter(import_record=import_record).first()
     return StockImportInfo(
@@ -51,6 +55,7 @@ def import_slims_csv_text(
         summary_row_count=snapshot.total_count if snapshot else 0,
         aggregation_error=aggregation_error,
         confirmation_reset_count=confirmation_reset_count,
+        aggregation_warning=aggregation_warning,
     )
 
 

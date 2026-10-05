@@ -1,11 +1,13 @@
 from __future__ import annotations
 
 from application.inventory_order_alert.domain.value_objects.confirmation import STATUS_CHOICES
+"""クライアント配信ペイロードのテスト（TC-SFV-D-054〜056）。"""
+
 from application.inventory_order_alert.domain.value_objects.flow_quadrant import (
     EVALUATION_PERIODS,
-    FLOW_AXIS_DORMANT,
-    FLOW_AXIS_LOW_FLOW,
-    QUADRANT_SUPPLY_RISK,
+    FLOW_QUADRANT_KEYS,
+    FLOW_QUADRANTS,
+    QUADRANT_LOW_FLOW_NO_INCOMING,
 )
 from application.inventory_order_alert.domain.value_objects.list_client_data import (
     build_list_client_payload,
@@ -13,10 +15,13 @@ from application.inventory_order_alert.domain.value_objects.list_client_data imp
     row_to_client_dict,
 )
 from application.inventory_order_alert.domain.value_objects.list_filter import build_filter_options
+from application.inventory_order_alert.domain.value_objects.recommended_action import (
+    DEFAULT_RECOMMENDED_ACTIONS,
+)
 from application.inventory_order_alert.domain.value_objects.stock_quantity import STOCK_NOT_FETCHED
 
 PERIOD_KEYS = {period.key for period in EVALUATION_PERIODS}
-LEGACY_PAYLOAD_KEYS = ("alertLevel", "alertOnly")
+LEGACY_PAYLOAD_KEYS = ("alertLevel", "alertOnly", "flowAxes", "flowPeriods", "defaultFlowSelection")
 
 
 def _row(**kwargs: object) -> dict[str, object]:
@@ -33,17 +38,16 @@ def _row(**kwargs: object) -> dict[str, object]:
         "post_shipment_count": 1,
         "post_shipment_total_qty": 250,
         "stock_qty": "100",
-        "flow_quadrant": QUADRANT_SUPPLY_RISK,
-        "flow_quadrant_key": "supply-risk",
+        "flow_quadrant": QUADRANT_LOW_FLOW_NO_INCOMING,
+        "flow_quadrant_key": "low-flow-no-incoming",
         "flow_quadrants": {
-            "L1": "supply-risk",
-            "L3": "supply-risk",
-            "L6": "supply-risk",
-            "D1": "supply-risk",
-            "D2": "supply-risk",
-            "D5": "supply-risk",
+            "Y1": "low-flow-no-incoming",
+            "Y3": "low-flow-no-incoming",
+            "Y5": "low-flow-no-incoming",
         },
         "no_incoming_record": True,
+        "flow_status": "出荷は継続、最終入荷 入荷実績なし（1年以上入荷なし）",
+        "recommended_action": "仕入先へ生産継続可否・設備/金型の有無を確認。在庫切れ予測月が近いものから",
         "responsible_department": "調達G・営業G・生産管理",
         "confirmation_status": "未確認",
     }
@@ -59,33 +63,107 @@ def _payload(rows: list[dict[str, object]]) -> dict[str, object]:
     )
 
 
-def test_build_list_client_payload_includes_flow_axes_and_periods():
+def test_d054_payload_includes_evaluation_periods_and_default_key():
     payload = _payload([_row()])
 
-    assert [axis["value"] for axis in payload["flowAxes"]] == [FLOW_AXIS_LOW_FLOW, FLOW_AXIS_DORMANT]
-    assert [period["key"] for period in payload["flowPeriods"][FLOW_AXIS_LOW_FLOW]] == ["L1", "L3", "L6"]
-    assert [period["key"] for period in payload["flowPeriods"][FLOW_AXIS_DORMANT]] == ["D1", "D2", "D5"]
+    assert payload["evaluationPeriods"] == [
+        {"years": 1, "key": "Y1", "label": "1年"},
+        {"years": 3, "key": "Y3", "label": "3年"},
+        {"years": 5, "key": "Y5", "label": "5年"},
+    ]
+    assert payload["defaultPeriodKey"] == "Y1"
+    assert "flowAxes" not in payload
+    assert "flowPeriods" not in payload
+
+
+def test_d055_payload_includes_recommended_actions_for_four_quadrants():
+    payload = _payload([_row()])
+
+    actions = payload["recommendedActions"]
+    assert set(actions) == set(FLOW_QUADRANT_KEYS.values())
+    for quadrant in FLOW_QUADRANTS:
+        expected = DEFAULT_RECOMMENDED_ACTIONS.for_quadrant(quadrant)
+        entry = actions[FLOW_QUADRANT_KEYS[quadrant]]
+        assert entry["statusTemplate"] == expected.status_template
+        assert entry["action"] == expected.action
+        assert entry["departments"] == "・".join(expected.departments)
+
+
+def test_d055_payload_uses_injected_recommended_actions():
+    overridden = DEFAULT_RECOMMENDED_ACTIONS.with_action_texts({"low-flow-no-incoming": "上書き文言"})
+
+    payload = build_list_client_payload(
+        all_rows=[_row()],
+        filter_options=build_filter_options([_row()]),
+        confirmation_status_choices=list(STATUS_CHOICES),
+        recommended_actions=overridden,
+    )
+
+    assert payload["recommendedActions"]["low-flow-no-incoming"]["action"] == "上書き文言"
+    assert payload["recommendedActions"]["dormant-stock"]["action"] == DEFAULT_RECOMMENDED_ACTIONS.for_quadrant("在庫死蔵品").action
+
+
+def test_d056_payload_row_flow_quadrants_use_year_keys():
+    payload = _payload([_row()])
+
+    assert set(payload["rows"][0]["flowQuadrants"]) == {"Y1", "Y3", "Y5"}
+
+
+def test_payload_row_includes_flow_status_and_recommended_action():
+    payload = _payload([_row()])
+
+    row = payload["rows"][0]
+    assert row["flowStatus"] == "出荷は継続、最終入荷 入荷実績なし（1年以上入荷なし）"
+    assert row["recommendedAction"].startswith("仕入先へ")
+
+
+def test_payload_has_no_legacy_quadrant_names():
+    import json
+
+    text = json.dumps(_payload([_row()]), ensure_ascii=False)
+    for legacy in ("供給リスク品", "在庫過剰リスク品", "supply-risk", "excess-stock-risk", "判定軸"):
+        assert legacy not in text
 
 
 def test_build_list_client_payload_includes_flow_quadrant_labels_and_order():
     payload = _payload([_row()])
 
-    assert len(payload["flowQuadrantLabels"]) == 4
+    # 07_flow-quadrant-refinement で 7 区分（欠品 2 + 従来 4 + 打ち切り候補）
+    assert len(payload["flowQuadrantLabels"]) == 7
     assert payload["flowQuadrantOrder"] == [
-        "supply-risk",
+        "stockout-no-incoming",
+        "stockout",
+        "low-flow-no-incoming",
         "dormant-stock",
-        "excess-stock-risk",
+        "low-flow-no-shipment",
+        "discontinuation-candidate",
         "normal-flow",
     ]
+    assert payload["flowQuadrantLabels"]["stockout-no-incoming"] == "欠品（入荷なし）"
+    assert payload["flowQuadrantLabels"]["stockout"] == "欠品"
 
 
-def test_build_list_client_payload_includes_default_flow_selection():
-    payload = _payload([_row()])
+def test_fqr_c005_row_carries_flow_reasons():
+    """流動区分の理由は詳細ダイアログに出す（TC-FQR-C-005）。キーがない旧行は空配列。"""
+    payload = _payload([_row(flow_reasons=["入荷 < 需要", "1年以上出荷なし・経路要確認"])])
 
-    assert payload["defaultFlowSelection"] == {"axis": FLOW_AXIS_LOW_FLOW, "period": 3}
+    assert payload["rows"][0]["flowReasons"] == ["入荷 < 需要", "1年以上出荷なし・経路要確認"]
+    assert _payload([_row()])["rows"][0]["flowReasons"] == []
 
 
-def test_build_list_client_payload_row_includes_six_flow_quadrants():
+def test_fqr_c005_row_carries_flow_reasons_for_every_period():
+    """判定期間の切替はクライアント側で行うため、理由も 3 期間ぶん渡す（07 design §1-6）。"""
+    by_period = {"Y1": ["1年以上出荷なし・経路要確認"], "Y3": [], "Y5": []}
+    payload = _payload([_row(flow_reasons_by_period=by_period)])
+
+    assert payload["rows"][0]["flowReasonsByPeriod"] == by_period
+    # 旧スナップショット（キーなし）は 3 期間とも空
+    assert _payload([_row()])["rows"][0]["flowReasonsByPeriod"] == {"Y1": [], "Y3": [], "Y5": []}
+    assert payload["flowQuadrantLabels"]["low-flow-no-incoming"] == "低流動品（入荷なし）"
+    assert payload["flowQuadrantLabels"]["low-flow-no-shipment"] == "低流動品（出荷なし）"
+
+
+def test_build_list_client_payload_row_flow_quadrants_cover_all_evaluation_periods():
     payload = _payload([_row()])
 
     assert set(payload["rows"][0]["flowQuadrants"]) == PERIOD_KEYS
@@ -156,10 +234,10 @@ def test_TC_IOA_DOM_07G_row_to_client_dict_includes_display_and_keys():
     client_row = row_to_client_dict(row)
     assert client_row["cust_code"] == "112"
     assert client_row["item_cd"] == "90249-10112"
-    assert client_row["alertRowClass"] == "supply-risk"
+    assert client_row["alertRowClass"] == "response-none"
     assert client_row["confirmationStatusKey"] == "unconfirmed"
     assert client_row["display"]["stock_qty"] == "100"
-    assert client_row["display"]["flow_quadrant"] == QUADRANT_SUPPLY_RISK
+    assert client_row["display"]["flow_quadrant"] == QUADRANT_LOW_FLOW_NO_INCOMING
 
 
 def test_row_to_client_dict_normalizes_row_identity_keys():
@@ -186,9 +264,187 @@ def test_TC_IOA_DOM_07H_build_list_client_payload():
     assert len(payload["rows"]) == 2
     assert payload["rows"][0]["item_cd"] == "90249-10112"
     assert payload["defaultPageSize"] == 50
-    assert payload["defaultSortSpecs"] == [{"column": "flow_quadrant", "direction": "asc"}]
+    assert payload["defaultSortSpecs"] == [{"column": "response_class", "direction": "asc"}]
     assert len(payload["sortableColumns"]) >= 10
     assert payload["filterOptions"]["custOptions"][0]["value"] == "112"
     assert payload["itemCdOptions"] == ["90249-10112", "ITEM-2"]
     assert payload["level1ItemCdOptions"] == ["90249-10112-9209"]
     assert payload["confirmationStatusChoices"][0]["value"] == "unconfirmed"
+
+
+# --- 05_single-flow-view 第 2 段階: ペイロードの需要予測キー ---
+
+
+def _stage2_row(**kwargs: object) -> dict[str, object]:
+    return _row(
+        internal_item_cd="96160-00500-9065",
+        unconfirmed_order_trend=[
+            {"month": "2026-09", "qty": 0},
+            {"month": "2026-10", "qty": 224},
+            {"month": "2026-11", "qty": 216},
+            {"month": "2026-12", "qty": 197},
+        ],
+        reconciliation_unit_key="10523-X0A02",
+        demand_forecast_basis="内示",
+        demand_forecast_current_month_remaining=0,
+        demand_forecast_monthly=[224, 216, 197],
+        demand_forecast_monthly_average=212.3333,
+        demand_forecast_stock_total=31970.0,
+        months_of_stock=150.6,
+        stockout_forecast_month=None,
+        **kwargs,
+    )
+
+
+def test_stage2_payload_row_includes_demand_forecast_keys():
+    payload = _payload([_stage2_row()])
+
+    row = payload["rows"][0]
+    assert row["internalItemCd"] == "96160-00500-9065"
+    assert [point["qty"] for point in row["unconfirmedOrderTrend"]] == [0, 224, 216, 197]
+    assert row["reconciliationUnitKey"] == "10523-X0A02"
+    assert row["demandForecast"] == {
+        "basis": "内示",
+        "currentMonthRemaining": 0,
+        "monthly": [224, 216, 197],
+        "monthlyAverage": 212.3333,
+        "stockTotal": 31970.0,
+        "monthsOfStock": 150.6,
+        "stockoutForecastMonth": None,
+    }
+
+
+def test_stage2_payload_row_without_forecast_keys_has_none_basis():
+    payload = _payload([_row()])
+
+    row = payload["rows"][0]
+    assert row["internalItemCd"] == ""
+    assert row["unconfirmedOrderTrend"] == []
+    assert row["reconciliationUnitKey"] == ""
+    assert row["demandForecast"]["basis"] == "なし"
+    assert row["demandForecast"]["monthsOfStock"] is None
+    assert row["demandForecast"]["stockTotal"] is None
+    assert row["demandForecast"]["stockoutForecastMonth"] is None
+    assert row["demandForecast"]["monthly"] == [0, 0, 0]
+
+
+def test_srr_payload_drops_replenishment_block():
+    """補充見込み系は 08 で撤去した（08 design §2.3/§2.4）。"""
+    row = _stage2_row(replenishment_qty=5, replenishment_stale_qty=400)
+
+    client_row = _payload([row])["rows"][0]
+
+    assert "replenishment" not in client_row
+    assert "upstreamOrder" not in client_row
+    assert "daysUntilStockout" not in client_row
+    assert "shortageQty" not in client_row
+
+
+def test_stage2_payload_lists_sort_only_columns_separately():
+    payload = _payload([_row()])
+
+    assert payload["sortOnlyColumns"] == [{"key": "months_of_stock", "label": "在庫月数"}]
+    assert "months_of_stock" not in [column["key"] for column in payload["sortableColumns"]]
+
+
+# --- 09_stock-simulation-chart: TC-SSC-P-001/002 ---
+
+
+def test_ssc_p001_payload_carries_daily_series_for_the_simulation():
+    row = _row(
+        daily_shipment=[{"date": "2026-09-10", "qty": 20}],
+        daily_incoming=[{"date": "2026-09-12", "qty": 50}],
+        planned_incoming=[{"date": "2026-10-05", "qty": 50}],
+        unconfirmed_order_daily=[{"date": "2026-10-01", "qty": 60}],
+    )
+
+    client_row = _payload([row])["rows"][0]
+
+    assert client_row["dailyShipment"] == [{"date": "2026-09-10", "qty": 20}]
+    assert client_row["dailyIncoming"] == [{"date": "2026-09-12", "qty": 50}]
+    assert client_row["plannedIncoming"] == [{"date": "2026-10-05", "qty": 50}]
+    assert client_row["unconfirmedOrderDaily"] == [{"date": "2026-10-01", "qty": 60}]
+
+
+def test_ssc_p002_old_snapshot_rows_get_empty_series():
+    """旧スナップショット（キーなし）は空配列。例外にしない。"""
+    client_row = _payload([_row()])["rows"][0]
+
+    for key in ("dailyShipment", "dailyIncoming", "plannedIncoming", "unconfirmedOrderDaily"):
+        assert client_row[key] == []
+
+
+def test_ssc_p002_broken_entries_are_dropped():
+    row = _row(daily_shipment=[{"date": "", "qty": 5}, {"date": "2026-09-10", "qty": 0}, "garbage", {"date": "2026-09-11", "qty": 3}])
+
+    assert _payload([row])["rows"][0]["dailyShipment"] == [{"date": "2026-09-11", "qty": 3}]
+
+
+def test_ssc_payload_carries_the_fixed_simulation_range():
+    """品目によって端が変わらないよう、描画範囲はサーバが決める（REQ-SSC-F-002）。"""
+    from datetime import date
+
+    payload = build_list_client_payload(
+        all_rows=[_row()],
+        filter_options=build_filter_options([_row()]),
+        confirmation_status_choices=list(STATUS_CHOICES),
+        as_of_date=date(2026, 9, 18),
+    )
+
+    assert payload["asOfDate"] == "2026-09-18"
+    assert payload["simulationRange"] == {"start": "2026-08-19", "end": "2026-12-31"}
+
+
+def test_ssc_payload_range_is_empty_without_a_base_date():
+    payload = _payload([_row()])
+
+    assert payload["asOfDate"] == ""
+    assert payload["simulationRange"] == {"start": "", "end": ""}
+
+
+# --- 10_detail-dialog-cleanup: TC-DDC-P-001〜003 ---
+
+
+def test_ddc_p001_payload_carries_the_assessment_summary():
+    from datetime import date
+
+    row = _row(
+        response_class="要発注",
+        stockout_date="2026/10/10",
+        order_deadline="2026/10/05",
+        response_reasons=["在庫切れ 2026/10/10", "発注期限 2026/10/05"],
+    )
+    payload = build_list_client_payload(
+        all_rows=[row],
+        filter_options=build_filter_options([row]),
+        confirmation_status_choices=list(STATUS_CHOICES),
+        as_of_date=date(2026, 9, 18),
+    )
+
+    summary = payload["rows"][0]["assessmentSummary"]
+    assert summary["headline"] == "この品番は 2026/10/10 に在庫が切れます。2026/10/05 までに発注が必要です"
+    assert summary["nextAction"] == "生産管理: 発注期限までに発注する"
+    assert summary["deadlineText"] == "2026/10/05（あと 17 日）"
+    assert summary["reasons"] == ["在庫切れ 2026/10/10", "発注期限 2026/10/05"]
+
+
+def test_ddc_p002_old_snapshot_row_gets_the_safe_headline():
+    from datetime import date
+
+    payload = build_list_client_payload(
+        all_rows=[_row()],
+        filter_options=build_filter_options([_row()]),
+        confirmation_status_choices=list(STATUS_CHOICES),
+        as_of_date=date(2026, 9, 18),
+    )
+
+    summary = payload["rows"][0]["assessmentSummary"]
+    assert summary["headline"] == "在庫は切れません"
+    assert summary["deadlineText"] == ""
+
+
+def test_ddc_p002_without_a_base_date_the_summary_is_empty():
+    """基準日がなければ残り日数を出せないので空にする（例外にしない）。"""
+    summary = _payload([_row()])["rows"][0]["assessmentSummary"]
+
+    assert summary == {"headline": "", "nextAction": "", "deadlineText": "", "reasons": []}

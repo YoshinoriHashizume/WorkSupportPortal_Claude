@@ -13,7 +13,7 @@ from application.inventory_order_alert.domain.value_objects.confirmation import 
     confirmation_status_sort_key,
     confirmation_status_sort_rank,
 )
-from application.inventory_order_alert.domain.value_objects.flow_quadrant import QUADRANT_SUPPLY_RISK
+from application.inventory_order_alert.domain.value_objects.flow_quadrant import QUADRANT_LOW_FLOW_NO_INCOMING
 
 
 def test_confirmation_record_has_confirmed_flow_quadrant_field():
@@ -22,12 +22,12 @@ def test_confirmation_record_has_confirmed_flow_quadrant_field():
         item_cd="90249-10112",
         status=STATUS_CONFIRMED,
         memo="",
-        confirmed_flow_quadrant=QUADRANT_SUPPLY_RISK,
+        confirmed_flow_quadrant=QUADRANT_LOW_FLOW_NO_INCOMING,
         confirmed_at=None,
         confirmed_by="10001",
     )
 
-    assert record.confirmed_flow_quadrant == QUADRANT_SUPPLY_RISK
+    assert record.confirmed_flow_quadrant == QUADRANT_LOW_FLOW_NO_INCOMING
     assert not hasattr(record, "confirmed_alert_level")
 
 

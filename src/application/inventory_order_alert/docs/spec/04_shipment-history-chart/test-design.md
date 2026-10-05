@@ -1,0 +1,282 @@
+# テスト設計書: 詳細ダイアログへの出荷推移グラフの追加
+
+文書ID: TEST-SHIPMENT-HISTORY-CHART-2026-001
+作成日: 2026/09/01
+更新日: 2026/09/03（入出荷推移の独立グラフ表示を撤去。TC-SHC-X-001, X-003, X-004, X-005, X-009 を撤去・置き換え。TC-SHC-X-016〜018を追加。推定在庫推移からMARI起点系列を撤去しTC-SHC-X-019・X-020を追加）
+対応文書: [design.md](./design.md)（DESIGN-SHIPMENT-HISTORY-CHART-2026-001）
+テスト戦略reference: 03_mari-stock-visibility/test-design.md と同一方針を踏襲（本書では差分のみ記述）
+テストフレームワークreference: django-pytest
+
+---
+
+## 1. テスト戦略
+
+### 1.1 テスト対象のスコープ
+
+- **対象**: 月次出荷推移の集計ロジック（domain）、Oracle 取得結果のグループ化（infrastructure）、集計行への付与、既存スナップショットとの互換、クライアント配信ペイロード、JS の描画ロジック（ソース文字列アサーション方式）。
+- **対象外**: `fetch_all_shipments()` 自体（無変更）、`aggregate_shipment_stats()` 自体（無変更）。SVG の見た目（ピクセル比較はしない。要素の存在・データ属性で検証する）。
+
+### 1.2 テストレイヤーの方針
+
+| レイヤー | テスト種別 | 方針 | DB依存 |
+|---|---|---|---|
+| Domain（`shipment_trend.py`） | 単体テスト | 日付固定リテラルで月境界を厳密に検証 | なし |
+| Infrastructure（`group_shipments_by_pair`） | 単体テスト | Oracle カーソルは `unittest.mock` | なし（グループ化自体はPython内） |
+| Infrastructure（`build_summary_rows` 統合） | 既存の `_shipped_pair_patches` パッチ方式を拡張 | 既存テストと同じモック方式 | なし |
+| Infrastructure（スナップショット往復） | 既存の `test_summary_storage.py` パターンを拡張 | Django ORM 使用 | あり |
+| Interfaces（詳細ダイアログ） | ビュー統合テスト＋JS ソース文字列アサーション | 既存パターンを踏襲 | あり |
+
+### 1.3 TDD方針
+
+Red → Green → Refactor。各実装タスクの直前にテスト作成タスクを置く（tasks.md 参照）。
+
+### 1.4 テストケースIDの規約
+
+`TC-SHC-{層}-{連番}`。層: D=Domain, I=Infrastructure, A=Application, X=Interfaces, E=エッジケース/性能。
+
+---
+
+## 2. テストケース一覧
+
+### 2.1 Domain層テスト（`shipment_trend.py`）
+
+| # | テストケース | 入力 | 期待結果 | 対応REQ-ID | 優先度 |
+|---|---|---|---|---|---|
+| TC-SHC-D-001 | 出荷実績なしなら全月0の24件を返す | `shipments=[]`, `as_of_date=2026-06-17` | 24件、全て `qty=0`、月は 2024-07〜2026-06 | REQ-SHC-F-001 | P1 |
+| TC-SHC-D-002 | 単月に複数出荷があれば合算する | 同月に qty=10, qty=5 が2件 | 当該月 `qty=15` | REQ-SHC-F-001 | P1 |
+| TC-SHC-D-003 | as_of_date の月が最終月になる | `as_of_date=2026-06-17` | 最後の要素の `month == "2026-06"` | REQ-SHC-F-001 | P1 |
+| TC-SHC-D-004 | 24か月より古い出荷は含まれない | `as_of_date=2026-06-17` の25か月前に出荷 | その月は結果に現れない（範囲外） | REQ-SHC-F-001 | P1 |
+| TC-SHC-D-005 | 月は古い順に並ぶ | 複数月にまたがる出荷 | `result[i].month < result[i+1].month` | REQ-SHC-F-002 | P2 |
+| TC-SHC-D-006 | 戻り値は常に固定長24件 | 出荷が1件だけ・24件超の月にまたがる等 | 常に `len(result) == 24` | REQ-SHC-F-002 | P1 |
+| TC-SHC-D-007 | 月末日の出荷が月境界をまたがない | `ship_date` が月末・翌月頭に近い値 | 正しい月に分類される | REQ-SHC-F-001 | P2 |
+| TC-SHC-D-008 | 負の出荷数量（返品）はそのまま合算する | `qty=-5` を含む | 加工せず合計に反映（design.md §8） | REQ-SHC-F-001 | P2 |
+| TC-SHC-D-009 | `months` 引数を変えると長さが変わる | `months=6` | `len(result) == 6` | 設計の柔軟性確認 | P3 |
+
+### 2.2 Infrastructure層テスト
+
+#### `group_shipments_by_pair()`
+
+| # | テストケース | 入力 | 期待結果 | 対応REQ-ID | 優先度 |
+|---|---|---|---|---|---|
+| TC-SHC-I-001 | cust_code + cust_item_cd でグループ化される | 2件が同一キー、1件が別キー | 2グループ、件数がそれぞれ一致 | REQ-SHC-F-001 | P1 |
+| TC-SHC-I-002 | 空リストなら空辞書を返す | `[]` | `{}` | 境界値 | P2 |
+| TC-SHC-I-003 | 該当キーがない行の月次は空リストで扱われる（呼び出し側で0埋め） | 未出荷ペア | `build_monthly_shipment_trend([])` が全月0を返すことと合わせて確認 | REQ-SHC-F-004 | P1 |
+
+#### `build_summary_rows()` への付与
+
+| # | テストケース | 入力 | 期待結果 | 対応REQ-ID | 優先度 |
+|---|---|---|---|---|---|
+| TC-SHC-I-004 | 出荷ありの行に shipment_trend が付与される | 既存 `_shipped_pair_patches` を利用 | `rows[0]["shipment_trend"]` が24件のリスト | REQ-SHC-F-001 | P1 |
+| TC-SHC-I-005 | Oracle への追加問い合わせが発生しない | `build_summary_rows` 実行 | `fetch_all_shipments` の呼び出し回数が1回のまま（既存回数から増えない） | REQ-SHC-NF-001 | **P1** |
+| TC-SHC-I-006 | 既存の出荷回数（post_shipment_count）算出結果が変わらない | 既存の代表行データ | 本機能導入前後で `post_shipment_count` 等が一致 | REQ-SHC-NF-003（既存ロジック無変更） | **P1** |
+
+#### スナップショット往復
+
+| # | テストケース | 入力 | 期待結果 | 対応REQ-ID | 優先度 |
+|---|---|---|---|---|---|
+| TC-SHC-I-007 | shipment_trend を含む行が保存・復元できる | 24件のリストを含む行 | 復元後も24件・値が一致（Decimal化されない） | REQ-SHC-NF-002 | P1 |
+| TC-SHC-I-008 | 既存スナップショット（shipment_trend キーなし）の読込で例外を出さない | キーなしの行 | `row.get("shipment_trend")` が `None`。例外なし | REQ-SHC-F-004 | **P1** |
+
+#### 入荷推移（V-217）の取得と付与
+
+| # | テストケース | 入力 | 期待結果 | 対応REQ-ID | 優先度 |
+|---|---|---|---|---|---|
+| TC-SHC-I-009 | `fetch_incoming_receipts` が window_start 以降のみ返す | window境界をまたぐ検収明細 | window内のみ返る | REQ-SHC-NF-008 | P1 |
+| TC-SHC-I-010 | `build_summary_rows` が `incoming_trend` を付与する | `_shipped_pair_patches` を拡張 | `rows[0]["incoming_trend"]` が24件 | REQ-SHC-F-005 | P1 |
+| TC-SHC-I-011 | 入荷推移クエリが1回だけ発行される | `build_summary_rows` 実行 | `fetch_incoming_receipts` の呼び出し回数が1 | REQ-SHC-NF-008 | **P1** |
+
+### 2.3 Application層テスト
+
+| # | テストケース | 入力 | 期待結果 | 対応REQ-ID | 優先度 |
+|---|---|---|---|---|---|
+| TC-SHC-A-001 | 一覧表示のユースケースが shipment_trend を通過させる | `ListPage.execute()` | `context.all_rows[0]["shipment_trend"]` が取得できる | REQ-SHC-F-001 | P2 |
+| TC-SHC-A-002 | 一覧表示で Oracle を呼ばない（既存方針の非回帰） | `ListPage.execute()` | 既存と同様、取込を実行しない | REQ-SHC-NF-001 | P1 |
+
+### 2.4 Interfaces層テスト
+
+| # | テストケース | 入力 | 期待結果 | 対応REQ-ID | 優先度 |
+|---|---|---|---|---|---|
+| TC-SHC-X-001 | ～～［2026/09/03撤去］詳細ダイアログに「出荷推移」区分が存在する～～ | — | （独立グラフ表示の撤去に伴い削除。下記の撤去確認テストに置き換え） | REQ-SHC-F-002（撤去） | — |
+| TC-SHC-X-002 | JS に getShipmentTrend ゲッターが定義されている | list-client.js ソース | 文字列 `getShipmentTrend` が存在（推定在庫推移の算出に引き続き使用） | design.md §6.3 | P1 |
+| TC-SHC-X-003 | ～～［2026/09/03撤去］JS に renderShipmentTrendChart が定義され SVG を組み立てる～～ | — | （同上） | REQ-SHC-F-002（撤去） | — |
+| TC-SHC-X-004 | ～～［2026/09/03撤去］実績なし時の表示ロジックが存在する～～ | — | （同上） | REQ-SHC-F-003（撤去） | — |
+| TC-SHC-X-005 | ～～［2026/09/03撤去］既存の4区分の順序が変わらない（出荷推移区分の位置）～～ | — | （推定在庫推移の位置確認テストに置き換え。下記参照） | design.md §6.5（撤去） | — |
+| TC-SHC-X-006 | 流動区分の判定結果が本要件の前後で変わらない | `pytest test_flow_quadrant.py` | 全件 Green（非回帰） | REQ-SHC-NF-004 | **P1** |
+| TC-SHC-X-007 | `config/tests/test_clean_architecture.py` が Green | 全体テスト | レイヤー違反なし | REQ-SHC-NF-006 | **P1** |
+| TC-SHC-X-008 | JS に getIncomingTrend ゲッターが定義されている | list-client.js ソース | 文字列 `getIncomingTrend` が存在（推定在庫推移の算出に引き続き使用） | REQ-SHC-F-005 | P1 |
+| TC-SHC-X-009 | ～～［2026/09/03撤去］チャートが出荷・入荷2系列を描画する凡例を持つ～～ | — | （同上） | REQ-SHC-F-005（撤去） | — |
+
+#### 入出荷推移の独立グラフ表示の撤去確認（2026/09/03、DECISIONS.md参照）
+
+| # | テストケース | 入力 | 期待結果 | 対応REQ-ID | 優先度 |
+|---|---|---|---|---|---|
+| （新設） | 入出荷推移の専用グラフ描画関数・DOM区分が存在しない | list.js ソース / 一覧ページHTML | `renderShipmentTrendChart` 関数・`ioa-detail-shipment-trend-section` がいずれも存在しない | REQ-SHC-F-002撤去 | P1 |
+| TC-SHC-X-015（再掲） | 推定在庫推移区分が「在庫」と「メモ」の間にある（旧X-005の位置検証を引き継ぐ） | 一覧ページHTML | `ioa-detail-anchored-stock-trend-section` の位置が在庫区分とメモ区分の間 | design.md §6.5 | P1 |
+
+#### 推定在庫推移（V-218）のJSロジック
+
+| # | テストケース | 入力 | 期待結果 | 対応REQ-ID | 優先度 |
+|---|---|---|---|---|---|
+| TC-SHC-X-010 | `buildAnchoredStockTrend` が定義され末尾要素を起点値とする | list.js ソース | 関数定義と `length - 1` を使った代入コードが存在 | REQ-SHC-F-006 | P1 |
+| TC-SHC-X-011 | `parseAnchorQty` がカンマ除去・空文字で `null` を返す | list.js ソース | 関数定義とカンマ除去・空文字判定の分岐が存在 | REQ-SHC-F-006 | P1 |
+| TC-SHC-X-012 | `renderAnchoredStockChart` がゼロ基準線を含むスケールで描画する | list.js ソース | 関数定義と `Math.min(0` 等、0 を範囲に含めるスケール計算コードが存在 | REQ-SHC-F-006 | P1 |
+| TC-SHC-X-013 | 推定値をクランプしていない（マイナスのまま表示） | list.js ソース | `buildAnchoredStockTrend` / `renderAnchoredStockChart` 内に負値を0に切り上げる処理（`Math.max(0,` 等）が存在しない | REQ-SHC-F-006 | P1 |
+| TC-SHC-X-014 | `fillDetailSections` から算出・描画が呼ばれる | list.js ソース | `buildAnchoredStockTrend(` と `renderAnchoredStockChart(` の呼び出しが `fillDetailSections` 内に存在 | design.md §6.6 | P1 |
+| TC-SHC-X-015 | 詳細ダイアログに「推定在庫推移」区分が存在する | 一覧ページHTML | 新規区分クラスが存在し、「参考値」相当の注記文言が存在 | REQ-SHC-F-006 | P1 |
+
+#### 推定在庫推移グラフの表示改善（2026/09/03、実画面フィードバック対応）
+
+| # | テストケース | 入力 | 期待結果 | 対応REQ-ID | 優先度 |
+|---|---|---|---|---|---|
+| TC-SHC-X-016 | 月ラベルの見切れ防止（text-anchorをインラインstyleで上書き） | list.js ソース | `label.style.textAnchor` の使用と `setAttribute("text-anchor"` の不使用を確認（CSSクラスに負けて上書きされない不具合の再発防止） | REQ-SHC-F-006 | P1 |
+| TC-SHC-X-017 | Y軸に数量目盛りラベルを表示する | list.js ソース | `ioa-anchored-stock-trend-y-axis-label` クラスと `toLocaleString` の使用が存在 | REQ-SHC-F-006 | P2 |
+| TC-SHC-X-018 | Y軸目盛りを等間隔グリッド線で描画する | list.js ソース | `GRID_LINE_COUNT` 定数と `ioa-anchored-stock-trend-grid-line` クラスの使用が存在 | REQ-SHC-F-006 | P2 |
+
+#### 推定在庫推移からのMARI起点系列撤去（2026/09/03、DECISIONS.md参照）
+
+| # | テストケース | 入力 | 期待結果 | 対応REQ-ID | 優先度 |
+|---|---|---|---|---|---|
+| TC-SHC-X-019 | `renderAnchoredStockChart` がMARI系列を扱わない | list.js ソース | 関数内に `mariSeries`／`ioa-anchored-stock-trend-line--mari`／`ioa-anchored-stock-trend-point--mari`／`ioa-anchored-stock-trend-legend-item--mari`／`MARI起点` のいずれも存在しない | REQ-SHC-F-006（改訂） | P1 |
+| TC-SHC-X-020 | `fillDetailSections` がMARI起点系列を算出しない | list.js ソース | `mariAnchor`／`mariAnchoredTrend` が存在せず、`renderAnchoredStockChart(anchoredStockTrendSection, slimsAnchoredTrend, incomingTrend)` で呼ばれる（2026/09/11 改訂: 入荷の棒を描くため第3引数 `incomingTrend` を追加。MARI**起点系列**を持たないことの検証は `mariAnchor`／`mariAnchoredTrend` の不在で担保する） | REQ-SHC-F-006（改訂） | P1 |
+
+#### 入荷実績の棒グラフ追加・0起点化（2026/09/11、DECISIONS.md ステージ12参照）
+
+| # | テストケース | 入力 | 期待結果 | 対応REQ-ID | 優先度 |
+|---|---|---|---|---|---|
+| TC-SHC-X-021 | 推定在庫推移グラフに入荷実績の棒を描画する | list.js ソース | `renderAnchoredStockChart` 内に `incomingSeries` 引数と `ioa-anchored-stock-trend-bar--incoming` クラス、矩形生成（`createElementNS(svgNs, "rect")`）が存在する | REQ-SHC-F-006（改訂） | P1 |
+| TC-SHC-X-022 | Y軸の値域に入荷数量を算入する | list.js ソース | `maxQty` の算出に入荷系列の qty が含まれる（`Math.max` の引数に入荷系列が渡る） | REQ-SHC-F-006（改訂） | P1 |
+| TC-SHC-X-023 | 凡例に入荷(MARI)を表示する | list.js ソース | 凡例生成部に `ioa-anchored-stock-trend-legend-item--incoming` と `入荷(MARI)` が存在する | REQ-SHC-F-006（改訂） | P2 |
+| TC-SHC-X-024 | 在庫数が「該当なし」（空）の行は 0 を起点に算出する | list.js ソース（`parseAnchorQty`） | 空文字に対して `0` を返す分岐が存在する（`STOCK_NOT_FETCHED` の `－` と区別する） | REQ-SHC-F-006（改訂） | P1 |
+| TC-SHC-X-025 | 在庫数が「未取得」（`－`）の行はグラフを表示しない | list.js ソース（`parseAnchorQty`） | `－` を含む非数値に対して `null` を返し、`buildAnchoredStockTrend` が空配列を返す経路が維持されている | REQ-SHC-F-006（改訂） | P1 |
+| TC-SHC-X-026 | 棒が折れ線より背面に描画される | list.js ソース | 棒の描画（`drawIncomingBars` 相当）の呼び出しが `drawSeries(` の呼び出しより前にある | REQ-SHC-F-006（改訂） | P2 |
+
+#### 5年9組への遷移ボタン（2026/09/11、DECISIONS.md ステージ13参照）
+
+| # | テストケース | 入力 | 期待結果 | 対応REQ-ID | 優先度 |
+|---|---|---|---|---|---|
+| TC-SHC-X-027 | 遷移ボタンが推定在庫推移グラフの下にある | 一覧ページHTML | `ioa-detail-gonen-link` が `ioa-detail-anchored-stock-trend-empty` より後、`ioa-detail-memo-section` より前に存在する | §6.7 | P1 |
+| TC-SHC-X-028 | 別タブで開く | 一覧ページHTML | リンクに `target="_blank"` と `rel="noopener"` が付与されている | §6.7 | P1 |
+| TC-SHC-X-029 | 遷移先は5年9組の検索結果ページ | list.js ソース | `/app/production/five-year-nine/result` を定数として持ち、`href` に設定している | §6.7 | P1 |
+| TC-SHC-X-030 | 検索条件を4パラメータで渡す | list.js ソース | `custCode`／`custItem`／`yearMonth`／`asOfDate` を `URLSearchParams` で組み立て、`optionChange` は渡さない | §6.7 | P1 |
+| TC-SHC-X-031 | 年月は今月・対象日付は今日（ローカル時刻） | list.js ソース | `getFullYear()`／`getMonth()`／`getDate()` から組み立て、`toISOString()` を使わない（UTC変換による前日・前月ずれの防止） | §6.7 | P1 |
+| TC-SHC-X-032 | 得意先コード・得意先品番が空の行ではリンクを隠す | list.js ソース | `hidden` の切り替えが `custCode` と `itemCd` の有無で行われる | §6.7 | P2 |
+
+#### 推定在庫推移の算出単位を得意先品番に変更（2026/09/11、DECISIONS.md ステージ14参照）
+
+| # | テストケース | 入力 | 期待結果 | 対応REQ-ID | 優先度 |
+|---|---|---|---|---|---|
+| TC-SHC-X-033 | 品番単位の合算アクセサが存在する | list-client.js ソース | `getItemTrends(itemCd)` が定義され、`shipmentTrend` と `incomingTrend` を返す | §6.6 | P1 |
+| TC-SHC-X-034 | 出荷は同一得意先品番の全行を合算する | list-client.js ソース | `allRows` を `item_cd` で絞り込み、`shipment_trend` を月ごとに加算している | §6.6 | P1 |
+| TC-SHC-X-035 | 入荷は内作品番×仕入先の重複を除いて合算する | list-client.js ソース | `level1_item_cd` と `level1_vend_cd` を組にした重複除去（`Set` 等）を経て `incoming_trend` を加算している | §6.6 | P1 |
+| TC-SHC-X-036 | 合算はフィルタ状態に依存しない | list-client.js ソース | 合算関数が `allRows` を参照し、`applyListFilters` の結果を参照していない | §6.6 | P1 |
+| TC-SHC-X-037 | 詳細ダイアログが合算値で逆算・棒描画する | list.js ソース | `fillDetailSections` が `getItemTrends(` を呼び、その結果を `buildAnchoredStockTrend` と `renderAnchoredStockChart` に渡している（`getShipmentTrend(` / `getIncomingTrend(` を推定在庫推移の算出に使わない） | §6.6 | P1 |
+| TC-SHC-X-038 | 実データでの効果 | 2026-09-07 取込スナップショット（2,298行） | マイナスを含む行が 443 行（19.3%、行単位）→ 240 行（10.4%、得意先品番単位）→ **210 行（9.1%、照合単位）** と減少し、94223-80600 と 96160-00500 のマイナスが解消する（手動検証・DECISIONS.md ステージ14・15に記録） | §6.6 | P2 |
+
+#### 算出単位を照合単位（連結成分）へ再改訂（2026/09/11、DECISIONS.md ステージ15参照）
+
+| # | テストケース | 入力 | 期待結果 | 対応REQ-ID | 優先度 |
+|---|---|---|---|---|---|
+| TC-SHC-X-039 | 照合単位を二部グラフの連結成分として作る | list-client.js ソース | Union-Find で辺（得意先品番 ―― 内作品番×仕入先）をつなぎ、成分ごとに合算している | §6.6 | P1 |
+| TC-SHC-X-040 | 起点は照合単位の在庫合計。未取得の扱いを維持 | list.js ソース（`sumUnitAnchorQty`） | 各品番に `parseAnchorQty` を適用して合算し、全品番が未取得（`null`）なら `null` を返す（グラフ非表示） | §6.6 | P1 |
+| TC-SHC-X-041 | 起点の内訳は複数品番の単位でのみ表示 | list.js ソース（`renderAnchorBreakdown`） | 品番が 2 件未満なら `hidden`、多い場合は先頭 `ANCHOR_BREAKDOWN_MAX_ITEMS` 件＋「他N品番」に丸める | §6.6 | P2 |
+
+---
+
+## 3. テストデータ
+
+### 3.1 代表データ
+
+各テストファイル先頭にモジュール定数として定義する（他ファイルからは import しない）。
+
+```python
+# 例: test_shipment_trend_vo.py
+AS_OF_DATE = date(2026, 6, 17)
+```
+
+### 3.2 異常系テストデータ
+
+- 出荷実績が1件もない `(cust_code, cust_item_cd)` ペア
+- 24か月の境界をまたぐ出荷日（ちょうど24か月前・25か月前）
+- 負の出荷数量（返品を模したデータ）
+- 既存スナップショット相当（`shipment_trend` キーを持たない行の辞書）
+
+---
+
+## 4. 境界値・異常系のカバレッジ
+
+### 4.1 境界値テスト
+
+| 対象 | 境界値 | テストケース |
+|---|---|---|
+| 対象期間の下限 | ちょうど24か月前 / 25か月前 | TC-SHC-D-004 |
+| 月境界 | 月末日・月初日の出荷 | TC-SHC-D-007 |
+| 出荷数量 | 0・負値 | TC-SHC-D-008 |
+
+### 4.2 異常系テスト
+
+| 対象 | 異常ケース | 期待される振る舞い |
+|---|---|---|
+| 出荷実績が全くない品目 | `shipments=[]` | 全月0の24件（TC-SHC-D-001）。表示側は「実績なし」（TC-SHC-X-004） |
+| 既存スナップショット | `shipment_trend` キーなし | 例外にならず「実績なし」相当（TC-SHC-I-008） |
+
+### 4.3 エッジケース
+
+| # | 内容 |
+|---|---|
+| TC-SHC-E-001 | 配信ペイロードの1行あたり増分を実測する（design.md §6.2 の見積り約500バイトを検証） |
+| TC-SHC-E-002 | 5,000行相当でも `build_list_client_payload` が完了する（既存の性能非回帰） |
+
+---
+
+## 5. テスト環境
+
+### 5.1 テスト実行コマンド
+
+| 目的 | コマンド |
+|---|---|
+| Domain層のみ | `pytest application/inventory_order_alert/tests/test_shipment_trend_vo.py -x` |
+| アプリ全体 | `pytest application/inventory_order_alert/` |
+| アーキテクチャ検証 | `pytest config/tests/test_clean_architecture.py` |
+| 全体 | `pytest` |
+
+作業ディレクトリは `/django_app/src`。
+
+---
+
+## 6. 要件トレーサビリティ
+
+| 要件ID | テストケース |
+|---|---|
+| REQ-SHC-F-001 | TC-SHC-D-001〜004, D-006〜008, I-001, I-004 |
+| REQ-SHC-F-002（表示は撤去） | TC-SHC-D-005, D-006（算出部分のみ有効） |
+| REQ-SHC-F-003（撤去） | — |
+| REQ-SHC-F-004 | TC-SHC-I-003, I-008 |
+| REQ-SHC-F-005（表示は撤去） | TC-SHC-I-009〜011, X-008（算出・取得部分のみ有効） |
+| REQ-SHC-F-006（MARI起点系列は撤去） | TC-SHC-X-010〜020 |
+| REQ-SHC-NF-008 | TC-SHC-I-009, I-011 |
+| REQ-SHC-NF-001 | TC-SHC-I-005, A-002 |
+| REQ-SHC-NF-002 | TC-SHC-I-007 |
+| REQ-SHC-NF-003 | TC-SHC-I-006 |
+| REQ-SHC-NF-004 | TC-SHC-X-006 |
+| REQ-SHC-NF-005 | design.md §2.1 のレビューで確認（自動テスト化しない。import 文の目視確認） |
+| REQ-SHC-NF-006 | TC-SHC-X-007 |
+| REQ-SHC-NF-007（TDD） | tasks.md の各タスクで Red→Green を確認 |
+
+---
+
+## レビュー履歴
+
+### 自己実施レビュー (2026/09/01)
+
+網羅性・境界値・非回帰観点を確認し、NG相当の指摘なし。E-001（ペイロード実測）は design.md のリスクR-1と対応しており、実測後に許容値を確定する（DECISIONS.md 参照）。
+
+### 追記レビュー（推定在庫推移 V-218 追加分） (2026/09/03)
+
+- JS ロジックはこれまでの出荷推移・入荷推移と同じ**ソース文字列アサーション方式**で検証する（実行環境に JS テストランナーがないため、厳密な数値計算の正しさまでは自動検証できない。design.md の算出式レビューと目視確認で補う）。
+- ペイロード・Oracle 問い合わせ回数への影響がないことは、既存の TC-SHC-I-005 / E-001 系の実測が本機能追加後も変わらないことで間接的に確認する（新規テストは追加しない。算出がクライアント側の純粋計算のため）。
+
+### 追記レビュー（入出荷推移の独立グラフ表示の撤去） (2026/09/03)
+
+- 独立グラフ表示を前提としていた TC-SHC-X-001, X-003, X-004, X-005, X-009 を撤去した。これらが検証していた「グラフが存在する」性質は不要になったため、代わりに「専用グラフの描画関数・DOM区分が存在しないこと」を検証する撤去確認テストを新設した（回帰防止：将来再度うっかり同じ関数を復活させた場合に気づけるようにする）。
+- TC-SHC-X-005 が担っていた「区分の位置検証」の役割は、推定在庫推移区分の位置検証（TC-SHC-X-015 の拡張）に引き継いだ。
+- データ算出（TC-SHC-D-005, D-006, TC-SHC-I-009〜011, X-002, X-008）は無変更のまま有効。

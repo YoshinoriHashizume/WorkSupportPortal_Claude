@@ -54,11 +54,21 @@ def _counts_payload(counts: RowCounts) -> dict[str, int]:
     return {
         "total": counts.total,
         "attention": counts.attention,
-        "supplyRisk": counts.supply_risk,
+        # 07 在庫なしの 3 区分（design §3.2）
+        "stockoutNoIncoming": counts.stockout_no_incoming,
+        "stockout": counts.stockout,
+        "discontinuationCandidate": counts.discontinuation_candidate,
+        "lowFlowNoIncoming": counts.low_flow_no_incoming,
         "dormantStock": counts.dormant_stock,
-        "excessStockRisk": counts.excess_stock_risk,
+        "lowFlowNoShipment": counts.low_flow_no_shipment,
         "normalFlow": counts.normal_flow,
         "unconfirmed": counts.unconfirmed,
+        # 08 対応区分（S-204）
+        "orderOverdue": counts.order_overdue,
+        "deliveryCheck": counts.delivery_check,
+        "orderNeeded": counts.order_needed,
+        "watch": counts.watch,
+        "noneResponse": counts.none_response,
     }
 
 
@@ -169,11 +179,18 @@ def dashboard_summary_payload(
     return {
         "ok": True,
         "counts": {
-            "supplyRisk": context.supply_risk,
+            "stockoutNoIncoming": context.stockout_no_incoming,
+            "stockout": context.stockout,
+            "lowFlowNoIncoming": context.low_flow_no_incoming,
             "dormantStock": context.dormant_stock,
-            "excessStockRisk": context.excess_stock_risk,
+            "lowFlowNoShipment": context.low_flow_no_shipment,
+            "discontinuationCandidate": context.discontinuation_candidate,
             "attention": context.attention,
             "unconfirmed": context.unconfirmed,
+            "orderOverdue": context.order_overdue,
+            "deliveryCheck": context.delivery_check,
+            "orderNeeded": context.order_needed,
+            "watch": context.watch,
         },
         "stockImport": {
             "importedAt": _jsonable(imported_at) if imported_at is not None else None,

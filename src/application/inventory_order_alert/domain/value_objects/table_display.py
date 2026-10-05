@@ -9,6 +9,9 @@ from application.inventory_order_alert.domain.value_objects.code_sort import num
 from application.inventory_order_alert.domain.value_objects.dates import parse_optional_ymd
 
 SORTABLE_COLUMNS: tuple[tuple[str, str], ...] = (
+    ("response_class", "対応区分"),
+    ("stockout_date", "在庫切れ日"),
+    ("order_deadline", "発注期限"),
     ("flow_quadrant", "流動区分"),
     ("cust_chrg_psn_cd", "担当者コード"),
     ("cust_code", "得意先コード"),
@@ -28,7 +31,7 @@ SORTABLE_COLUMNS: tuple[tuple[str, str], ...] = (
 
 PAGE_SIZE_OPTIONS = (20, 50, 100, 200)
 DEFAULT_PAGE_SIZE = 50
-DEFAULT_SORT = "flow_quadrant"
+DEFAULT_SORT = "response_class"
 DEFAULT_DIRECTION = "asc"
 MAX_SORT_SPECS = 5
 from application.inventory_order_alert.domain.value_objects.confirmation import confirmation_status_sort_key
@@ -36,9 +39,14 @@ from application.inventory_order_alert.domain.value_objects.flow_quadrant import
     QUADRANT_NORMAL_FLOW,
     flow_quadrant_sort_rank,
 )
+from application.inventory_order_alert.domain.value_objects.stockout_risk import response_class_sort_rank
 VALID_DIRECTIONS = {"asc", "desc"}
-SORTABLE_KEYS = {column for column, _label in SORTABLE_COLUMNS}
-COLUMN_LABELS = dict(SORTABLE_COLUMNS)
+#: 一覧の列には出さないがソートできる項目（05 design §6.1）。在庫月数（V-222）は詳細ダイアログに表示する。
+SORT_ONLY_COLUMNS: tuple[tuple[str, str], ...] = (("months_of_stock", "在庫月数"),)
+#: 空（None・キーなし）を昇順・降順とも末尾に置く列。
+NULLS_LAST_COLUMNS = {"months_of_stock", "stockout_date", "order_deadline"}
+SORTABLE_KEYS = {column for column, _label in SORTABLE_COLUMNS} | {column for column, _label in SORT_ONLY_COLUMNS}
+COLUMN_LABELS = dict(SORTABLE_COLUMNS) | dict(SORT_ONLY_COLUMNS)
 
 
 @dataclass(frozen=True)
@@ -197,6 +205,8 @@ def _date_sort_key(value: object) -> tuple[int, str]:
 
 def _sort_value(row: dict[str, object], column: str) -> object:
     value = row.get(column, "")
+    if column == "response_class":
+        return response_class_sort_rank(row)
     if column == "flow_quadrant":
         return flow_quadrant_sort_rank(str(value or QUADRANT_NORMAL_FLOW))
     if column in {"post_shipment_count", "post_shipment_total_qty"}:
@@ -215,16 +225,44 @@ def _sort_value(row: dict[str, object], column: str) -> object:
             return Decimal("-1")
     if column in {"last_incoming_date", "last_ship_date"}:
         return _date_sort_key(value)
+    if column in {"stockout_date", "order_deadline"}:
+        # 空（在庫切れなし）は昇順・降順とも末尾（NULLS_LAST_COLUMNS）
+        text = str(value or "").strip()
+        if not text:
+            return None
+        try:
+            return parse_optional_ymd(text).toordinal()
+        except ValueError:
+            return None
     if column == "cust_chrg_psn_cd":
         return numeric_code_sort_key(str(value or ""))
     if column == "confirmation_status":
         return confirmation_status_sort_key(row)
+    if column == "months_of_stock":
+        try:
+            return None if value is None or value == "" else float(value)
+        except (TypeError, ValueError):
+            return None
     return str(value or "").lower()
+
+
+def _sort_key(row: dict[str, object], spec: SortSpec) -> object:
+    value = _sort_value(row, spec.column)
+    if spec.column not in NULLS_LAST_COLUMNS:
+        return value
+    # 空は昇順でも降順でも末尾（TC-SFV-D-059）。reverse の向きに合わせて空の順位を反転させる
+    is_none = value is None
+    if spec.direction == "desc":
+        return (0 if is_none else 1, 0.0 if is_none else value)
+    return (1 if is_none else 0, 0.0 if is_none else value)
 
 
 def sort_rows(rows: list[dict[str, object]], *, sort_specs: tuple[SortSpec, ...]) -> list[dict[str, object]]:
     sorted_rows = list(rows)
     tiebreakers = (
+        SortSpec("order_deadline", "asc"),
+        SortSpec("stockout_date", "asc"),
+        SortSpec("flow_quadrant", "asc"),
         SortSpec("cust_code", "asc"),
         SortSpec("item_cd", "asc"),
     )
@@ -232,7 +270,7 @@ def sort_rows(rows: list[dict[str, object]], *, sort_specs: tuple[SortSpec, ...]
     full_specs = sort_specs + tuple(spec for spec in tiebreakers if spec.column not in active_columns)
     for spec in reversed(full_specs):
         reverse = spec.direction == "desc"
-        sorted_rows.sort(key=lambda row: _sort_value(row, spec.column), reverse=reverse)
+        sorted_rows.sort(key=lambda row, spec=spec: _sort_key(row, spec), reverse=reverse)
     return sorted_rows
 
 

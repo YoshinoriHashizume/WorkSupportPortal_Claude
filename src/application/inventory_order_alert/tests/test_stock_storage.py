@@ -25,7 +25,7 @@ def user(db):
 @pytest.mark.django_db
 @patch("application.inventory_order_alert.infrastructure.persistence.slims_stock_repository.run_summary_aggregation")
 def test_import_slims_csv_text_replaces_snapshot(mock_aggregate, user):
-    mock_aggregate.return_value = ("", 0)
+    mock_aggregate.return_value = ("", 0, "")
     text = read_csv_text(FIXTURE)
     info = import_slims_csv_text(text, user=user, file_name="sample.csv")
 
@@ -44,7 +44,7 @@ def test_import_slims_csv_text_replaces_snapshot(mock_aggregate, user):
 @pytest.mark.django_db
 @patch("application.inventory_order_alert.infrastructure.persistence.slims_stock_repository.run_summary_aggregation")
 def test_import_slims_csv_text_replaces_previous_snapshot(mock_aggregate, user):
-    mock_aggregate.return_value = ("", 0)
+    mock_aggregate.return_value = ("", 0, "")
     text = read_csv_text(FIXTURE)
     import_slims_csv_text(text, user=user, file_name="first.csv")
     import_slims_csv_text(text, user=user, file_name="second.csv")

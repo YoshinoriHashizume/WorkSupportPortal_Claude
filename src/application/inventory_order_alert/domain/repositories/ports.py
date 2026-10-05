@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from collections.abc import Callable
+from datetime import date
 from typing import Protocol
 
 from application.inventory_order_alert.domain.value_objects.app_settings import AppSettings
@@ -31,12 +32,21 @@ class SaveAppSettings(Protocol):
         *,
         warning_days: int,
         stock_stale_days: int,
+        default_lead_time_days: int = ...,
         updated_by: object | None = ...,
     ) -> AppSettings: ...
 
 
+#: 集計行の後処理（行, 基準日）→ 行。取込側が集計 → 後処理 → 保存 の順に適用する（05 design §6.7）。
+EnrichRows = Callable[[list[dict[str, object]], date], list[dict[str, object]]]
+
+
 class StockImporter(Protocol):
-    """SLIMS 在庫 CSV のテキストを取り込み、取込情報を返す。"""
+    """SLIMS 在庫 CSV のテキストを取り込み、取込情報を返す。
+
+    ``enrich_rows`` は集計行を保存する前に適用する後処理（需要予測の付与など）。
+    集計と保存を infrastructure が一括で行う既存の構造を壊さず、業務計算を domain に置くための最小の接点。
+    """
 
     def __call__(
         self,
@@ -44,6 +54,7 @@ class StockImporter(Protocol):
         *,
         user: object | None = ...,
         file_name: str = ...,
+        enrich_rows: EnrichRows | None = ...,
     ) -> StockImportInfo: ...
 
 

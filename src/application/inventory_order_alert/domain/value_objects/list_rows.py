@@ -4,19 +4,34 @@ from datetime import date
 
 from application.inventory_order_alert.domain.value_objects.confirmation import ConfirmationRecord, attach_confirmation_fields
 from application.inventory_order_alert.domain.value_objects.dates import parse_optional_ymd
+from application.inventory_order_alert.domain.value_objects.flow_facts import build_flow_facts, flow_reasons
 from application.inventory_order_alert.domain.value_objects.flow_quadrant import (
+    DEFAULT_FLOW_THRESHOLDS,
+    EVALUATION_PERIODS,
     FLOW_QUADRANT_KEYS,
     FLOW_QUADRANT_LABELS,
     QUADRANT_NORMAL_FLOW,
     RESPONSIBLE_DEPARTMENT_SEPARATOR,
+    FlowSelection,
+    FlowThresholds,
     flow_quadrant_sort_rank,
-    format_responsible_departments,
     is_no_incoming_record,
     resolve_flow_quadrant,
     resolve_flow_quadrant_matrix,
 )
 from application.inventory_order_alert.domain.value_objects.list_query import ListQuery
+from application.inventory_order_alert.domain.value_objects.recommended_action import (
+    DEFAULT_RECOMMENDED_ACTIONS,
+    RecommendedActions,
+    render_status,
+)
 from application.inventory_order_alert.domain.value_objects.slims_stock import SlimsStockLocationLine
+from application.inventory_order_alert.domain.value_objects.ordering_profile import ORDERING_METHOD_KEYS, ORDERING_UNKNOWN
+from application.inventory_order_alert.domain.value_objects.stockout_risk import (
+    RESPONSE_CLASS_KEYS,
+    response_class_sort_rank,
+    row_response_class,
+)
 from application.inventory_order_alert.domain.value_objects.stock_join import attach_stock_fields
 
 
@@ -36,16 +51,21 @@ def apply_flow_quadrants_to_rows(
     *,
     as_of_date: date,
     query: ListQuery,
+    recommended_actions: RecommendedActions = DEFAULT_RECOMMENDED_ACTIONS,
+    thresholds: FlowThresholds = DEFAULT_FLOW_THRESHOLDS,
 ) -> list[dict[str, object]]:
-    """行に流動区分（S-203）と副次情報を付与する。
+    """行に流動区分（S-203）・状況・推奨アクション（T-207）・責任部署（R-201）・理由を付与する。
 
-    判定条件6値ぶんの結果（`flow_quadrants`）も併せて持たせ、判定軸・判定期間の切り替えを
-    クライアント側で再判定なしに行えるようにする（design.md §3.2 案B）。
+    判定期間 3 値ぶんの結果（`flow_quadrants`、キー Y1/Y3/Y5）も併せて持たせ、判定期間の切り替えを
+    クライアント側で再判定なしに行えるようにする（05 design §3.1）。
+    状況（`flow_status`）は選択中の判定期間で描画した文字列。通常流動品は状況・推奨アクションとも空。
+    在庫なし（T-209/T-210）の行は判定材料（`FlowFacts`）で 欠品 2 区分・打ち切り候補 に振り分ける（07 design §2.3）。
     """
     selection = query.flow_selection
     enriched: list[dict[str, object]] = []
     for row in rows:
         copied = dict(row)
+        facts = build_flow_facts(copied, as_of_date=as_of_date, thresholds=thresholds)
         last_incoming = _row_date(copied, "last_incoming_date", as_of_date=as_of_date)
         last_ship = _row_date(copied, "last_ship_date", as_of_date=as_of_date)
         quadrant = resolve_flow_quadrant(
@@ -53,16 +73,45 @@ def apply_flow_quadrants_to_rows(
             last_ship,
             as_of_date=as_of_date,
             selection=selection,
+            stock_missing=facts.stock_missing,
+            has_demand=facts.has_demand,
+            recent_incoming=facts.recent_incoming,
         )
+        no_incoming_record = is_no_incoming_record(last_incoming)
+        recommended = recommended_actions.for_quadrant(quadrant)
         copied["flow_quadrant"] = quadrant
         copied["flow_quadrant_key"] = FLOW_QUADRANT_KEYS[quadrant]
         copied["flow_quadrants"] = resolve_flow_quadrant_matrix(
             last_incoming,
             last_ship,
             as_of_date=as_of_date,
+            stock_missing=facts.stock_missing,
+            has_demand=facts.has_demand,
+            recent_incoming=facts.recent_incoming,
         )
-        copied["no_incoming_record"] = is_no_incoming_record(last_incoming)
-        copied["responsible_department"] = format_responsible_departments(quadrant)
+        copied["no_incoming_record"] = no_incoming_record
+        copied["flow_status"] = render_status(
+            recommended,
+            period=selection.period,
+            last_incoming=str(copied.get("last_incoming_date") or ""),
+            last_ship=str(copied.get("last_ship_date") or ""),
+            no_incoming_record=no_incoming_record,
+            recent_days=thresholds.recent_incoming_days,
+        )
+        # 理由は区分と同じく判定期間で変わるため 3 期間ぶん持たせ、クライアントの期間切替で引き直す（07 design §1-6）
+        copied["flow_reasons_by_period"] = {
+            period.key: flow_reasons(
+                copied,
+                FLOW_QUADRANT_LABELS[copied["flow_quadrants"][period.key]],
+                facts,
+                as_of_date=as_of_date,
+                selection=FlowSelection(period),
+            )
+            for period in EVALUATION_PERIODS
+        }
+        copied["flow_reasons"] = list(copied["flow_reasons_by_period"][selection.period.key])
+        copied["recommended_action"] = recommended.action
+        copied["responsible_department"] = RESPONSIBLE_DEPARTMENT_SEPARATOR.join(recommended.departments)
         enriched.append(copied)
     return enriched
 
@@ -75,9 +124,15 @@ def enrich_summary_rows(
     stock_lines: list[SlimsStockLocationLine] | None = None,
     stock_as_of_date: date | None = None,
     confirmations: dict[tuple[str, str], ConfirmationRecord] | None = None,
+    recommended_actions: RecommendedActions = DEFAULT_RECOMMENDED_ACTIONS,
 ) -> list[dict[str, object]]:
     rows_with_stock = attach_stock_fields(rows, stock_lines, stock_as_of_date=stock_as_of_date)
-    enriched = apply_flow_quadrants_to_rows(rows_with_stock, as_of_date=as_of_date, query=query)
+    enriched = apply_flow_quadrants_to_rows(
+        rows_with_stock,
+        as_of_date=as_of_date,
+        query=query,
+        recommended_actions=recommended_actions,
+    )
     confirmation_map = confirmations if confirmations is not None else {}
     return attach_confirmation_fields(enriched, confirmation_map)
 
@@ -96,16 +151,39 @@ def filter_summary_rows(rows: list[dict[str, object]], query: ListQuery) -> list
             continue
         if query.attention_only and quadrant == QUADRANT_NORMAL_FLOW:
             continue
+        if query.response_class and RESPONSE_CLASS_KEYS[row_response_class(row)] != query.response_class:
+            continue
+        if query.ordering_method and ORDERING_METHOD_KEYS.get(str(row.get("ordering_method") or ORDERING_UNKNOWN), "unknown") != query.ordering_method:
+            continue
         if query.hide_confirmed and str(row.get("confirmation_status") or "") == "確認済み":
             continue
         filtered.append(row)
     return filtered
 
 
+def _date_order(value: object) -> tuple[int, int]:
+    """日付文字列を並び替えキーにする。空は末尾（08 design §2.5）。"""
+    text = str(value or "").strip()
+    if not text:
+        return (1, 0)
+    try:
+        return (0, parse_optional_ymd(text).toordinal())
+    except ValueError:
+        return (1, 0)
+
+
 def sort_summary_rows(rows: list[dict[str, object]]) -> list[dict[str, object]]:
-    def sort_key(row: dict[str, object]) -> tuple[int, int]:
+    """既定の並び: 対応区分 → 発注期限（空は末尾）→ 在庫切れ日 → 流動区分ランク → 出荷数量降順（08 design §2.5）。"""
+
+    def sort_key(row: dict[str, object]) -> tuple:
         quadrant = str(row.get("flow_quadrant") or QUADRANT_NORMAL_FLOW)
         qty = int(row.get("post_shipment_total_qty") or 0)
-        return (flow_quadrant_sort_rank(quadrant), -qty)
+        return (
+            response_class_sort_rank(row),
+            _date_order(row.get("order_deadline")),
+            _date_order(row.get("stockout_date")),
+            flow_quadrant_sort_rank(quadrant),
+            -qty,
+        )
 
     return sorted(rows, key=sort_key)

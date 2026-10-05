@@ -27,6 +27,8 @@ class AppSettingsUseCase:
         saved = self._save_app_settings(
             warning_days=input_data.warning_days,
             stock_stale_days=input_data.stock_stale_days,
+            default_lead_time_days=input_data.default_lead_time_days,
+            recent_incoming_days=input_data.recent_incoming_days,
             updated_by=updated_by,
         )
         return settings_payload(saved)

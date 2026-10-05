@@ -2,10 +2,21 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
+from application.inventory_order_alert.domain.value_objects.flow_quadrant import (
+    DEFAULT_RECENT_INCOMING_DAYS,
+    MAX_RECENT_INCOMING_DAYS,
+    MIN_RECENT_INCOMING_DAYS,
+    FlowThresholds,
+)
+
 MIN_WARNING_DAYS = 1
 MAX_WARNING_DAYS = 3650
 MIN_STOCK_STALE_DAYS = 1
 MAX_STOCK_STALE_DAYS = 365
+# 対応区分（S-204）の閾値。安全日数・監視期間は 2026/09/23 に撤去した（08 design §2.4）
+MIN_DEFAULT_LEAD_TIME_DAYS = 1
+MAX_DEFAULT_LEAD_TIME_DAYS = 60
+# 直近入荷の窓（07 design §5.2）。範囲・既定値は flow_quadrant の定数を正とする
 
 
 def _require_in_range(value: int, *, label: str, minimum: int, maximum: int) -> None:
@@ -25,6 +36,10 @@ class AppSettings:
 
     warning_days: int = 365
     stock_stale_days: int = 7
+    #: 品目マスタにリードタイムがない品番の代替値（日）。発注期限（V-233）の算出に使う
+    default_lead_time_days: int = 5
+    #: 直近入荷とみなす日数（07 REQ-FQR-F-008）。欠品（T-209）の 2 区分の振り分けにのみ使う。判定期間（V-211）とは別物
+    recent_incoming_days: int = DEFAULT_RECENT_INCOMING_DAYS
 
     def __post_init__(self) -> None:
         _require_in_range(
@@ -39,12 +54,29 @@ class AppSettings:
             minimum=MIN_STOCK_STALE_DAYS,
             maximum=MAX_STOCK_STALE_DAYS,
         )
+        _require_in_range(
+            self.default_lead_time_days,
+            label="既定リードタイム（日）",
+            minimum=MIN_DEFAULT_LEAD_TIME_DAYS,
+            maximum=MAX_DEFAULT_LEAD_TIME_DAYS,
+        )
+        _require_in_range(
+            self.recent_incoming_days,
+            label="直近入荷の日数",
+            minimum=MIN_RECENT_INCOMING_DAYS,
+            maximum=MAX_RECENT_INCOMING_DAYS,
+        )
+
+    def to_flow_thresholds(self) -> FlowThresholds:
+        return FlowThresholds(recent_incoming_days=self.recent_incoming_days)
 
 
 @dataclass(frozen=True)
 class SettingsInput:
     warning_days: int
     stock_stale_days: int
+    default_lead_time_days: int = 5
+    recent_incoming_days: int = DEFAULT_RECENT_INCOMING_DAYS
 
 
 def clamp_warning_days(value: int) -> int:
@@ -53,6 +85,14 @@ def clamp_warning_days(value: int) -> int:
 
 def clamp_stock_stale_days(value: int) -> int:
     return max(MIN_STOCK_STALE_DAYS, min(MAX_STOCK_STALE_DAYS, int(value)))
+
+
+def clamp_default_lead_time_days(value: int) -> int:
+    return max(MIN_DEFAULT_LEAD_TIME_DAYS, min(MAX_DEFAULT_LEAD_TIME_DAYS, int(value)))
+
+
+def clamp_recent_incoming_days(value: int) -> int:
+    return max(MIN_RECENT_INCOMING_DAYS, min(MAX_RECENT_INCOMING_DAYS, int(value)))
 
 
 def _parse_int_in_range(value: object, *, label: str, minimum: int, maximum: int) -> int:
@@ -94,9 +134,28 @@ def parse_settings_payload(data: object, *, current: AppSettings | None = None) 
             maximum=MAX_STOCK_STALE_DAYS,
         )
 
+    default_lead_time_days = base.default_lead_time_days
+    if "defaultLeadTimeDays" in data:
+        default_lead_time_days = _parse_int_in_range(
+            data["defaultLeadTimeDays"],
+            label="既定リードタイム（日）",
+            minimum=MIN_DEFAULT_LEAD_TIME_DAYS,
+            maximum=MAX_DEFAULT_LEAD_TIME_DAYS,
+        )
+    recent_incoming_days = base.recent_incoming_days
+    if "recentIncomingDays" in data:
+        recent_incoming_days = _parse_int_in_range(
+            data["recentIncomingDays"],
+            label="直近入荷の日数",
+            minimum=MIN_RECENT_INCOMING_DAYS,
+            maximum=MAX_RECENT_INCOMING_DAYS,
+        )
+
     return SettingsInput(
         warning_days=warning_days,
         stock_stale_days=stock_stale_days,
+        default_lead_time_days=default_lead_time_days,
+        recent_incoming_days=recent_incoming_days,
     )
 
 
@@ -105,4 +164,6 @@ def settings_payload(settings: AppSettings) -> dict[str, object]:
     return {
         "warningDays": settings.warning_days,
         "stockStaleDays": settings.stock_stale_days,
+        "defaultLeadTimeDays": settings.default_lead_time_days,
+        "recentIncomingDays": settings.recent_incoming_days,
     }

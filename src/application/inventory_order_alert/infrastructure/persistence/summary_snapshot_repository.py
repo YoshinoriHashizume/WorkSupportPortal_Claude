@@ -24,11 +24,17 @@ def store_summary_snapshot(
             "rows": storable_rows,
             "total_count": counts.total,
             # 残置カラムへの詰め替え規則（design.md §5.1）。カラム名は据え置く。
-            "critical_count": counts.supply_risk,
-            "warning_count": counts.dormant_stock + counts.excess_stock_risk,
+            "critical_count": counts.low_flow_no_incoming,
+            "warning_count": counts.dormant_stock + counts.low_flow_no_shipment,
             "aggregation_error": aggregation_error,
         },
     )
+    # 最新 1 世代のみ保持する（機能仕様書 §7.2、2026/09/22）。運用は「取込 → リスクのある行を調べる → 処置」の
+    # 繰り返しで過去世代を参照しないため、取込のたびに古い世代を消して JSON の肥大化を防ぐ。
+    # 取込履歴（SlimsStockImport）・確認状態・確認メモは別テーブルで、ここでは消さない。
+    # ただし集計が失敗したときは消さない。直前の成功したスナップショットを壊さないため（REQ-MSV-F-009）。
+    if not aggregation_error:
+        InventoryOrderAlertSummarySnapshot.objects.exclude(pk=snapshot.pk).delete()
     return snapshot
 
 
@@ -54,6 +60,6 @@ def persist_editable_snapshot(snapshot: EditableSummarySnapshot, rows: list[dict
         rows=[row_to_storable(row) for row in rows],
         total_count=counts.total,
         # 残置カラムへの詰め替え規則（design.md §5.1）。カラム名は据え置く。
-        critical_count=counts.supply_risk,
-        warning_count=counts.dormant_stock + counts.excess_stock_risk,
+        critical_count=counts.low_flow_no_incoming,
+        warning_count=counts.dormant_stock + counts.low_flow_no_shipment,
     )

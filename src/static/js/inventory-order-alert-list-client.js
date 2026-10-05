@@ -59,15 +59,37 @@
     return { custCode: "", itemCd: "" };
   }
 
-  // 流動区分の判定ロジックはサーバ側にのみ置く。ここは row.flowQuadrants から引くだけにする
-  // （design.md §3.2 案B）。暦月計算を JS に持ち込まない。
+  // 流動区分の判定ロジックはサーバ側にのみ置く。ここは row.flowQuadrants（Y1/Y3/Y5）から引くだけにする
+  // （05 design §3.1）。暦月計算を JS に持ち込まない。
   const QUADRANT_NORMAL_FLOW_KEY = "normal-flow";
+  // ランクは S-203（07 で 7 区分に拡張）。未知のキーは通常流動品に倒れるので、
+  // ここに載っていない区分は一覧で通常流動品として扱われてしまう点に注意。
   const FLOW_QUADRANT_RANK = {
-    "supply-risk": 0,
-    "dormant-stock": 1,
-    "excess-stock-risk": 2,
-    [QUADRANT_NORMAL_FLOW_KEY]: 3,
+    "stockout-no-incoming": 0,
+    "stockout": 1,
+    "low-flow-no-incoming": 2,
+    "dormant-stock": 3,
+    "low-flow-no-shipment": 4,
+    "discontinuation-candidate": 5,
+    [QUADRANT_NORMAL_FLOW_KEY]: 6,
   };
+  const DEFAULT_PERIOD_KEY = "Y1";
+  // 対応区分（S-204）。判定は取込時にサーバで行い、ここは行の値を使うだけ（08 design §5）。
+  const RESPONSE_CLASS_RANK = { "order-overdue": 0, "delivery-check": 1, "order-needed": 2, watch: 3, none: 4 };
+  const RESPONSE_CLASS_LABELS = {
+    "order-overdue": "発注遅れ",
+    "delivery-check": "納期確認",
+    "order-needed": "要発注",
+    watch: "要監視",
+    none: "対象外",
+  };
+  const ORDERING_METHOD_KEYS = ["manual", "mrp", "unknown"];
+
+  function rowResponseClassKey(row) {
+    const key = String(row.responseClassKey || "");
+    return Object.prototype.hasOwnProperty.call(RESPONSE_CLASS_RANK, key) ? key : "none";
+  }
+  const NO_INCOMING_RECORD_TEXT = "入荷実績なし";
   const CONFIRMATION_STATUS_RANK = {
     unconfirmed: 0,
     in_progress: 1,
@@ -75,9 +97,19 @@
   };
 
   function flowSelectionKey(state) {
-    const axis = String(state.flowAxis || "low_flow");
-    const prefix = axis === "dormant" ? "D" : "L";
-    return `${prefix}${Number(state.flowPeriod) || 3}`;
+    return String(state.periodKey || DEFAULT_PERIOD_KEY);
+  }
+
+  // 状況（S-203）はサーバ由来のテンプレートに判定期間ラベルと行の日付を埋めるだけ（05 design §6.3、NF-005）。
+  function renderStatusText(statusTemplate, periodLabel, row) {
+    const lastIncoming = row.noIncomingRecord
+      ? NO_INCOMING_RECORD_TEXT
+      : String(row.display?.last_incoming_date ?? row.last_incoming_date ?? "");
+    const lastShip = String(row.display?.last_ship_date ?? row.last_ship_date ?? "");
+    return String(statusTemplate || "")
+      .replace("{period}", periodLabel)
+      .replace("{last_incoming}", lastIncoming)
+      .replace("{last_ship}", lastShip);
   }
 
   function rowFlowQuadrantKey(row, state) {
@@ -132,38 +164,29 @@
     const visibleCustOptions = CustFilter.custOptionsForChrg(allCustOptions, custChrgCustIndex, custChrgPsnCd);
     const validCust = new Set(visibleCustOptions.map((option) => option.value));
     const custCodeRaw = params.get("cust_code") || "";
-    const defaultSelection = defaults.defaultFlowSelection || { axis: "low_flow", period: 3 };
-    const flowPeriods = defaults.flowPeriods || {};
-    const axisRaw = params.get("axis") || "";
-    const flowAxis = Object.prototype.hasOwnProperty.call(flowPeriods, axisRaw)
-      ? axisRaw
-      : defaultSelection.axis;
-    const flowPeriod = resolveFlowPeriod(flowPeriods, flowAxis, params.get("period"), defaultSelection);
+    const periodKey = resolvePeriodKey(defaults.evaluationPeriods || [], params.get("period"), defaults.defaultPeriodKey);
     const quadrantRaw = params.get("flow_quadrant") || "";
     return {
       custCode: custCodeRaw && validCust.has(custCodeRaw) ? custCodeRaw : "",
       custChrgPsnCd,
       itemCd: params.get("item_cd") || "",
       level1ItemCd: params.get("level1_item_cd") || "",
-      flowAxis,
-      flowPeriod,
+      periodKey,
       flowQuadrant: Object.prototype.hasOwnProperty.call(FLOW_QUADRANT_RANK, quadrantRaw) ? quadrantRaw : "",
+      responseClass: Object.prototype.hasOwnProperty.call(RESPONSE_CLASS_RANK, params.get("response_class") || "") ? params.get("response_class") : "",
+      orderingMethod: ORDERING_METHOD_KEYS.includes(params.get("ordering_method") || "") ? params.get("ordering_method") : "",
       attentionOnly: (params.get("attentionOnly") || "").toLowerCase() === "true",
       ...Core.readBaseStateFromUrl(defaults, defaultDirectionForColumn),
     };
   }
 
-  function resolveFlowPeriod(flowPeriods, axis, rawPeriod, defaultSelection) {
-    const options = flowPeriods[axis] || [];
-    const parsed = Number(rawPeriod);
-    if (options.some((option) => Number(option.value) === parsed)) {
-      return parsed;
-    }
-    // 軸に対応しない値・未指定は当該軸の既定値へ倒す（design.md §6.1）。
-    if (axis === defaultSelection.axis) {
-      return Number(defaultSelection.period);
-    }
-    return options.length ? Number(options[0].value) : Number(defaultSelection.period);
+  // `period` は年数（1/3/5）または Y キー。不正値・旧値（6 など）は既定へ倒す（05 design §6.1）。
+  function resolvePeriodKey(evaluationPeriods, rawPeriod, defaultPeriodKey) {
+    const raw = String(rawPeriod || "").trim();
+    const matched = evaluationPeriods.find(
+      (period) => period.key === raw || String(period.years) === raw,
+    );
+    return matched ? matched.key : String(defaultPeriodKey || DEFAULT_PERIOD_KEY);
   }
 
   function numericCodeSortKey(code) {
@@ -215,6 +238,12 @@
     return [1, iso];
   }
 
+  // 在庫切れ日（V-232）・発注期限（V-233）の並び替え用。空・解析不能は null（＝末尾）。
+  function dateSortNumber(value) {
+    const parsed = parseOptionalYmd(String(value || "").trim());
+    return parsed ? parsed.getTime() : null;
+  }
+
   function applyListFilters(rows, state) {
     return rows.filter((row) => {
       const quadrantKey = rowFlowQuadrantKey(row, state);
@@ -222,6 +251,12 @@
         return false;
       }
       if (state.attentionOnly && quadrantKey === QUADRANT_NORMAL_FLOW_KEY) {
+        return false;
+      }
+      if (state.responseClass && rowResponseClassKey(row) !== state.responseClass) {
+        return false;
+      }
+      if (state.orderingMethod && String(row.orderingMethodKey || "unknown") !== state.orderingMethod) {
         return false;
       }
       if (state.custCode && String(row.cust_code || "").trim() !== state.custCode) {
@@ -244,14 +279,26 @@
     return rows.reduce(
       (counts, row) => {
         const quadrantKey = rowFlowQuadrantKey(row, state);
-        if (quadrantKey === "supply-risk") {
-          counts.supplyRisk += 1;
+        if (quadrantKey === "low-flow-no-incoming") {
+          counts.lowFlowNoIncoming += 1;
         } else if (quadrantKey === "dormant-stock") {
           counts.dormantStock += 1;
-        } else if (quadrantKey === "excess-stock-risk") {
-          counts.excessStockRisk += 1;
+        } else if (quadrantKey === "low-flow-no-shipment") {
+          counts.lowFlowNoShipment += 1;
         } else {
           counts.normalFlow += 1;
+        }
+        const responseKey = rowResponseClassKey(row);
+        if (responseKey === "order-overdue") {
+          counts.orderOverdue += 1;
+        } else if (responseKey === "delivery-check") {
+          counts.deliveryCheck += 1;
+        } else if (responseKey === "order-needed") {
+          counts.orderNeeded += 1;
+        } else if (responseKey === "watch") {
+          counts.watch += 1;
+        } else {
+          counts.noneResponse += 1;
         }
         const status = String(row.confirmation_status || "未確認");
         if (status === "確認済み") {
@@ -264,10 +311,15 @@
         return counts;
       },
       {
-        supplyRisk: 0,
+        lowFlowNoIncoming: 0,
         dormantStock: 0,
-        excessStockRisk: 0,
+        lowFlowNoShipment: 0,
         normalFlow: 0,
+        orderOverdue: 0,
+        deliveryCheck: 0,
+        orderNeeded: 0,
+        watch: 0,
+        noneResponse: 0,
         confirmed: 0,
         inProgress: 0,
         unconfirmed: 0,
@@ -275,10 +327,41 @@
     );
   }
 
+  function sortDirectionOf(state, column) {
+    const spec = (state.sortSpecs || []).find((item) => item.column === column);
+    return spec ? spec.direction : "asc";
+  }
+
+  // 空を昇順・降順とも末尾に置く数値ソートキー（在庫月数・在庫切れ日・発注期限）。
+  function nullsLastSortValue(raw, state, column) {
+    const number = raw === null || raw === undefined || raw === "" ? null : Number(raw);
+    const isEmpty = number === null || !Number.isFinite(number);
+    if (sortDirectionOf(state, column) === "desc") {
+      return isEmpty ? [0, 0] : [1, number];
+    }
+    return isEmpty ? [1, 0] : [0, number];
+  }
+
+  // 在庫月数（V-222）の並び替え。空は昇順・降順とも末尾（05 design §6.1、TC-SFV-D-059）。
+  function monthsOfStockSortValue(row, state) {
+    return nullsLastSortValue(row.demandForecast?.monthsOfStock ?? row.months_of_stock, state, "months_of_stock");
+  }
+
   function sortValue(row, column, state) {
     const value = row[column] ?? "";
     if (column === "flow_quadrant") {
       return flowQuadrantSortRank(rowFlowQuadrantKey(row, state));
+    }
+    if (column === "months_of_stock") {
+      return monthsOfStockSortValue(row, state);
+    }
+    if (column === "response_class") {
+      return RESPONSE_CLASS_RANK[rowResponseClassKey(row)];
+    }
+    if (column === "stockout_date" || column === "order_deadline") {
+      // 空（在庫切れなし）は昇順・降順とも末尾（08 design §2.5）
+      const key = column === "stockout_date" ? row.stockoutDate : row.orderDeadline;
+      return nullsLastSortValue(dateSortNumber(key), state, column);
     }
     if (column === "post_shipment_count" || column === "post_shipment_total_qty") {
       const number = Number.parseInt(String(value || "0"), 10);
@@ -329,6 +412,8 @@
     const allCustOptions = defaults.filterOptions?.custOptions || [];
     const custChrgCustIndex = CustFilter.buildCustChrgCustIndex(allRows);
     const sortableColumns = Array.isArray(payload.sortableColumns) ? payload.sortableColumns : [];
+    // 一覧の列には出さないが並び替えダイアログでは選べる項目（在庫月数）。05 design §6.1
+    const sortOnlyColumns = Array.isArray(payload.sortOnlyColumns) ? payload.sortOnlyColumns : [];
     const confirmationStatusChoices = Array.isArray(payload.confirmationStatusChoices)
       ? payload.confirmationStatusChoices
       : [];
@@ -346,13 +431,15 @@
     const tableHead = pageRoot.querySelector(".ioa-table thead");
     const countsLeft = pageRoot.querySelector(".ioa-table-counts-left");
     const countsRight = pageRoot.querySelector(".ioa-table-counts-right");
-    const flowAxisSelect = pageRoot.querySelector("#ioa-flow-axis");
-    const flowPeriodSelect = pageRoot.querySelector("#ioa-flow-period");
+    const evaluationPeriodSelect = pageRoot.querySelector("#ioa-evaluation-period");
     const flowQuadrantSelect = pageRoot.querySelector("#ioa-flow-quadrant");
+    const responseClassSelect = pageRoot.querySelector("#ioa-response-class");
+    const orderingMethodSelect = pageRoot.querySelector("#ioa-ordering-method");
     const flowQuadrantLabels = payload.flowQuadrantLabels || {};
     const flowQuadrantDepartments = payload.flowQuadrantDepartments || {};
-    const flowAxes = Array.isArray(payload.flowAxes) ? payload.flowAxes : [];
-    const flowPeriods = payload.flowPeriods || {};
+    const recommendedActions = payload.recommendedActions || {};
+    const evaluationPeriods = Array.isArray(payload.evaluationPeriods) ? payload.evaluationPeriods : [];
+    const alertRulesDialog = document.getElementById("ioa-alert-rules-dialog");
     const paginationElements = {
       footer: pageRoot.querySelector(".ioa-table-footer"),
       pageSizeSelect: pageRoot.querySelector(".ioa-page-size-select"),
@@ -447,6 +534,124 @@
       );
     }
 
+    // 推定在庫推移(V-218)は「照合単位」で逆算する（design.md §6.6、2026/09/11 改訂）。
+    // 在庫は得意先品番・出荷は得意先×得意先品番・入荷は内作品番×仕入先と粒度が異なるため、
+    // 得意先品番と (内作品番, 仕入先) を節点とする二部グラフの連結成分まで広げて数量を閉じる。
+    // 合算は必ず未フィルタの allRows で行う（絞り込みでグラフが変わってはならない）。
+    let reconciliationUnits = null;
+
+    function itemKeyOf(row) {
+      return `I:${String(row.item_cd || "")}`;
+    }
+
+    function pairKeyOf(row) {
+      return `P:${String(row.level1_item_cd || "")}|${String(row.level1_vend_cd || "")}`;
+    }
+
+    function sumTrendInto(total, trend) {
+      if (!Array.isArray(trend)) {
+        return;
+      }
+      trend.forEach((point, index) => {
+        if (index >= total.length) {
+          return;
+        }
+        total[index].qty += Number(point?.qty) || 0;
+      });
+    }
+
+    function buildReconciliationUnits() {
+      // Union-Find（経路圧縮のみ。数千件規模なのでランクは持たない）
+      const parent = new Map();
+      const find = (key) => {
+        if (!parent.has(key)) {
+          parent.set(key, key);
+        }
+        let root = key;
+        while (parent.get(root) !== root) {
+          root = parent.get(root);
+        }
+        let cursor = key;
+        while (parent.get(cursor) !== root) {
+          const next = parent.get(cursor);
+          parent.set(cursor, root);
+          cursor = next;
+        }
+        return root;
+      };
+      const union = (a, b) => {
+        const rootA = find(a);
+        const rootB = find(b);
+        if (rootA !== rootB) {
+          parent.set(rootA, rootB);
+        }
+      };
+
+      allRows.forEach((row) => union(itemKeyOf(row), pairKeyOf(row)));
+
+      const grouped = new Map();
+      allRows.forEach((row) => {
+        const root = find(itemKeyOf(row));
+        if (!grouped.has(root)) {
+          grouped.set(root, []);
+        }
+        grouped.get(root).push(row);
+      });
+
+      const units = new Map();
+      grouped.forEach((unitRows) => {
+        const base = unitRows.find((row) => Array.isArray(row.shipment_trend) && row.shipment_trend.length);
+        const months = base ? base.shipment_trend.map((point) => point.month) : [];
+        const shipmentTrend = months.map((month) => ({ month, qty: 0 }));
+        const incomingTrend = months.map((month) => ({ month, qty: 0 }));
+        // 出荷: 行は (得意先, 得意先品番) で一意なので、そのまま全行を足す。
+        unitRows.forEach((row) => sumTrendInto(shipmentTrend, row.shipment_trend));
+        // 入荷: (内作品番, 仕入先) 単位のため、同じ組を共有する行で重複する。組ごとに1回だけ足す。
+        const countedPairs = new Set();
+        const level1Pairs = [];
+        unitRows.forEach((row) => {
+          const key = pairKeyOf(row);
+          if (countedPairs.has(key)) {
+            return;
+          }
+          countedPairs.add(key);
+          level1Pairs.push({
+            level1ItemCd: String(row.level1_item_cd || ""),
+            level1VendCd: String(row.level1_vend_cd || ""),
+          });
+          sumTrendInto(incomingTrend, row.incoming_trend);
+        });
+        // 在庫: 得意先品番ごとに1回。表示文字列を返し、3状態の解釈は呼び出し側に委ねる。
+        const countedItems = new Set();
+        const stocks = [];
+        unitRows.forEach((row) => {
+          const itemCd = String(row.item_cd || "");
+          if (countedItems.has(itemCd)) {
+            return;
+          }
+          countedItems.add(itemCd);
+          stocks.push({ itemCd, stockDisplay: String(row.display?.stock_qty ?? "") });
+        });
+        const unit = { shipmentTrend, incomingTrend, stocks, level1Pairs };
+        countedItems.forEach((itemCd) => units.set(itemCd, unit));
+      });
+      return units;
+    }
+
+    function itemTrendsOf(itemCd) {
+      if (!reconciliationUnits) {
+        reconciliationUnits = buildReconciliationUnits();
+      }
+      return (
+        reconciliationUnits.get(String(itemCd || "")) || {
+          shipmentTrend: [],
+          incomingTrend: [],
+          stocks: [],
+          level1Pairs: [],
+        }
+      );
+    }
+
     function syncControlsFromState() {
       if (custChrgSelect) {
         custChrgSelect.value = state.custChrgPsnCd;
@@ -483,11 +688,22 @@
       if (state.level1ItemCd && String(state.level1ItemCd).trim()) {
         params.set("level1_item_cd", String(state.level1ItemCd).trim());
       }
-      // 判定条件は常に URL へ書き戻し、再読み込み後も選択が復元されるようにする（design.md §6.1）。
-      params.set("axis", state.flowAxis);
-      params.set("period", String(state.flowPeriod));
+      // 判定期間は常に URL へ書き戻し、再読み込み後も選択が復元されるようにする（05 design §6.1、REQ-SFV-F-016）。
+      params.delete("axis");
+      params.set("period", String(currentPeriod().years));
       if (state.flowQuadrant) {
         params.set("flow_quadrant", state.flowQuadrant);
+      }
+      if (state.responseClass) {
+        params.set("response_class", state.responseClass);
+      } else {
+        params.delete("response_class");
+      }
+      params.delete("stockout_risk");
+      if (state.orderingMethod) {
+        params.set("ordering_method", state.orderingMethod);
+      } else {
+        params.delete("ordering_method");
       }
       if (state.attentionOnly) {
         params.set("attentionOnly", "true");
@@ -511,6 +727,48 @@
         .join("")}</select>`;
     }
 
+    function currentPeriod() {
+      const matched = evaluationPeriods.find((period) => period.key === state.periodKey);
+      return matched || evaluationPeriods[0] || { years: 1, key: DEFAULT_PERIOD_KEY, label: "1年" };
+    }
+
+    function flowStatusOf(row, quadrantKey) {
+      const template = recommendedActions[quadrantKey]?.statusTemplate || "";
+      return renderStatusText(template, currentPeriod().label, row);
+    }
+
+    function recommendedActionOf(quadrantKey) {
+      return recommendedActions[quadrantKey]?.action || "";
+    }
+
+    function responsibleDepartmentOf(quadrantKey) {
+      return recommendedActions[quadrantKey]?.departments || flowQuadrantDepartments[quadrantKey] || "";
+    }
+
+    // 緊急度（V-223）の文言。需要予測が算出できない行（basis なし・在庫月数なし）は空（05 design §6.3、REQ-SFV-F-009）。
+    // 在庫切れ予測月が空（120 か月超）は「十分」。テンプレート側（list.html）の描画と対で維持する。
+    function urgencyTextOf(row) {
+      const forecast = row.demandForecast || {};
+      const months = forecast.monthsOfStock;
+      if (!forecast.basis || forecast.basis === "なし" || months === null || months === undefined) {
+        return "";
+      }
+      const stockout = forecast.stockoutForecastMonth ? `${forecast.stockoutForecastMonth} に在庫切れ` : "十分";
+      return `約 ${months} か月分 → ${stockout}（${forecast.basis}）`;
+    }
+
+    // 流動区分セルは区分名のみ（05 design §6.3、REQ-SFV-F-004。2026-09-17 改訂）。通常流動品は空。
+    // 状況・緊急度・推奨アクション・責任部署・理由・判定期間は 2026-09-30 に詳細ダイアログから撤去した
+    // （10 REQ-DDC-F-008）。getFlowStatus() 等の公開 getter は呼び出し元がなくなったが、
+    // 判定ルールポップアップからの再利用があり得るため残している。
+    function renderFlowCell(row, quadrantKey) {
+      if (quadrantKey === QUADRANT_NORMAL_FLOW_KEY) {
+        return `<td class="ioa-flow-cell"></td>`;
+      }
+      // 区分ごとのバッジ色は CSS（.ioa-flow-quadrant--<key>）。行の色は付けない（07 design §5.1）
+      return `<td class="ioa-flow-cell"><span class="ioa-flow-quadrant ioa-flow-quadrant--${Core.escapeHtml(quadrantKey)}">${Core.escapeHtml(flowQuadrantLabels[quadrantKey] || "")}</span></td>`;
+    }
+
     function renderTableBody(pageRows) {
       visiblePageRows = pageRows;
       if (!pageRows.length) {
@@ -524,9 +782,10 @@
           const rowKey = row.rowKey || buildRowKeyAttribute(identity);
           const quadrantKey = rowFlowQuadrantKey(row, state);
           const statusKey = String(row.confirmationStatusKey || "unconfirmed");
-          // 確認状態は流動区分より優先する（design.md §6.6.7）。
+          const responseKey = rowResponseClassKey(row);
+          // 行の色は 確認状態 > 対応区分 のみ。流動区分は色に使わない（08 design §5）。
           const rowClass =
-            statusKey === "confirmed" ? "確認済" : statusKey === "in_progress" ? "確認中" : quadrantKey;
+            statusKey === "confirmed" ? "確認済" : statusKey === "in_progress" ? "確認中" : `response-${responseKey}`;
           const cells = sortableColumns
             .map((column) => {
               if (column.key === "confirmation_status") {
@@ -535,9 +794,14 @@
                   identity,
                 )}</td>`;
               }
-              // 判定条件を切り替えたら流動区分は引き直す（design.md §3.2 案B）。
+              // 判定期間を切り替えたら流動区分は引き直す（05 design §3.1）。
               if (column.key === "flow_quadrant") {
-                return `<td>${Core.escapeHtml(flowQuadrantLabels[quadrantKey] || "")}</td>`;
+                return renderFlowCell(row, quadrantKey);
+              }
+              // 対応区分（S-204）はサーバ判定値をそのまま出す。対象外・旧行は空
+              if (column.key === "response_class") {
+                const label = responseKey === "none" || !row.responseClassKey ? "" : RESPONSE_CLASS_LABELS[responseKey];
+                return `<td class="ioa-response-class-cell">${label ? `<span class="ioa-response-class ioa-response-class--${responseKey}">${Core.escapeHtml(label)}</span>` : ""}</td>`;
               }
               return `<td>${Core.escapeHtml(display[column.key] ?? "")}</td>`;
             })
@@ -553,6 +817,13 @@
             data-last-incoming-date="${Core.escapeHtml(display.last_incoming_date ?? "")}"
             data-last-ship-date="${Core.escapeHtml(display.last_ship_date ?? "")}"
             data-flow-quadrant="${Core.escapeHtml(quadrantKey)}"
+            data-flow-status="${Core.escapeHtml(quadrantKey === QUADRANT_NORMAL_FLOW_KEY ? "" : flowStatusOf(row, quadrantKey))}"
+            data-recommended-action="${Core.escapeHtml(recommendedActionOf(quadrantKey))}"
+            data-responsible-department="${Core.escapeHtml(responsibleDepartmentOf(quadrantKey))}"
+            data-response-class="${Core.escapeHtml(responseKey)}"
+            data-demand-forecast-basis="${Core.escapeHtml(row.demandForecast?.basis || "")}"
+            data-months-of-stock="${Core.escapeHtml(row.demandForecast?.monthsOfStock ?? "")}"
+            data-stockout-forecast-month="${Core.escapeHtml(row.demandForecast?.stockoutForecastMonth || "")}"
             data-no-incoming-record="${row.noIncomingRecord ? "1" : ""}"
             data-stock-qty="${Core.escapeHtml(display.stock_qty ?? "")}"
             data-mari-stock-qty="${Core.escapeHtml(display.mari_stock_qty ?? "")}"
@@ -566,7 +837,7 @@
 
     function renderCounts(counts) {
       countsLeft.textContent =
-        `供給リスク品 ${counts.supplyRisk} 件 / 在庫死蔵品 ${counts.dormantStock} 件 / 在庫過剰リスク品 ${counts.excessStockRisk} 件 / 通常流動品 ${counts.normalFlow} 件`;
+        `発注遅れ ${counts.orderOverdue} 件 / 納期確認 ${counts.deliveryCheck} 件 / 要発注 ${counts.orderNeeded} 件 / 要監視 ${counts.watch} 件 / 対象外 ${counts.noneResponse} 件`;
       countsRight.textContent =
         `確認済み ${counts.confirmed} 件 / 確認中 ${counts.inProgress} 件 / 未確認 ${counts.unconfirmed} 件`;
     }
@@ -574,7 +845,11 @@
     function render() {
       const filtered = applyListFilters(allRows, state);
       const counts = countRows(filtered, state);
+      // 同順位の並びはサーバの既定（table_display.sort_rows）と同じ: 発注期限 → 在庫切れ日 → 流動区分 → 得意先コード → 得意先品番
       const sorted = Core.sortRows(filtered, state.sortSpecs, (row, column) => sortValue(row, column, state), [
+        { column: "order_deadline", direction: "asc" },
+        { column: "stockout_date", direction: "asc" },
+        { column: "flow_quadrant", direction: "asc" },
         { column: "cust_code", direction: "asc" },
         { column: "item_cd", direction: "asc" },
       ]);
@@ -611,47 +886,44 @@
     }
 
     function syncFlowSelector() {
-      if (flowAxisSelect) {
-        flowAxisSelect.value = state.flowAxis;
-      }
-      if (flowPeriodSelect) {
-        // 選択中の判定軸に属する選択肢だけを見せる（design.md §6.6.1）。
-        // 判定期間の value は軸をまたいで重複する（例: 低流動1か月と死蔵1年がともに "1"）ため、
-        // <select>.value = "1" の代入は DOM 順で最初に一致した option（隠れていても）を選んでしまう。
-        // 軸と value の両方が一致する option を明示的に選択する。
-        let matchedOption = null;
-        Array.from(flowPeriodSelect.options).forEach((option) => {
-          const isCurrentAxis = option.dataset.axis === state.flowAxis;
-          option.hidden = !isCurrentAxis;
-          if (isCurrentAxis && Number(option.value) === Number(state.flowPeriod)) {
-            matchedOption = option;
-          }
-        });
-        if (matchedOption) {
-          matchedOption.selected = true;
-        }
+      const period = currentPeriod();
+      if (evaluationPeriodSelect) {
+        evaluationPeriodSelect.value = String(period.years);
       }
       if (flowQuadrantSelect) {
         flowQuadrantSelect.value = state.flowQuadrant || "";
       }
+      if (responseClassSelect) {
+        responseClassSelect.value = state.responseClass || "";
+      }
+      if (orderingMethodSelect) {
+        orderingMethodSelect.value = state.orderingMethod || "";
+      }
+      // 判定ルールダイアログの「現在の判定期間」と状況テンプレートの {period} を選択中の判定期間に合わせる。
+      if (alertRulesDialog) {
+        const periodElement = alertRulesDialog.querySelector(".ioa-alert-rules-period");
+        if (periodElement) {
+          periodElement.textContent = period.label;
+        }
+        alertRulesDialog.querySelectorAll(".ioa-alert-rules-status[data-status-template]").forEach((cell) => {
+          cell.textContent = String(cell.dataset.statusTemplate || "").replace("{period}", period.label);
+        });
+      }
     }
 
-    flowAxisSelect?.addEventListener("change", () => {
-      const nextAxis = flowAxisSelect.value;
-      const options = flowPeriods[nextAxis] || [];
-      // 軸を切り替えたら判定期間は当該軸の既定値へ戻す（REQ-LFV-F-003）。ページも1へ。
-      const defaultPeriod = nextAxis === (payload.defaultFlowSelection || {}).axis
-        ? Number((payload.defaultFlowSelection || {}).period)
-        : Number(options.length ? options[0].value : 3);
-      setState({ flowAxis: nextAxis, flowPeriod: defaultPeriod, page: 1 });
-    });
-
-    flowPeriodSelect?.addEventListener("change", () => {
-      setState({ flowPeriod: Number(flowPeriodSelect.value), page: 1 });
+    evaluationPeriodSelect?.addEventListener("change", () => {
+      // 判定期間を切り替えたらページは 1 へ（REQ-SFV-F-001）。
+      setState({ periodKey: resolvePeriodKey(evaluationPeriods, evaluationPeriodSelect.value, payload.defaultPeriodKey), page: 1 });
     });
 
     flowQuadrantSelect?.addEventListener("change", () => {
       setState({ flowQuadrant: flowQuadrantSelect.value, page: 1 });
+    });
+    responseClassSelect?.addEventListener("change", () => {
+      setState({ responseClass: responseClassSelect.value, page: 1 });
+    });
+    orderingMethodSelect?.addEventListener("change", () => {
+      setState({ orderingMethod: orderingMethodSelect.value, page: 1 });
     });
 
     custChrgSelect?.addEventListener("change", () => {
@@ -691,23 +963,106 @@
       getSortSpecs() {
         return state.sortSpecs.map((spec) => ({ ...spec }));
       },
+      // 並び替えダイアログ用。一覧の列に加え、ソート専用項目（在庫月数）も選べる（05 design §6.1）。
       getSortableColumns() {
-        return sortableColumns.map((column) => ({ ...column }));
+        return sortableColumns.concat(sortOnlyColumns).map((column) => ({ ...column }));
       },
-      // 詳細ダイアログ用（design.md §6.3.1）。責任部署は流動区分からの導出値であり、
-      // 判定軸の切替に追随させるため属性ではなく対応表から引く。
+      // 詳細ダイアログの需要予測区分用（05 design §6.4）。
+      getDemandForecast(custCode, itemCd) {
+        const row = findRow(custCode, itemCd);
+        return row?.demandForecast ? { ...row.demandForecast } : null;
+      },
+      getUnconfirmedOrderTrend(custCode, itemCd) {
+        const row = findRow(custCode, itemCd);
+        return Array.isArray(row?.unconfirmedOrderTrend) ? row.unconfirmedOrderTrend : [];
+      },
+      getUrgencyText(custCode, itemCd) {
+        const row = findRow(custCode, itemCd);
+        return row ? urgencyTextOf(row) : "";
+      },
+      // 詳細ダイアログの対応区分（08 design §5）。
+      getResponseClass(custCode, itemCd) {
+        const row = findRow(custCode, itemCd);
+        if (!row) {
+          return null;
+        }
+        const key = rowResponseClassKey(row);
+        return {
+          responseClass: row.responseClass || RESPONSE_CLASS_LABELS[key],
+          key,
+          reasons: Array.isArray(row.responseReasons) ? row.responseReasons : [],
+          stockoutDate: row.stockoutDate || "",
+          orderDeadline: row.orderDeadline || "",
+          overdueOrderQty: row.overdueOrderQty ?? 0,
+          overdueOrderCount: row.overdueOrderCount ?? 0,
+          belowSafetyStock: Boolean(row.belowSafetyStock),
+          safetyStock: row.safetyStock ?? 0,
+          leadTimeDays: row.leadTimeDays ?? null,
+          leadTimeSource: row.leadTimeSource || "",
+          orderingMethod: row.orderingMethod || "不明",
+          processChain: Array.isArray(row.processChain) ? row.processChain : [],
+          // 10: 判定サマリ（T-211）。文言はサーバが組み立てたものをそのまま渡す
+          summary: row.assessmentSummary || { headline: "", nextAction: "", deadlineText: "", reasons: [] },
+          // 09: 在庫シミュレーション（V-237）の材料。重複除去はサーバ側で済んでいる
+          simulation: {
+            asOfDate: String(payload.asOfDate || ""),
+            rangeStart: String(payload.simulationRange?.start || ""),
+            rangeEnd: String(payload.simulationRange?.end || ""),
+            dailyShipment: Array.isArray(row.dailyShipment) ? row.dailyShipment : [],
+            dailyIncoming: Array.isArray(row.dailyIncoming) ? row.dailyIncoming : [],
+            unconfirmedOrderDaily: Array.isArray(row.unconfirmedOrderDaily) ? row.unconfirmedOrderDaily : [],
+            plannedIncoming: Array.isArray(row.plannedIncoming) ? row.plannedIncoming : [],
+          },
+        };
+      },
+      // 詳細ダイアログ用（05 design §6.4）。状況・推奨アクション・責任部署は流動区分からの導出値であり、
+      // 判定期間の切替に追随させるため属性ではなく対応表から引く。
       getFlowQuadrantLabel(quadrantKey) {
         return flowQuadrantLabels[quadrantKey] || "";
       },
       getResponsibleDepartment(quadrantKey) {
-        return flowQuadrantDepartments[quadrantKey] || "";
+        return responsibleDepartmentOf(quadrantKey);
       },
-      getFlowConditionLabel() {
-        const axis = flowAxes.find((option) => option.value === state.flowAxis);
-        const period = (flowPeriods[state.flowAxis] || []).find(
-          (option) => Number(option.value) === Number(state.flowPeriod),
-        );
-        return axis && period ? `${axis.label}・${period.label}で判定` : "";
+      getRecommendedAction(quadrantKey) {
+        return recommendedActionOf(quadrantKey);
+      },
+      getFlowStatus(custCode, itemCd, quadrantKey) {
+        const row = findRow(custCode, itemCd);
+        if (!row || quadrantKey === QUADRANT_NORMAL_FLOW_KEY) {
+          return "";
+        }
+        return flowStatusOf(row, quadrantKey);
+      },
+      // 流動区分の理由（07 REQ-FQR-F-005）。理由も判定期間で変わるため、区分と同じく期間キーで引く
+      // （判定ロジックは JS に持ち込まない。07 design §1-6）。
+      getFlowReasons(custCode, itemCd, periodKey) {
+        const row = findRow(custCode, itemCd);
+        if (!row) {
+          return [];
+        }
+        const byPeriod = row.flowReasonsByPeriod || {};
+        const reasons = byPeriod[periodKey || flowSelectionKey(state)];
+        if (Array.isArray(reasons)) {
+          return reasons;
+        }
+        return Array.isArray(row.flowReasons) ? row.flowReasons : [];
+      },
+      getEvaluationPeriodLabel() {
+        return currentPeriod().label;
+      },
+      // 出荷推移(V-216)は24件の配列のため data-* 属性にせず、findRow() 経由で行データから直接返す(design.md §6.3)。
+      getShipmentTrend(custCode, itemCd) {
+        const row = findRow(custCode, itemCd);
+        return Array.isArray(row?.shipment_trend) ? row.shipment_trend : [];
+      },
+      // 入荷推移(V-217)も同様に findRow() 経由で返す(design.md §6.1)。
+      getIncomingTrend(custCode, itemCd) {
+        const row = findRow(custCode, itemCd);
+        return Array.isArray(row?.incoming_trend) ? row.incoming_trend : [];
+      },
+      // 推定在庫推移(V-218)用。照合単位に合算した出荷・入荷と、起点の内訳を返す(design.md §6.6)。
+      getItemTrends(itemCd) {
+        return itemTrendsOf(itemCd);
       },
       getListFilterParams() {
         return {

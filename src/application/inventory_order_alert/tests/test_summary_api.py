@@ -95,13 +95,11 @@ def test_summary_api_returns_empty_result_without_snapshot():
 
 
 def test_summary_api_merge_query_with_settings_does_not_override_flow_selection():
-    """判定軸・判定期間は利用者がクエリで選ぶ値であり、設定値で上書きしない（design.md §6.1）。"""
+    """判定期間は利用者がクエリで選ぶ値であり、設定値で上書きしない（05 design §6.1）。"""
     summary = _summary([_row(last_incoming_date="", last_ship_date="2026/06/15")])
-    result = SummaryApi(lambda: summary, lambda: _settings()).execute(
-        {"axis": "dormant", "period": "5"}, today=AS_OF
-    )
+    result = SummaryApi(lambda: summary, lambda: _settings()).execute({"period": "5"}, today=AS_OF)
 
-    assert result["rows"][0]["flow_quadrant"] == "供給リスク品"
+    assert result["rows"][0]["flow_quadrant"] == "低流動品（入荷なし）"
 
 
 def test_summary_api_counts_payload_uses_flow_quadrant_keys():
@@ -111,13 +109,23 @@ def test_summary_api_counts_payload_uses_flow_quadrant_keys():
     assert set(result["counts"]) == {
         "total",
         "attention",
-        "supplyRisk",
+        # 07 在庫なしの 3 区分（TC-FQR-C-003）
+        "stockoutNoIncoming",
+        "stockout",
+        "discontinuationCandidate",
+        "lowFlowNoIncoming",
         "dormantStock",
-        "excessStockRisk",
+        "lowFlowNoShipment",
         "normalFlow",
         "unconfirmed",
+        # 08 対応区分（TC-SRR-C-008）
+        "orderOverdue",
+        "deliveryCheck",
+        "orderNeeded",
+        "watch",
+        "noneResponse",
     }
-    assert result["counts"]["supplyRisk"] == 1
+    assert result["counts"]["lowFlowNoIncoming"] == 1
 
 
 def test_summary_api_attention_only_excludes_normal_flow():
@@ -131,19 +139,20 @@ def test_summary_api_attention_only_excludes_normal_flow():
         {"attentionOnly": "true"}, today=AS_OF
     )
 
-    assert [row["flow_quadrant"] for row in result["rows"]] == ["供給リスク品"]
+    assert [row["flow_quadrant"] for row in result["rows"]] == ["低流動品（入荷なし）"]
 
 
-def test_summary_api_reflects_selected_axis_and_period():
+def test_summary_api_reflects_selected_evaluation_period():
     summary = _summary([_row(last_incoming_date="2024/01/10", last_ship_date="2024/02/10")])
 
-    low_flow = SummaryApi(lambda: summary, lambda: _settings()).execute({}, today=AS_OF)
-    dormant = SummaryApi(lambda: summary, lambda: _settings()).execute(
-        {"axis": "dormant", "period": "5"}, today=AS_OF
-    )
+    one_year = SummaryApi(lambda: summary, lambda: _settings()).execute({}, today=AS_OF)
+    five_years = SummaryApi(lambda: summary, lambda: _settings()).execute({"period": "5"}, today=AS_OF)
+    legacy = SummaryApi(lambda: summary, lambda: _settings()).execute({"axis": "dormant", "period": "5"}, today=AS_OF)
 
-    assert low_flow["rows"][0]["flow_quadrant"] == "在庫死蔵品"
-    assert dormant["rows"][0]["flow_quadrant"] == "通常流動品"
+    assert one_year["rows"][0]["flow_quadrant"] == "在庫死蔵品"
+    assert five_years["rows"][0]["flow_quadrant"] == "通常流動品"
+    # 旧 URL の axis は無視され、period の年数だけが効く
+    assert legacy["rows"][0]["flow_quadrant"] == "通常流動品"
 
 
 def test_summary_api_filters_by_vend_code():
@@ -267,11 +276,18 @@ def test_dashboard_summary_serializes_counts_and_stock_import():
 
     assert result["ok"] is True
     assert set(result["counts"]) == {
-        "supplyRisk",
+        "stockoutNoIncoming",
+        "stockout",
+        "lowFlowNoIncoming",
         "dormantStock",
-        "excessStockRisk",
+        "lowFlowNoShipment",
+        "discontinuationCandidate",
         "attention",
         "unconfirmed",
+        "orderOverdue",
+        "deliveryCheck",
+        "orderNeeded",
+        "watch",
     }
     assert result["stockImport"]["hasData"] is True
     assert result["stockImport"]["stockAsOfLabel"] == "2026年6月17日時点の在庫"
@@ -283,11 +299,18 @@ def test_dashboard_summary_without_stock_data():
     result = DashboardSummary(dashboard, lambda: None).execute()
 
     assert result["counts"] == {
-        "supplyRisk": 0,
+        "stockoutNoIncoming": 0,
+        "stockout": 0,
+        "lowFlowNoIncoming": 0,
         "dormantStock": 0,
-        "excessStockRisk": 0,
+        "lowFlowNoShipment": 0,
+        "discontinuationCandidate": 0,
         "attention": 0,
         "unconfirmed": 0,
+        "orderOverdue": 0,
+        "deliveryCheck": 0,
+        "orderNeeded": 0,
+        "watch": 0,
     }
     assert result["stockImport"]["hasData"] is False
     assert result["stockImport"]["importedAt"] is None

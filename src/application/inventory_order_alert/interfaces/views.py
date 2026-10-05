@@ -46,6 +46,8 @@ def list_page(request: HttpRequest) -> HttpResponse:
             all_rows=context.all_rows,
             filter_options=context.filter_options,
             confirmation_status_choices=context.confirmation_status_choices,
+            recommended_actions=context.recommended_actions,
+            as_of_date=context.as_of_date,
         )
         if context.has_list_data
         else None
@@ -83,9 +85,12 @@ def list_page(request: HttpRequest) -> HttpResponse:
             "is_admin": is_portal_admin(request.user),
             "confirmation_status_choices": context.confirmation_status_choices,
             "flow_selection": context.flow_selection,
-            "flow_axis_options": context.flow_axis_options,
-            "flow_period_options": context.flow_period_options,
+            "evaluation_periods": context.evaluation_periods,
             "flow_quadrant_filter": context.flow_quadrant_filter,
+            "response_class_filter": context.response_class_filter,
+            "ordering_method_filter": context.ordering_method_filter,
+            "response_class_options": context.response_class_options,
+            "ordering_method_options": context.ordering_method_options,
             "flow_quadrant_rule_rows": context.flow_quadrant_rule_rows,
             "test_data_warning": context.test_data_warning,
             "list_client_payload": list_client_payload,
@@ -164,6 +169,7 @@ def settings_page(request: HttpRequest) -> HttpResponse:
         {
             "warning_days": settings.warning_days,
             "stock_stale_days": settings.stock_stale_days,
+            "recent_incoming_days": settings.recent_incoming_days,
             "can_reset_confirmations": can_reset_confirmations(),
         },
     )

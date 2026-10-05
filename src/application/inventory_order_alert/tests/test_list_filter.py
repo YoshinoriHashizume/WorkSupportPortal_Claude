@@ -15,15 +15,16 @@ from application.inventory_order_alert.domain.value_objects.list_filter import (
     parse_list_filter_params,
 )
 from application.inventory_order_alert.domain.value_objects.flow_quadrant import (
+    FLOW_QUADRANT_KEYS,
+    QUADRANT_LOW_FLOW_NO_INCOMING,
     EvaluationPeriod,
-    FLOW_AXIS_DORMANT,
-    FLOW_AXIS_LOW_FLOW,
     FlowSelection,
 )
 from application.inventory_order_alert.domain.value_objects.table_display import SortSpec, TableDisplayParams
 
-SELECTION_D5 = FlowSelection(EvaluationPeriod(FLOW_AXIS_DORMANT, 5))
-SELECTION_L3 = FlowSelection(EvaluationPeriod(FLOW_AXIS_LOW_FLOW, 3))
+SELECTION_Y5 = FlowSelection(EvaluationPeriod(5))
+SELECTION_Y3 = FlowSelection(EvaluationPeriod(3))
+KEY_LOW_FLOW_NO_INCOMING = FLOW_QUADRANT_KEYS[QUADRANT_LOW_FLOW_NO_INCOMING]
 
 
 def _row(**kwargs) -> dict[str, object]:
@@ -189,19 +190,43 @@ def test_build_display_query_string_includes_prefix_filters():
     assert "level1_item_cd=L1" in query
 
 
-def test_build_display_query_string_includes_axis_period_and_flow_quadrant():
+def test_build_display_query_string_includes_period_years_and_flow_quadrant():
     table_params = TableDisplayParams(sort_specs=(SortSpec("flow_quadrant", "asc"),), page=1, page_size=50)
 
     query = build_display_query_string(
         table_params=table_params,
         filter_params=ListFilterParams(),
-        flow_selection=SELECTION_D5,
+        flow_selection=SELECTION_Y5,
+        flow_quadrant=KEY_LOW_FLOW_NO_INCOMING,
+    )
+
+    parsed = parse_qs(query)
+    assert parsed["period"] == ["5"]
+    assert parsed["flow_quadrant"] == [KEY_LOW_FLOW_NO_INCOMING]
+    assert "axis" not in parsed
+
+
+def test_build_display_query_string_drops_legacy_flow_quadrant_key():
+    """旧キーは `parse_flow_quadrant` で新キーに写像済みの前提。未写像の旧キーはリンクに載せない。"""
+    table_params = TableDisplayParams(sort_specs=(SortSpec("flow_quadrant", "asc"),), page=1, page_size=50)
+
+    query = build_display_query_string(
+        table_params=table_params,
+        filter_params=ListFilterParams(),
+        flow_selection=SELECTION_Y3,
         flow_quadrant="supply-risk",
     )
 
-    assert "axis=dormant" in query
-    assert "period=5" in query
-    assert "flow_quadrant=supply-risk" in query
+    assert "flow_quadrant" not in parse_qs(query)
+    assert "supply-risk" not in query
+
+
+def test_build_display_query_string_defaults_to_one_year():
+    table_params = TableDisplayParams(sort_specs=(SortSpec("flow_quadrant", "asc"),), page=1, page_size=50)
+
+    query = build_display_query_string(table_params=table_params, filter_params=ListFilterParams())
+
+    assert parse_qs(query)["period"] == ["1"]
 
 
 def test_build_display_query_string_keeps_selection_when_sort_changes():
@@ -210,12 +235,12 @@ def test_build_display_query_string_keeps_selection_when_sort_changes():
     query = build_display_query_string(
         table_params=table_params,
         filter_params=ListFilterParams(),
-        flow_selection=SELECTION_D5,
+        flow_selection=SELECTION_Y5,
         sort_specs=(SortSpec("item_cd", "desc"),),
     )
 
     assert "sort=item_cd" in query
-    assert "axis=dormant" in query
+    assert "axis" not in parse_qs(query)
     assert "period=5" in query
 
 
@@ -225,12 +250,12 @@ def test_build_display_query_string_keeps_selection_when_page_changes():
     query = build_display_query_string(
         table_params=table_params,
         filter_params=ListFilterParams(),
-        flow_selection=SELECTION_D5,
+        flow_selection=SELECTION_Y5,
         page=3,
     )
 
     assert "page=3" in query
-    assert "axis=dormant" in query
+    assert "axis" not in parse_qs(query)
     assert "period=5" in query
 
 
@@ -240,7 +265,7 @@ def test_build_display_query_string_omits_empty_flow_quadrant():
     query = build_display_query_string(
         table_params=table_params,
         filter_params=ListFilterParams(),
-        flow_selection=SELECTION_L3,
+        flow_selection=SELECTION_Y3,
         flow_quadrant="",
     )
 

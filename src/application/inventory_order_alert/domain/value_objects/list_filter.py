@@ -169,6 +169,8 @@ def build_display_query_string(
     filter_params: ListFilterParams,
     flow_selection: FlowSelection = REFERENCE_FLOW_SELECTION,
     flow_quadrant: str = "",
+    response_class: str = "",
+    ordering_method: str = "",
     page: int | None = None,
     sort_specs: tuple[SortSpec, ...] | None = None,
     page_size: int | None = None,
@@ -179,13 +181,15 @@ def build_display_query_string(
         "dir": ",".join(spec.direction for spec in specs),
         "page": page if page is not None else table_params.page,
         "page_size": page_size if page_size is not None else table_params.page_size,
-        # 判定条件はソート・ページング・フィルタのどのリンクにも引き継ぐ（design.md §6.1）。
-        # 既定値でも必ず出力し、axis と period が対で欠けないようにする。
-        "axis": flow_selection.axis,
-        "period": flow_selection.period.value,
+        # 判定期間はソート・ページング・フィルタのどのリンクにも引き継ぐ（05 design.md §6.1）。
+        "period": flow_selection.period.years,
     }
     if flow_quadrant in FLOW_QUADRANT_LABELS:
         query["flow_quadrant"] = flow_quadrant
+    if response_class:
+        query["response_class"] = response_class
+    if ordering_method:
+        query["ordering_method"] = ordering_method
     if filter_params.cust_code:
         query["cust_code"] = filter_params.cust_code
     if filter_params.cust_chrg_psn_cd:
