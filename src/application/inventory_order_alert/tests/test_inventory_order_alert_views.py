@@ -1108,7 +1108,8 @@ def test_x013_export_csv_has_stage2_trailing_columns_and_values(client, producti
     assert response.status_code == 200
     columns = header.split(",")
     assert columns[24:28] == ["在庫月数", "在庫切れ予測月", "需要予測の算出根拠", "推奨アクション"]
-    assert columns[-1] == "発注方式"
+    # 11 REQ-JS-F-006 で滞留発注残の 2 列を末尾に足した
+    assert columns[-3:] == ["発注方式", "滞留発注残件数", "滞留発注残数量"]
     assert columns.index("流動区分") < columns.index("判定軸") < columns.index("判定期間")
     import csv
     import io
@@ -1477,7 +1478,7 @@ def test_srr_x008_csv_appends_response_class_columns(client, production_user):
 
     records = list(csv.DictReader(io.StringIO(body)))
     header = body.splitlines()[0].split(",")
-    assert header[-9:] == [
+    assert header[-11:] == [
         "対応区分",
         "対応区分の理由",
         "在庫切れ日",
@@ -1487,6 +1488,9 @@ def test_srr_x008_csv_appends_response_class_columns(client, production_user):
         "安全在庫",
         "リードタイム",
         "発注方式",
+        # 11 REQ-JS-F-006
+        "滞留発注残件数",
+        "滞留発注残数量",
     ]
     overdue = next(r for r in records if r["得意先品番"] == "ITEM-OVERDUE")
     assert overdue["対応区分"] == "発注遅れ"
@@ -1596,9 +1600,9 @@ def test_static_assets_are_cache_busted_for_the_current_revision():
     base = (templates / "base.html").read_text(encoding="utf-8")
     ioa = (templates / "inventory_order_alert" / "list.html").read_text(encoding="utf-8")
 
-    assert "/static/css/app.css?v=20261005-item-master-fields" in base
-    assert "/static/js/inventory-order-alert-list.js?v=20261005-item-master-fields" in ioa
-    assert "/static/js/inventory-order-alert-list-client.js?v=20261005-item-master-fields" in ioa
+    assert "/static/css/app.css?v=20261027-judgement-scope" in base
+    assert "/static/js/inventory-order-alert-list.js?v=20261027-judgement-scope" in ioa
+    assert "/static/js/inventory-order-alert-list-client.js?v=20261027-judgement-scope" in ioa
     # 旧版が残っていないこと
     for stale in ("20260922-forecast-line-no-planned", "20260921-stale-overdue", "20260918-unit-forecast", "20260929-stock-simulation", "20260930-date-axis-scroll", "20260930-detail-cleanup", "20260930-chart-scroll-fix", "20260930-template-comment-fix"):
         assert stale not in base and stale not in ioa

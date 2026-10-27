@@ -49,6 +49,9 @@ EXPORT_COLUMNS: list[tuple[str, str]] = [
     ("safety_stock", "安全在庫"),
     ("lead_time_days", "リードタイム"),
     ("ordering_method", "発注方式"),
+    # 11 滞留発注残（V-238、REQ-JS-F-006）: 納期切れのまま更新がなく入荷見込みに数えないもの
+    ("stale_order_count", "滞留発注残件数"),
+    ("stale_order_qty", "滞留発注残数量"),
 ]
 
 EXPORT_FIELDNAMES = [column for column, _label in EXPORT_COLUMNS]

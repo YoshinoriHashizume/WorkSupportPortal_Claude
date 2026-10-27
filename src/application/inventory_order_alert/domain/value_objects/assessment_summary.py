@@ -13,6 +13,9 @@ from __future__ import annotations
 from dataclasses import dataclass
 from datetime import date
 
+from application.inventory_order_alert.domain.value_objects.app_settings import (
+    DEFAULT_JUDGEMENT_HORIZON_DAYS,
+)
 from application.inventory_order_alert.domain.value_objects.dates import parse_optional_ymd
 from application.inventory_order_alert.domain.value_objects.stockout_risk import (
     RESPONSE_DELIVERY_CHECK,
@@ -88,7 +91,12 @@ def _deadline_text(row: dict[str, object], *, as_of_date: date) -> str:
     return f"{deadline_raw}（{-days} 日超過）"
 
 
-def build_assessment_summary(row: dict[str, object], *, as_of_date: date) -> AssessmentSummary:
+def build_assessment_summary(
+    row: dict[str, object],
+    *,
+    as_of_date: date,
+    judgement_horizon_days: int = DEFAULT_JUDGEMENT_HORIZON_DAYS,
+) -> AssessmentSummary:
     """行の判定値から判定サマリを組み立てる。例外は投げない。"""
     response_class = row_response_class(row)
     stockout_raw = str(row.get("stockout_date") or "").strip()
@@ -96,6 +104,29 @@ def build_assessment_summary(row: dict[str, object], *, as_of_date: date) -> Ass
     reasons = tuple(str(reason) for reason in (row.get("response_reasons") or []))
 
     overdue_text = f"納期遅れの発注残 {_as_int(row.get('overdue_order_count'))} 件 {_qty(row.get('overdue_order_qty'))} 個"
+
+    # 判定ホライズン（V-239）より先に切れる行は対応区分が 対象外 / 要監視 になる。
+    # 「在庫は切れません」と言うと事実と逆なので、切れる日と「今は対応不要」を併せて述べる（11 REQ-JS-F-001/004）
+    stockout = _parse(stockout_raw)
+    beyond_horizon = (
+        stockout is not None
+        and response_class in (RESPONSE_NONE, RESPONSE_WATCH)
+        and (stockout - as_of_date).days >= judgement_horizon_days
+    )
+    if beyond_horizon:
+        tail = ""
+        if response_class == RESPONSE_WATCH:
+            tail = f"。安全在庫 {_qty(row.get('safety_stock'))} を下回ります"
+        return AssessmentSummary(
+            headline=(
+                f"在庫は {stockout_raw} に切れますが、{judgement_horizon_days} 日より先なので"
+                f"今は対応不要です{tail}"
+            ),
+            response_class=response_class,
+            next_action=NEXT_ACTIONS.get(response_class, NEXT_ACTIONS[RESPONSE_NONE]),
+            deadline_text=_deadline_text(row, as_of_date=as_of_date),
+            reasons=reasons,
+        )
 
     if response_class in (RESPONSE_ORDER_OVERDUE, RESPONSE_ORDER_NEEDED) and stockout_raw:
         if response_class == RESPONSE_ORDER_OVERDUE:

@@ -120,10 +120,48 @@ def planned_incoming_by_due(unit_rows: list[dict[str, object]], *, as_of_date: d
     return planned
 
 
-def overdue_orders(unit_rows: list[dict[str, object]], *, as_of_date: date) -> tuple[int, int]:
-    """納期遅れの発注残の (数量合計, 件数)。在庫の計算には加算しない（REQ-SRR-F-002）。"""
-    total = 0
-    count = 0
+@dataclass(frozen=True)
+class OverdueBreakdown:
+    """納期を過ぎた発注残の内訳（V-224 / V-238、11 design §2.2）。
+
+    `overdue_*` は「生きている納期遅れ」＝対応区分（S-204）の納期確認の根拠になるもの。
+    `stale_*` は滞留発注残（V-238）＝**判定には使わず表示だけする**もの。
+    """
+
+    overdue_qty: int = 0
+    overdue_count: int = 0
+    stale_qty: int = 0
+    stale_count: int = 0
+
+
+def _is_stale(order: dict[str, object], *, as_of_date: date, stale_after_days: int | None) -> bool:
+    """滞留発注残（V-238）か。基幹に発注停止フラグがないため最終更新日による**推定**である。
+
+    `stale_after_days` が None、`updated_at` がない・解析できない明細は**滞留としない**
+    （旧スナップショットを従来どおり納期遅れとして扱う。11 REQ-JS-F-007）。
+    """
+    if stale_after_days is None:
+        return False
+    updated_at = _parse_date(order.get("updated_at"))
+    if updated_at is None:
+        return False
+    return (as_of_date - updated_at).days >= stale_after_days
+
+
+def overdue_order_breakdown(
+    unit_rows: list[dict[str, object]],
+    *,
+    as_of_date: date,
+    stale_after_days: int | None = None,
+) -> OverdueBreakdown:
+    """納期 ≤ 基準日 の発注残を「生きている納期遅れ」と「滞留」に分ける（11 REQ-JS-F-002）。
+
+    どちらも在庫の計算には加算しない（REQ-SRR-F-002）。対象は完成品直下の工程のみ。
+    """
+    overdue_qty = 0
+    overdue_count = 0
+    stale_qty = 0
+    stale_count = 0
     seen: set[str] = set()
     for row in unit_rows:
         level1 = (str(row.get("level1_item_cd") or "").strip(), str(row.get("level1_vend_cd") or "").strip())
@@ -141,10 +179,30 @@ def overdue_orders(unit_rows: list[dict[str, object]], *, as_of_date: date) -> t
             seen.add(order_cd)
             due = _parse_date(order.get("due_date"))
             qty = _as_int(order.get("remaining_qty"))
-            if due is not None and qty > 0 and due <= as_of_date:
-                total += qty
-                count += 1
-    return total, count
+            if due is None or qty <= 0 or due > as_of_date:
+                continue
+            if _is_stale(order, as_of_date=as_of_date, stale_after_days=stale_after_days):
+                stale_qty += qty
+                stale_count += 1
+            else:
+                overdue_qty += qty
+                overdue_count += 1
+    return OverdueBreakdown(
+        overdue_qty=overdue_qty,
+        overdue_count=overdue_count,
+        stale_qty=stale_qty,
+        stale_count=stale_count,
+    )
+
+
+def overdue_orders(unit_rows: list[dict[str, object]], *, as_of_date: date) -> tuple[int, int]:
+    """納期を過ぎた発注残の (数量合計, 件数)。**滞留（V-238）も含む**。
+
+    在庫の計算には加算しない（REQ-SRR-F-002）。滞留を分けたいときは
+    `overdue_order_breakdown()` を使う（11 design §2.2）。
+    """
+    breakdown = overdue_order_breakdown(unit_rows, as_of_date=as_of_date, stale_after_days=None)
+    return breakdown.overdue_qty, breakdown.overdue_count
 
 
 def build_stock_simulation_input(

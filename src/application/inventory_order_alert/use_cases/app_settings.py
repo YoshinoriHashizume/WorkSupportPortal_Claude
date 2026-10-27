@@ -29,6 +29,8 @@ class AppSettingsUseCase:
             stock_stale_days=input_data.stock_stale_days,
             default_lead_time_days=input_data.default_lead_time_days,
             recent_incoming_days=input_data.recent_incoming_days,
+            judgement_horizon_days=input_data.judgement_horizon_days,
+            stale_order_days=input_data.stale_order_days,
             updated_by=updated_by,
         )
         return settings_payload(saved)

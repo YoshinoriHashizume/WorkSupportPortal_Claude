@@ -170,6 +170,9 @@ def settings_page(request: HttpRequest) -> HttpResponse:
             "warning_days": settings.warning_days,
             "stock_stale_days": settings.stock_stale_days,
             "recent_incoming_days": settings.recent_incoming_days,
+            # 11 REQ-JS-F-001/002: 判定ホライズン（V-239）・滞留発注残（V-238）の閾値
+            "judgement_horizon_days": settings.judgement_horizon_days,
+            "stale_order_days": settings.stale_order_days,
             "can_reset_confirmations": can_reset_confirmations(),
         },
     )

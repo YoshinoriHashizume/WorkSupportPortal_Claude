@@ -17,6 +17,13 @@ MAX_STOCK_STALE_DAYS = 365
 MIN_DEFAULT_LEAD_TIME_DAYS = 1
 MAX_DEFAULT_LEAD_TIME_DAYS = 60
 # 直近入荷の窓（07 design §5.2）。範囲・既定値は flow_quadrant の定数を正とする
+# 判定ホライズン（V-239）・滞留発注残（V-238）の閾値（11 design §2.1）
+MIN_JUDGEMENT_HORIZON_DAYS = 1
+MAX_JUDGEMENT_HORIZON_DAYS = 365
+DEFAULT_JUDGEMENT_HORIZON_DAYS = 30
+MIN_STALE_ORDER_DAYS = 1
+MAX_STALE_ORDER_DAYS = 730
+DEFAULT_STALE_ORDER_DAYS = 30
 
 
 def _require_in_range(value: int, *, label: str, minimum: int, maximum: int) -> None:
@@ -40,6 +47,12 @@ class AppSettings:
     default_lead_time_days: int = 5
     #: 直近入荷とみなす日数（07 REQ-FQR-F-008）。欠品（T-209）の 2 区分の振り分けにのみ使う。判定期間（V-211）とは別物
     recent_incoming_days: int = DEFAULT_RECENT_INCOMING_DAYS
+    #: 判定ホライズン（V-239、11 REQ-JS-F-001）。在庫切れ日（V-232）をここまでしか対応区分（S-204）に反映しない。
+    #: 算出・表示は範囲外でも従来どおり行う
+    judgement_horizon_days: int = DEFAULT_JUDGEMENT_HORIZON_DAYS
+    #: 滞留発注残（V-238、11 REQ-JS-F-002）と見なすまでの未更新日数。
+    #: 基幹に発注停止フラグがないため `UPDATED_DATE` による推定である
+    stale_order_days: int = DEFAULT_STALE_ORDER_DAYS
 
     def __post_init__(self) -> None:
         _require_in_range(
@@ -66,6 +79,18 @@ class AppSettings:
             minimum=MIN_RECENT_INCOMING_DAYS,
             maximum=MAX_RECENT_INCOMING_DAYS,
         )
+        _require_in_range(
+            self.judgement_horizon_days,
+            label="判定ホライズン（日）",
+            minimum=MIN_JUDGEMENT_HORIZON_DAYS,
+            maximum=MAX_JUDGEMENT_HORIZON_DAYS,
+        )
+        _require_in_range(
+            self.stale_order_days,
+            label="滞留発注残と見なす未更新日数",
+            minimum=MIN_STALE_ORDER_DAYS,
+            maximum=MAX_STALE_ORDER_DAYS,
+        )
 
     def to_flow_thresholds(self) -> FlowThresholds:
         return FlowThresholds(recent_incoming_days=self.recent_incoming_days)
@@ -77,6 +102,8 @@ class SettingsInput:
     stock_stale_days: int
     default_lead_time_days: int = 5
     recent_incoming_days: int = DEFAULT_RECENT_INCOMING_DAYS
+    judgement_horizon_days: int = DEFAULT_JUDGEMENT_HORIZON_DAYS
+    stale_order_days: int = DEFAULT_STALE_ORDER_DAYS
 
 
 def clamp_warning_days(value: int) -> int:
@@ -93,6 +120,14 @@ def clamp_default_lead_time_days(value: int) -> int:
 
 def clamp_recent_incoming_days(value: int) -> int:
     return max(MIN_RECENT_INCOMING_DAYS, min(MAX_RECENT_INCOMING_DAYS, int(value)))
+
+
+def clamp_judgement_horizon_days(value: int) -> int:
+    return max(MIN_JUDGEMENT_HORIZON_DAYS, min(MAX_JUDGEMENT_HORIZON_DAYS, int(value)))
+
+
+def clamp_stale_order_days(value: int) -> int:
+    return max(MIN_STALE_ORDER_DAYS, min(MAX_STALE_ORDER_DAYS, int(value)))
 
 
 def _parse_int_in_range(value: object, *, label: str, minimum: int, maximum: int) -> int:
@@ -151,11 +186,31 @@ def parse_settings_payload(data: object, *, current: AppSettings | None = None) 
             maximum=MAX_RECENT_INCOMING_DAYS,
         )
 
+    judgement_horizon_days = base.judgement_horizon_days
+    if "judgementHorizonDays" in data:
+        judgement_horizon_days = _parse_int_in_range(
+            data["judgementHorizonDays"],
+            label="判定ホライズン（日）",
+            minimum=MIN_JUDGEMENT_HORIZON_DAYS,
+            maximum=MAX_JUDGEMENT_HORIZON_DAYS,
+        )
+
+    stale_order_days = base.stale_order_days
+    if "staleOrderDays" in data:
+        stale_order_days = _parse_int_in_range(
+            data["staleOrderDays"],
+            label="滞留発注残と見なす未更新日数",
+            minimum=MIN_STALE_ORDER_DAYS,
+            maximum=MAX_STALE_ORDER_DAYS,
+        )
+
     return SettingsInput(
         warning_days=warning_days,
         stock_stale_days=stock_stale_days,
         default_lead_time_days=default_lead_time_days,
         recent_incoming_days=recent_incoming_days,
+        judgement_horizon_days=judgement_horizon_days,
+        stale_order_days=stale_order_days,
     )
 
 
@@ -166,4 +221,6 @@ def settings_payload(settings: AppSettings) -> dict[str, object]:
         "stockStaleDays": settings.stock_stale_days,
         "defaultLeadTimeDays": settings.default_lead_time_days,
         "recentIncomingDays": settings.recent_incoming_days,
+        "judgementHorizonDays": settings.judgement_horizon_days,
+        "staleOrderDays": settings.stale_order_days,
     }

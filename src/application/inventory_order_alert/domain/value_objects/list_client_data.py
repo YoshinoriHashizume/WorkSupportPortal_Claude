@@ -139,6 +139,9 @@ def row_to_client_dict(row: dict[str, object], as_of_date: object | None = None)
     client_row["safetyStock"] = _optional_number(row.get("safety_stock")) or 0.0
     client_row["overdueOrderQty"] = _optional_int(row.get("overdue_order_qty")) or 0
     client_row["overdueOrderCount"] = _optional_int(row.get("overdue_order_count")) or 0
+    # 11: 滞留発注残（V-238）。判定には使わず表示のみ（REQ-JS-F-002/005）
+    client_row["staleOrderQty"] = _optional_int(row.get("stale_order_qty")) or 0
+    client_row["staleOrderCount"] = _optional_int(row.get("stale_order_count")) or 0
     # 09: 在庫シミュレーション（V-237）の材料。重複除去はサーバ側で済んでおり、JS は累積するだけ
     client_row["dailyShipment"] = _daily_points(row.get("daily_shipment"))
     client_row["dailyIncoming"] = _daily_points(row.get("daily_incoming"))

@@ -254,6 +254,8 @@
     // 在庫と発注残の区分（10 REQ-DDC-F-002）。判定に使った数字をまとめる。
     const riskFields = {
       overdueOrders: dialog.querySelector(".ioa-detail-overdue-orders"),
+    staleOrders: dialog.querySelector(".ioa-detail-stale-orders"),
+    staleOrdersLabel: dialog.querySelector(".ioa-detail-stale-orders-label"),
       plannedIncoming: dialog.querySelector(".ioa-detail-planned-incoming"),
       safetyStock: dialog.querySelector(".ioa-detail-safety-stock"),
       leadTime: dialog.querySelector(".ioa-detail-stockout-lead-time"),
@@ -358,6 +360,22 @@
           ? `${formatQty(info.overdueOrderQty)}（${info.overdueOrderCount} 件）— 在庫の計算に入れていません`
           : "なし",
       );
+      // 滞留発注残（V-238）。納期切れのまま更新がないもので、対応区分の判定にも使わない（11 REQ-JS-F-005）。
+      // 基幹に発注停止フラグがないため推定である旨が伝わる文言にする。0 件なら行ごと隠す。
+      const staleQty = Number(info.staleOrderQty) || 0;
+      const hasStale = staleQty > 0;
+      setDetailText(
+        riskFields.staleOrders,
+        hasStale
+          ? `${formatQty(staleQty)}（${info.staleOrderCount} 件）— 納期切れのまま更新がないため入荷見込みに数えていません`
+          : "なし",
+      );
+      if (riskFields.staleOrders) {
+        riskFields.staleOrders.hidden = !hasStale;
+      }
+      if (riskFields.staleOrdersLabel) {
+        riskFields.staleOrdersLabel.hidden = !hasStale;
+      }
       setDetailText(
         riskFields.safetyStock,
         info.safetyStock > 0

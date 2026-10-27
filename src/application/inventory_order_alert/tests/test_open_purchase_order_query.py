@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import re
 from datetime import date
 from unittest.mock import MagicMock
 
@@ -27,7 +28,7 @@ def _connection(description: list[str], rows: list[tuple[object, ...]]) -> tuple
     return connection, cursor
 
 
-PO_COLUMNS = ["ORDER_CD", "ITEM_CD", "VEND_CD", "PUCH_ODR_DLV_DATE", "CONFIRM_DLV_DATE", "ZAN"]
+PO_COLUMNS = ["ORDER_CD", "ITEM_CD", "VEND_CD", "PUCH_ODR_DLV_DATE", "UPDATED_DATE", "ZAN"]
 
 
 # --- TC-SOR-I-001: 発注残クエリの条件 ---
@@ -46,21 +47,27 @@ def test_i001_open_purchase_order_query_conditions():
     assert "T_PAST_INSPC_ACPT" in upper
     # 明細の識別子（重複除去キー）。同品番・同納期・同数量の別明細を潰さないため（2026/09/18）
     assert "TRIM(P.PUCH_ODR_CD) AS ORDER_CD" in upper
+    # 11 TC-JS-I-001: 滞留発注残（V-238）の判定に使う最終更新日を取る
+    assert "UPDATED_DATE" in upper
+    # 11 TC-JS-I-002: 回答納期は 80 万件中 10 件しか入力がなく運用されていないため使わない
+    assert "CONFIRM_DLV_DATE" not in upper
     assert upper.strip().startswith("SELECT")
+    # 単語境界で見る。列名 UPDATED_DATE に含まれる "UPDATE" を書き込みと誤検知しないため（2026-10-27）
     for keyword in WRITE_KEYWORDS:
-        assert keyword not in upper
+        assert not re.search(rf"\b{keyword}\b", upper), f"{keyword} が SQL に含まれている"
     assert cursor.execute.call_count == 1
 
 
 # --- TC-SOR-I-002: 行変換 ---
 
 
-def test_i002_rows_are_converted_with_confirmed_due_date_preferred():
+def test_i002_rows_are_converted_with_updated_date():
     connection, _ = _connection(
         PO_COLUMNS,
         [
-            (" PO-1 ", " X-9065 ", " 9065 ", date(2026, 10, 5), None, 100),
-            ("PO-2", "X-9065", "9065", date(2026, 10, 5), date(2026, 10, 20), 30),
+            (" PO-1 ", " X-9065 ", " 9065 ", date(2026, 10, 5), date(2026, 10, 6), 100),
+            # TC-JS-I-005: UPDATED_DATE が NULL でも例外にしない
+            ("PO-2", "X-9065", "9065", date(2026, 10, 5), None, 30),
             ("PO-3", "X-9065", "9065", None, None, 7),
             # 残数 ≤ 0 の明細は落とす（REQ-SOR-F-001「残数 > 0」）
             ("PO-4", "X-9065", "9065", date(2026, 11, 1), None, -3),
@@ -74,12 +81,13 @@ def test_i002_rows_are_converted_with_confirmed_due_date_preferred():
 
     orders = fetch_open_purchase_orders(connection)
 
+    # 納期は常に PUCH_ODR_DLV_DATE（回答納期は使わない）。最終更新日が 5 番目に入る（11 design §3.1）
     assert orders == [
-        ("PO-1", "X-9065", "9065", date(2026, 10, 5), 100),
-        ("PO-2", "X-9065", "9065", date(2026, 10, 20), 30),
-        ("PO-3", "X-9065", "9065", None, 7),
-        ("PO-7", "X-9065", "9065", date(2026, 12, 1), 20),
-        ("PO-8", "X-9065", "9065", date(2026, 12, 1), 20),
+        ("PO-1", "X-9065", "9065", date(2026, 10, 5), date(2026, 10, 6), 100),
+        ("PO-2", "X-9065", "9065", date(2026, 10, 5), None, 30),
+        ("PO-3", "X-9065", "9065", None, None, 7),
+        ("PO-7", "X-9065", "9065", date(2026, 12, 1), None, 20),
+        ("PO-8", "X-9065", "9065", date(2026, 12, 1), None, 20),
     ]
 
 
