@@ -462,7 +462,7 @@ def _stage3_patches(**overrides):
         "fetch_bom_level1_by_root": {"96160-00500": ["X-9065"]},
         "fetch_vendor_by_component": {"X-9065": ("9065", "ミズタニ")},
         "fetch_last_incoming_by_item_vend": {("X-9065", "9065"): date(2025, 4, 2)},
-        "fetch_open_purchase_orders_or_warn": ([("PO-1", "X-9065", "9065", date(2026, 8, 5), 100), ("PO-2", "OTHER", "9065", date(2026, 8, 5), 9)], ""),
+        "fetch_open_purchase_orders_or_warn": ([("PO-1", "X-9065", "9065", date(2026, 8, 5), date(2026, 8, 5), 100), ("PO-2", "OTHER", "9065", date(2026, 8, 5), date(2026, 8, 5), 9)], ""),
         "fetch_item_ordering_profiles_or_warn": ({"X-9065": (3, "4", None), "96160-00500": (None, None, 50)}, ""),
     }
     base.update(overrides)
@@ -474,7 +474,17 @@ def test_i004_build_summary_rows_attaches_open_orders_and_ordering_profile_witho
 
     row = rows[0]
     assert row["level1_item_cd"] == "X-9065"
-    assert row["open_purchase_orders"] == [{"order_cd": "PO-1", "item_cd": "X-9065", "vend_cd": "9065", "due_date": "2026/08/05", "remaining_qty": 100}]
+    assert row["open_purchase_orders"] == [
+        {
+            "order_cd": "PO-1",
+            "item_cd": "X-9065",
+            "vend_cd": "9065",
+            "due_date": "2026/08/05",
+            # 滞留発注残（V-238）の判定に使う最終更新日（11 design §3.1）
+            "updated_at": "2026/08/05",
+            "remaining_qty": 100,
+        }
+    ]
     assert row["open_purchase_orders_unknown"] is False
     assert row["lead_time_days"] == 3
     assert row["lead_time_source"] == "master"
@@ -578,7 +588,7 @@ def _chain_patches(**extra):
         fetch_last_incoming_by_item_vend={("X-9133", "9133"): date(2025, 1, 13)},
         fetch_bom_chain_by_root={"96160-00500": [(1, "X-9133"), (2, "X-9213"), (3, "X-9106")]},
         fetch_open_purchase_orders_or_warn=(
-            [("PO-A", "X-9106", "9106", date(2026, 6, 15), 240), ("PO-B", "X-9133", "9133", date(2026, 10, 5), 10), ("PO-C", "OTHER", "9106", date(2026, 8, 5), 9)],
+            [("PO-A", "X-9106", "9106", date(2026, 6, 15), date(2026, 6, 15), 240), ("PO-B", "X-9133", "9133", date(2026, 10, 5), date(2026, 10, 5), 10), ("PO-C", "OTHER", "9106", date(2026, 8, 5), date(2026, 8, 5), 9)],
             "",
         ),
         fetch_item_ordering_profiles_or_warn=({"X-9133": (0, "5", None), "X-9213": (4, "5", None), "X-9106": (5, "4", None)}, ""),
@@ -649,11 +659,11 @@ def test_ssc_i002_rows_carry_planned_incoming_without_overdue() -> None:
         **_stage3_patches(
             fetch_open_purchase_orders_or_warn=(
                 [
-                    ("PO-1", "X-9065", "9065", date(2026, 7, 10), 100),   # 未来 → 含む
-                    ("PO-2", "X-9065", "9065", date(2026, 7, 10), 40),    # 同じ納期は合算
-                    ("PO-3", "X-9065", "9065", date(2026, 6, 10), 70),    # 納期遅れ → 含まない
-                    ("PO-4", "X-9065", "9065", date(2026, 6, 29), 30),    # 基準日当日 → 含まない
-                    ("PO-5", "OTHER", "9065", date(2026, 7, 20), 9),      # 直下の工程でない → 含まない
+                    ("PO-1", "X-9065", "9065", date(2026, 7, 10), date(2026, 7, 10), 100),   # 未来 → 含む
+                    ("PO-2", "X-9065", "9065", date(2026, 7, 10), date(2026, 7, 10), 40),    # 同じ納期は合算
+                    ("PO-3", "X-9065", "9065", date(2026, 6, 10), date(2026, 6, 10), 70),    # 納期遅れ → 含まない
+                    ("PO-4", "X-9065", "9065", date(2026, 6, 29), date(2026, 6, 29), 30),    # 基準日当日 → 含まない
+                    ("PO-5", "OTHER", "9065", date(2026, 7, 20), date(2026, 7, 20), 9),      # 直下の工程でない → 含まない
                 ],
                 "",
             )

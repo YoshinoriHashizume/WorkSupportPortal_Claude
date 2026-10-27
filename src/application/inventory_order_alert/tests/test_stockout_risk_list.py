@@ -321,6 +321,9 @@ def test_c004_csv_appends_response_class_columns():
         "safety_stock",
         "lead_time_days",
         "ordering_method",
+        # 11 REQ-JS-F-006: 滞留発注残（V-238）の 2 列を末尾に追加
+        "stale_order_count",
+        "stale_order_qty",
     ]
     assert [label for _c, label in EXPORT_COLUMNS[28:]] == [
         "対応区分",
@@ -332,6 +335,8 @@ def test_c004_csv_appends_response_class_columns():
         "安全在庫",
         "リードタイム",
         "発注方式",
+        "滞留発注残件数",
+        "滞留発注残数量",
     ]
 
     rows = [

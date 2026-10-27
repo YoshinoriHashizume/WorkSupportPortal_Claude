@@ -470,10 +470,14 @@ def fetch_unconfirmed_orders_or_warn(connection: object, *, as_of_date: date) ->
         return [], f"{UNCONFIRMED_ORDER_FETCH_ERROR_PREFIX}: {exc}"
 
 
-def fetch_open_purchase_orders(connection: object) -> list[tuple[str, str, str, date | None, int]]:
-    """発注残（V-224）: (発注コード, 仕入先品番, 仕入先, 納期, 残数)。状態 2・取消なし・残数 > 0。5年9組の残数算出と同じ条件（06 design §6.1）。
+def fetch_open_purchase_orders(connection: object) -> list[tuple[str, str, str, date | None, date | None, int]]:
+    """発注残（V-224）: (発注コード, 仕入先品番, 仕入先, 納期, 最終更新日, 残数)。状態 2・取消なし・残数 > 0。5年9組の残数算出と同じ条件（06 design §6.1）。
 
-    残数は発注数量 − 当該発注の検収数量合計。回答納期（CONFIRM_DLV_DATE）があればそれを納期とする。
+    残数は発注数量 − 当該発注の検収数量合計。納期は `PUCH_ODR_DLV_DATE`。
+    **回答納期（CONFIRM_DLV_DATE）は使わない**（2026-10-27 実測で全 809,397 明細中 10 件しか
+    入力がなく運用されていない。11 design §3.1）。
+    最終更新日（UPDATED_DATE）は滞留発注残（V-238）の判定に使う。基幹に発注停止フラグが
+    存在しないため、これによる**推定**しか手段がない（11 REQ-JS-F-002）。
     発注コード（PUCH_ODR_CD）は明細の識別子で、照合単位内の重複除去に使う（値の組で除くと
     同品番・同納期・同数量の別明細が潰れる。2026/09/18 改訂）。取込ごとに 1 回だけ発行する。
     """
@@ -482,7 +486,7 @@ def fetch_open_purchase_orders(connection: object) -> list[tuple[str, str, str, 
                TRIM(p.ITEM_CD) AS ITEM_CD,
                TRIM(p.VEND_CD) AS VEND_CD,
                p.PUCH_ODR_DLV_DATE,
-               p.CONFIRM_DLV_DATE,
+               p.UPDATED_DATE,
                p.PUCH_ODR_QTY - NVL((SELECT SUM(a.ACPT_QTY) FROM T_PAST_INSPC_ACPT a WHERE a.PUCH_ODR_CD = p.PUCH_ODR_CD), 0) AS ZAN
           FROM T_RLSD_PUCH_ODR p
          WHERE p.PUCH_ODR_STS_TYP = '2'
@@ -490,25 +494,28 @@ def fetch_open_purchase_orders(connection: object) -> list[tuple[str, str, str, 
     """
     cursor = connection.cursor()
     cursor.execute(sql)
-    orders: list[tuple[str, str, str, date | None, int]] = []
+    orders: list[tuple[str, str, str, date | None, date | None, int]] = []
     for row in rows_as_dicts(cursor):
         order_cd = str(row.get("order_cd") or "").strip()
         item_cd = str(row.get("item_cd") or "").strip()
         vend_cd = str(row.get("vend_cd") or "").strip()
         if not item_cd or not vend_cd:
             continue
-        due = to_date(row.get("confirm_dlv_date")) or to_date(row.get("puch_odr_dlv_date"))
+        due = to_date(row.get("puch_odr_dlv_date"))
+        updated_at = to_date(row.get("updated_date"))
         try:
             remaining = int(float(row.get("zan") or 0))
         except (TypeError, ValueError):
             remaining = 0
         if remaining <= 0:
             continue
-        orders.append((order_cd, item_cd, vend_cd, due, remaining))
+        orders.append((order_cd, item_cd, vend_cd, due, updated_at, remaining))
     return orders
 
 
-def fetch_open_purchase_orders_or_warn(connection: object) -> tuple[list[tuple[str, str, str, date | None, int]], str]:
+def fetch_open_purchase_orders_or_warn(
+    connection: object,
+) -> tuple[list[tuple[str, str, str, date | None, date | None, int]], str]:
     """発注残を取得する。Oracle の問い合わせ失敗は取込を止めず、空と警告文を返す。"""
     try:
         return fetch_open_purchase_orders(connection), ""
@@ -712,13 +719,15 @@ def build_summary_rows(
     if open_orders_warning and warnings is not None:
         warnings.append(open_orders_warning)
     open_orders_by_pair: dict[tuple[str, str], list[dict[str, object]]] = {}
-    for order_cd, item_cd, vend_cd, due, remaining in open_orders:
+    for order_cd, item_cd, vend_cd, due, updated_at, remaining in open_orders:
         open_orders_by_pair.setdefault((item_cd, vend_cd), []).append(
             {
                 "order_cd": order_cd,
                 "item_cd": item_cd,
                 "vend_cd": vend_cd,
                 "due_date": due.strftime("%Y/%m/%d") if due else "",
+                # 滞留発注残（V-238）の判定に使う。旧スナップショットの行は持たない（11 REQ-JS-F-007）
+                "updated_at": updated_at.strftime("%Y/%m/%d") if updated_at else "",
                 "remaining_qty": remaining,
             }
         )

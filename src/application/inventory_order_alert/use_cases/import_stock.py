@@ -37,6 +37,9 @@ class ImportStock:
             with_flow,
             as_of_date,
             default_lead_time_days=settings.default_lead_time_days,
+            # 判定ホライズン（V-239）・滞留発注残（V-238）の閾値も取込時点の設定を使う（11 REQ-JS-F-008）
+            judgement_horizon_days=settings.judgement_horizon_days,
+            stale_order_days=settings.stale_order_days,
         )
 
     def execute(self, raw_bytes: bytes, *, user: object | None = None, file_name: str = "") -> StockImportInfo:

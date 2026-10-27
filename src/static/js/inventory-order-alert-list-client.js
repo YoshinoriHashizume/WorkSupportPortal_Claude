@@ -995,6 +995,9 @@
           orderDeadline: row.orderDeadline || "",
           overdueOrderQty: row.overdueOrderQty ?? 0,
           overdueOrderCount: row.overdueOrderCount ?? 0,
+          // 11: 滞留発注残（V-238）。判定には使わず詳細ダイアログに表示するだけ
+          staleOrderQty: row.staleOrderQty ?? 0,
+          staleOrderCount: row.staleOrderCount ?? 0,
           belowSafetyStock: Boolean(row.belowSafetyStock),
           safetyStock: row.safetyStock ?? 0,
           leadTimeDays: row.leadTimeDays ?? null,

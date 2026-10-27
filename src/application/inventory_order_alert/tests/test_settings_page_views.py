@@ -178,6 +178,9 @@ def test_api_settings_get_returns_current_settings(client, admin_user):
         "stockStaleDays",
         "defaultLeadTimeDays",
         "recentIncomingDays",
+        # 11 TC-JS-A-003
+        "judgementHorizonDays",
+        "staleOrderDays",
     }
 
 

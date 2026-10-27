@@ -44,6 +44,11 @@ def _projection(**overrides: object) -> DailyStockProjection:
         "overdue_order_count": 0,
         "lead_time_days": 5,
         "lead_time_source": LEAD_TIME_SOURCE_MASTER,
+        # 2 軸マトリクスのテストでは要監視が出る側（手動発注）を既定にする。
+        # MRP 発注で要監視にならないことは TC-JS-W-002/003 で別に固定する（11 REQ-JS-F-003）
+        "has_manual_ordering": True,
+        "stale_order_qty": 0,
+        "stale_order_count": 0,
     }
     values.update(overrides)
     return DailyStockProjection(**values)
@@ -186,6 +191,148 @@ def test_n003_below_safety_stock_reason():
     result = _assess(below_safety_stock=True, safety_stock=50)
 
     assert "安全在庫 50 を下回る" in result.reasons
+
+
+# --- 11 TC-JS-W-*: 要監視は手動発注のみ（REQ-JS-F-003） ---
+
+
+def test_js_w001_manual_ordering_below_safety_stock_is_watch():
+    result = _assess(below_safety_stock=True, safety_stock=1000, has_manual_ordering=True)
+
+    assert result.response_class == RESPONSE_WATCH
+
+
+def test_js_w002_mrp_ordering_below_safety_stock_is_none():
+    """MRP は安全在庫を所要量計算に加味するため自動で発注が起票される（2026-10-27 業務確認）。"""
+    result = _assess(below_safety_stock=True, safety_stock=1000, has_manual_ordering=False)
+
+    assert result.response_class == RESPONSE_NONE
+
+
+def test_js_w004_manual_ordering_without_breach_is_none():
+    result = _assess(below_safety_stock=False, has_manual_ordering=True)
+
+    assert result.response_class == RESPONSE_NONE
+
+
+def test_js_w006_below_safety_stock_is_still_reported_for_mrp():
+    """判定に反映しないだけで、値そのものは保持する（REQ-JS-F-004）。"""
+    result = _assess(below_safety_stock=True, safety_stock=1000, has_manual_ordering=False)
+
+    assert result.projection.below_safety_stock is True
+    assert result.projection.safety_stock == 1000
+
+
+def test_js_w007_mrp_below_safety_stock_reason_says_it_is_not_reflected():
+    result = _assess(below_safety_stock=True, safety_stock=1000, has_manual_ordering=False)
+
+    assert "安全在庫 1,000 を下回る（MRP が自動補充するため対応区分に反映していません）" in result.reasons
+
+
+# --- 11 TC-JS-H-*: 判定ホライズン（REQ-JS-F-001） ---
+
+
+def test_js_h001_stockout_just_inside_horizon_is_judged():
+    result = _assess(stockout_date=date(2026, 9, 19), order_deadline=date(2026, 9, 25))
+
+    assert result.response_class == RESPONSE_ORDER_NEEDED
+
+
+def test_js_h002_stockout_29_days_ahead_is_judged():
+    result = _assess(stockout_date=date(2026, 10, 17), order_deadline=date(2026, 10, 12))
+
+    assert result.response_class == RESPONSE_ORDER_NEEDED
+
+
+def test_js_h003_stockout_exactly_at_horizon_is_not_judged():
+    """境界は 30 日。`>=` なので 30 日ちょうどは判定に使わない。"""
+    result = _assess(stockout_date=date(2026, 10, 18), order_deadline=date(2026, 10, 13))
+
+    assert result.response_class == RESPONSE_NONE
+
+
+def test_js_h004_stockout_far_ahead_is_not_judged():
+    result = _assess(stockout_date=date(2026, 12, 9), order_deadline=date(2026, 12, 5))
+
+    assert result.response_class == RESPONSE_NONE
+
+
+def test_js_h006_stockout_in_the_past_is_judged():
+    """基準日より前の在庫切れ日は日数が負になるのでホライズン内（安全側）。"""
+    result = _assess(stockout_date=date(2026, 9, 11), order_deadline=date(2026, 9, 6))
+
+    assert result.response_class == RESPONSE_ORDER_OVERDUE
+
+
+def test_js_h007_beyond_horizon_with_overdue_is_delivery_check():
+    result = _assess(
+        stockout_date=date(2026, 12, 9),
+        order_deadline=date(2026, 12, 5),
+        overdue_order_qty=120,
+        overdue_order_count=3,
+    )
+
+    assert result.response_class == RESPONSE_DELIVERY_CHECK
+
+
+def test_js_h008_beyond_horizon_with_manual_safety_breach_is_watch():
+    result = _assess(
+        stockout_date=date(2026, 12, 9),
+        order_deadline=date(2026, 12, 5),
+        below_safety_stock=True,
+        safety_stock=1000,
+        has_manual_ordering=True,
+    )
+
+    assert result.response_class == RESPONSE_WATCH
+
+
+def test_js_h010_beyond_horizon_with_past_deadline_is_not_order_overdue():
+    """在庫切れ日を使わないので、発注期限が過去でも発注遅れにしない。"""
+    result = _assess(stockout_date=date(2026, 12, 9), order_deadline=date(2026, 9, 1))
+
+    assert result.response_class == RESPONSE_NONE
+
+
+def test_js_h011_horizon_is_configurable():
+    projection = _projection(stockout_date=date(2026, 12, 9), order_deadline=date(2026, 12, 5))
+
+    assert assess_response_class(projection, as_of_date=AS_OF, judgement_horizon_days=365).response_class == (
+        RESPONSE_ORDER_NEEDED
+    )
+
+
+def test_js_h012_stockout_date_is_still_reported_beyond_horizon():
+    """判定に使わなくても在庫切れ日は保持し、理由にも出す（REQ-JS-F-004）。"""
+    result = _assess(stockout_date=date(2026, 12, 9), order_deadline=date(2026, 12, 5))
+
+    assert result.projection.stockout_date == date(2026, 12, 9)
+    assert result.projection.order_deadline == date(2026, 12, 5)
+    assert "在庫切れ 2026/12/09（30 日より先のため対応区分に反映していません）" in result.reasons
+
+
+# --- 11 TC-JS-S-012〜014: 滞留発注残（REQ-JS-F-002） ---
+
+
+def test_js_s012_stale_only_is_not_delivery_check():
+    result = _assess(stale_order_qty=87, stale_order_count=5)
+
+    assert result.response_class == RESPONSE_NONE
+
+
+def test_js_s013_live_overdue_and_stale_are_both_reported():
+    result = _assess(
+        overdue_order_qty=120,
+        overdue_order_count=3,
+        stale_order_qty=87,
+        stale_order_count=5,
+    )
+
+    assert result.response_class == RESPONSE_DELIVERY_CHECK
+    assert "納期遅れの発注残 3 件 120 個" in result.reasons
+    assert (
+        "滞留発注残 5 件 87 個（納期切れのまま更新がなく入荷見込みに数えていません）" in result.reasons
+    )
 
 
 def test_n004_default_lead_time_reason():

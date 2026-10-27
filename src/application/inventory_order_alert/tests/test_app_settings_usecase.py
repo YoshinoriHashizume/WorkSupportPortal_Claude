@@ -135,6 +135,9 @@ def test_settings_payload_exposes_all_keys():
         "defaultLeadTimeDays": 5,
         # 07 第 2 段階: 直近入荷の窓（REQ-FQR-F-008）
         "recentIncomingDays": 30,
+        # 11 TC-JS-A-003: 判定ホライズン（V-239）・滞留発注残（V-238）の閾値
+        "judgementHorizonDays": 30,
+        "staleOrderDays": 30,
     }
 
 

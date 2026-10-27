@@ -20,10 +20,11 @@ from application.inventory_order_alert.domain.value_objects.ordering_profile imp
     LEAD_TIME_SOURCE_DEFAULT,
     LEAD_TIME_SOURCE_MASTER,
 )
+from application.inventory_order_alert.domain.value_objects.ordering_profile import ORDERING_MANUAL
 from application.inventory_order_alert.domain.value_objects.stock_simulation import (
     DailyMovement,
     build_stock_simulation_input,
-    overdue_orders,
+    overdue_order_breakdown,
 )
 
 #: リードタイムの既定値（設定から渡す。ここは引数の既定値のみ）
@@ -39,20 +40,16 @@ class DailyStockProjection:
     order_deadline: date | None = None
     below_safety_stock: bool = False
     safety_stock: float = 0.0
+    #: 生きている納期遅れ（滞留 V-238 は含まない。11 design §2.3）
     overdue_order_qty: int = 0
     overdue_order_count: int = 0
     lead_time_days: int = DEFAULT_LEAD_TIME_DAYS
     lead_time_source: str = LEAD_TIME_SOURCE_DEFAULT
-
-
-def _parse_date(value: object) -> date | None:
-    text = str(value or "").strip()
-    if not text:
-        return None
-    try:
-        return parse_optional_ymd(text)
-    except (ValueError, TypeError):
-        return None
+    #: 照合単位に手動発注（V-227）の行が 1 つでもあるか。要監視を出すかの判定に使う（11 REQ-JS-F-003）
+    has_manual_ordering: bool = False
+    #: 滞留発注残（V-238）。判定には使わず表示のみ（11 REQ-JS-F-002）
+    stale_order_qty: int = 0
+    stale_order_count: int = 0
 
 
 def _as_int(value: object) -> int:
@@ -76,13 +73,19 @@ def _daily_demand(unit_rows: list[dict[str, object]], *, as_of_date: date) -> Co
     )
 
 
-def _planned_and_overdue(unit_rows: list[dict[str, object]], *, as_of_date: date) -> tuple[Counter, int, int]:
-    """納期が基準日より後の予定入荷と、納期遅れの合計（在庫シミュレーションと同じ材料）。"""
-    planned = Counter(
+def _planned_incoming(unit_rows: list[dict[str, object]], *, as_of_date: date) -> Counter:
+    """納期が基準日より後の予定入荷（在庫シミュレーションと同じ材料）。"""
+    return Counter(
         {movement.date: movement.planned for movement in _future_movements(unit_rows, as_of_date) if movement.planned}
     )
-    overdue_qty, overdue_count = overdue_orders(unit_rows, as_of_date=as_of_date)
-    return planned, overdue_qty, overdue_count
+
+
+def _has_manual_ordering(unit_rows: list[dict[str, object]]) -> bool:
+    """照合単位に手動発注（V-227）の行が 1 つでもあるか（11 REQ-JS-F-003）。
+
+    単位内に手動発注と MRP 発注が混在する場合は **True**（人に見せる方へ倒す・安全側）。
+    """
+    return any(str(row.get("ordering_method") or "").strip() == ORDERING_MANUAL for row in unit_rows)
 
 
 def _future_movements(unit_rows: list[dict[str, object]], as_of_date: date) -> list[DailyMovement]:
@@ -124,20 +127,31 @@ def build_stock_projection(
     as_of_date: date,
     stock_total: float | None,
     default_lead_time_days: int = DEFAULT_LEAD_TIME_DAYS,
+    stale_order_days: int | None = None,
 ) -> DailyStockProjection:
-    """照合単位の行から日次の見通しを組み立てる。例外は投げない（REQ-SRR-NF-003）。"""
+    """照合単位の行から日次の見通しを組み立てる。例外は投げない（REQ-SRR-NF-003）。
+
+    `stale_order_days` を渡すと、納期を過ぎた発注残を「生きている納期遅れ」と
+    「滞留発注残（V-238）」に分ける。None なら従来どおり全部を納期遅れとして数える。
+    **在庫切れ日・発注期限・安全在庫割れの計算式は変更していない**（11 REQ-JS-NF-004）。
+    """
     lead_time_days, lead_time_source = _lead_time_of(unit_rows, default_days=default_lead_time_days)
     safety_stock = _safety_stock_of(unit_rows)
-    planned, overdue_qty, overdue_count = _planned_and_overdue(unit_rows, as_of_date=as_of_date)
+    planned = _planned_incoming(unit_rows, as_of_date=as_of_date)
+    breakdown = overdue_order_breakdown(unit_rows, as_of_date=as_of_date, stale_after_days=stale_order_days)
+    has_manual = _has_manual_ordering(unit_rows)
     demand = _daily_demand(unit_rows, as_of_date=as_of_date)
 
     base = DailyStockProjection(
         has_demand=bool(demand),
         safety_stock=safety_stock,
-        overdue_order_qty=overdue_qty,
-        overdue_order_count=overdue_count,
+        overdue_order_qty=breakdown.overdue_qty,
+        overdue_order_count=breakdown.overdue_count,
         lead_time_days=lead_time_days,
         lead_time_source=lead_time_source,
+        has_manual_ordering=has_manual,
+        stale_order_qty=breakdown.stale_qty,
+        stale_order_count=breakdown.stale_count,
     )
     if not demand:
         # 内示がなければ在庫は動かない（REQ-SRR-F-001）
@@ -165,8 +179,11 @@ def build_stock_projection(
         order_deadline=order_deadline,
         below_safety_stock=below_safety,
         safety_stock=safety_stock,
-        overdue_order_qty=overdue_qty,
-        overdue_order_count=overdue_count,
+        overdue_order_qty=breakdown.overdue_qty,
+        overdue_order_count=breakdown.overdue_count,
         lead_time_days=lead_time_days,
         lead_time_source=lead_time_source,
+        has_manual_ordering=has_manual,
+        stale_order_qty=breakdown.stale_qty,
+        stale_order_count=breakdown.stale_count,
     )

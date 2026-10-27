@@ -29,6 +29,10 @@ class InventoryOrderAlertSettings(models.Model):
     stock_stale_days = models.PositiveIntegerField(default=7)
     # 対応区分（S-204）の既定リードタイム（08 design §2.4）。判定は取込時に行うため、変更は次回取込から反映する
     default_lead_time_days = models.PositiveIntegerField(default=5)
+    # 判定ホライズン（V-239、11 REQ-JS-F-001、1〜365 日・既定 30）。在庫切れ日をここまでしか対応区分に反映しない
+    judgement_horizon_days = models.PositiveIntegerField(default=30)
+    # 滞留発注残（V-238、11 REQ-JS-F-002、1〜730 日・既定 30）と見なすまでの未更新日数
+    stale_order_days = models.PositiveIntegerField(default=30)
     updated_at = models.DateTimeField(auto_now=True)
     updated_by = models.ForeignKey(
         settings.AUTH_USER_MODEL,

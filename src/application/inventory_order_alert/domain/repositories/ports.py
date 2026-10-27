@@ -33,6 +33,9 @@ class SaveAppSettings(Protocol):
         warning_days: int,
         stock_stale_days: int,
         default_lead_time_days: int = ...,
+        recent_incoming_days: int = ...,
+        judgement_horizon_days: int = ...,
+        stale_order_days: int = ...,
         updated_by: object | None = ...,
     ) -> AppSettings: ...
 

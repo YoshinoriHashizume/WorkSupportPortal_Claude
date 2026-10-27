@@ -40,6 +40,32 @@
           一覧で切り替える判定期間とは別の設定です。
         </small>
       </label>
+
+      {# 11 REQ-JS-F-001: 判定ホライズン（V-239）。遠い将来の在庫切れを今日の警告にしないための範囲 #}
+      <label class="ioa-settings-field">
+        <span>判定ホライズン（日）</span>
+        <input type="number" id="ioa-setting-judgement-horizon-days" name="judgementHorizonDays"
+               min="1" max="365" step="1" value="{{ judgement_horizon_days }}" required>
+        <small>
+          在庫が切れる日がこの日数より先なら、対応区分を「対象外」にします（1〜365・既定 30）。
+          在庫切れ日・発注期限・在庫シミュレーションのグラフは従来どおり表示します。
+          <strong>変更は次回の SLIMS 在庫 CSV 取込から反映されます。</strong>
+        </small>
+      </label>
+
+      {# 11 REQ-JS-F-002: 滞留発注残（V-238）。基幹に発注停止フラグがないため推定である旨を明記する #}
+      <label class="ioa-settings-field">
+        <span>滞留発注残と見なす未更新日数</span>
+        <input type="number" id="ioa-setting-stale-order-days" name="staleOrderDays"
+               min="1" max="730" step="1" value="{{ stale_order_days }}" required>
+        <small>
+          納期を過ぎた発注残のうち、基幹でこの日数以上更新がないものを「滞留」とし、
+          対応区分の「納期確認」の根拠から外します（1〜730・既定 30）。
+          確定受注が来ずに電話で止めた発注が残り続ける運用に対応するためのものです。
+          <strong>基幹に発注停止のフラグがないため、最終更新日による推定です。</strong>
+          <strong>変更は次回の SLIMS 在庫 CSV 取込から反映されます。</strong>
+        </small>
+      </label>
     </div>
 
     <div class="ioa-settings-actions">
@@ -95,6 +121,8 @@
           warningDays: Number(document.getElementById("ioa-setting-warning-days").value),
           stockStaleDays: Number(document.getElementById("ioa-setting-stock-stale-days").value),
           recentIncomingDays: Number(document.getElementById("ioa-setting-recent-incoming-days").value),
+        judgementHorizonDays: Number(document.getElementById("ioa-setting-judgement-horizon-days").value),
+        staleOrderDays: Number(document.getElementById("ioa-setting-stale-order-days").value),
         });
         window.location.reload();
       } catch (error) {

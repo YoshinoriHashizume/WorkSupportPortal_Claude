@@ -14,6 +14,9 @@ from __future__ import annotations
 from dataclasses import dataclass
 from datetime import date
 
+from application.inventory_order_alert.domain.value_objects.app_settings import (
+    DEFAULT_JUDGEMENT_HORIZON_DAYS,
+)
 from application.inventory_order_alert.domain.value_objects.ordering_profile import LEAD_TIME_SOURCE_DEFAULT
 from application.inventory_order_alert.domain.value_objects.reconciliation_unit import ReconciliationUnits
 from application.inventory_order_alert.domain.value_objects.stock_projection import (
@@ -82,14 +85,52 @@ def _format_qty(value: float) -> str:
     return f"{int(value):,}" if float(value).is_integer() else f"{value:,.1f}"
 
 
-def assess_response_class(projection: DailyStockProjection, *, as_of_date: date) -> ResponseAssessment:
-    """対応区分と理由を決める（REQ-SRR-F-004/005）。
+def effective_stockout_date(
+    projection: DailyStockProjection,
+    *,
+    as_of_date: date,
+    judgement_horizon_days: int,
+) -> date | None:
+    """対応区分の判定に使う在庫切れ日（11 REQ-JS-F-001）。
+
+    判定ホライズン（V-239）より先に切れるものは None を返し、「在庫切れ日なし」として
+    2 軸マトリクスを引き直させる。**算出値そのものは変えない**（表示には実値を使う）。
+    基準日より前の在庫切れ日は日数が負になるのでホライズン内と判定する（安全側）。
+    """
+    stockout = projection.stockout_date
+    if stockout is None:
+        return None
+    if (stockout - as_of_date).days >= judgement_horizon_days:
+        return None
+    return stockout
+
+
+def assess_response_class(
+    projection: DailyStockProjection,
+    *,
+    as_of_date: date,
+    judgement_horizon_days: int = DEFAULT_JUDGEMENT_HORIZON_DAYS,
+) -> ResponseAssessment:
+    """対応区分と理由を決める（REQ-SRR-F-004/005、11 REQ-JS-F-001/002/003）。
 
     2 軸（在庫の見通し × 納期遅れの発注残）の組み合わせで決まるため、分岐の順番に依存しない。
+    判定に入れる前に材料を 3 点で絞る（11 design §2.4）。
+      - 在庫切れ日は判定ホライズン（V-239）の範囲内だけ
+      - 納期遅れは滞留発注残（V-238）を除いたもの（`projection.overdue_order_qty` が既にそう）
+      - 安全在庫割れによる要監視は手動発注（V-227）の品番だけ
+    **判定に使わなかった材料も理由には出す**（REQ-JS-F-004）。
     """
+    stockout = effective_stockout_date(
+        projection, as_of_date=as_of_date, judgement_horizon_days=judgement_horizon_days
+    )
+    beyond_horizon = projection.stockout_date is not None and stockout is None
     overdue = projection.overdue_order_qty > 0
+    stale = projection.stale_order_qty > 0
+    # MRP は安全在庫を所要量計算に加味するため自動で発注が起票される（2026-10-27 業務確認）。
+    # 人が動かないと発注されない手動発注だけを要監視にする（REQ-JS-F-003）。
+    watchable = projection.below_safety_stock and projection.has_manual_ordering
 
-    if projection.stockout_date is not None:
+    if stockout is not None:
         deadline = projection.order_deadline
         if deadline is not None and deadline <= as_of_date:
             response_class = RESPONSE_ORDER_OVERDUE
@@ -97,21 +138,38 @@ def assess_response_class(projection: DailyStockProjection, *, as_of_date: date)
             response_class = RESPONSE_DELIVERY_CHECK if overdue else RESPONSE_ORDER_NEEDED
     elif overdue:
         response_class = RESPONSE_DELIVERY_CHECK
-    elif projection.below_safety_stock:
+    elif watchable:
         response_class = RESPONSE_WATCH
     else:
         response_class = RESPONSE_NONE
 
     reasons: list[str] = []
     if projection.stockout_date is not None:
-        reasons.append(f"在庫切れ {_format_date(projection.stockout_date)}")
-        if projection.order_deadline is not None:
-            reasons.append(f"発注期限 {_format_date(projection.order_deadline)}")
+        if beyond_horizon:
+            reasons.append(
+                f"在庫切れ {_format_date(projection.stockout_date)}"
+                f"（{judgement_horizon_days} 日より先のため対応区分に反映していません）"
+            )
+        else:
+            reasons.append(f"在庫切れ {_format_date(projection.stockout_date)}")
+            if projection.order_deadline is not None:
+                reasons.append(f"発注期限 {_format_date(projection.order_deadline)}")
     if overdue:
         reasons.append(f"納期遅れの発注残 {projection.overdue_order_count} 件 {_format_qty(projection.overdue_order_qty)} 個")
+    if stale:
+        reasons.append(
+            f"滞留発注残 {projection.stale_order_count} 件 {_format_qty(projection.stale_order_qty)} 個"
+            "（納期切れのまま更新がなく入荷見込みに数えていません）"
+        )
     if projection.below_safety_stock:
-        reasons.append(f"安全在庫 {_format_qty(projection.safety_stock)} を下回る")
-    if projection.stockout_date is not None and projection.lead_time_source == LEAD_TIME_SOURCE_DEFAULT:
+        if watchable:
+            reasons.append(f"安全在庫 {_format_qty(projection.safety_stock)} を下回る")
+        else:
+            reasons.append(
+                f"安全在庫 {_format_qty(projection.safety_stock)} を下回る"
+                "（MRP が自動補充するため対応区分に反映していません）"
+            )
+    if stockout is not None and projection.lead_time_source == LEAD_TIME_SOURCE_DEFAULT:
         reasons.append("リードタイム未設定")
     if not projection.has_demand:
         reasons.append("内示なし（在庫は動かない）")
@@ -154,6 +212,9 @@ def _assessment_fields(assessment: ResponseAssessment) -> dict[str, object]:
         "overdue_order_count": projection.overdue_order_count,
         "lead_time_days": projection.lead_time_days,
         "lead_time_source": projection.lead_time_source,
+        # 滞留発注残（V-238）。判定には使わず表示のみ（11 REQ-JS-F-002/005）
+        "stale_order_qty": projection.stale_order_qty,
+        "stale_order_count": projection.stale_order_count,
     }
 
 
@@ -172,6 +233,8 @@ def attach_response_class(
     as_of_date: date,
     *,
     default_lead_time_days: int = DEFAULT_LEAD_TIME_DAYS,
+    judgement_horizon_days: int = DEFAULT_JUDGEMENT_HORIZON_DAYS,
+    stale_order_days: int | None = None,
 ) -> list[dict[str, object]]:
     """照合単位ごとに 1 回判定し、単位内の全行に複製する（入力は変更しない）。"""
     units = ReconciliationUnits.build(rows)
@@ -184,9 +247,19 @@ def attach_response_class(
         if unit is None:
             # 得意先品番が空の行は照合単位に属さない。行単体で見る
             projection = build_stock_projection(
-                [row], as_of_date=as_of_date, stock_total=_stock_total_of(row), default_lead_time_days=default_lead_time_days
+                [row],
+                as_of_date=as_of_date,
+                stock_total=_stock_total_of(row),
+                default_lead_time_days=default_lead_time_days,
+                stale_order_days=stale_order_days,
             )
-            copied.update(_assessment_fields(assess_response_class(projection, as_of_date=as_of_date)))
+            copied.update(
+                _assessment_fields(
+                    assess_response_class(
+                        projection, as_of_date=as_of_date, judgement_horizon_days=judgement_horizon_days
+                    )
+                )
+            )
             enriched.append(copied)
             continue
         if unit.key not in cache:
@@ -196,8 +269,13 @@ def attach_response_class(
                 as_of_date=as_of_date,
                 stock_total=_stock_total_of(row),
                 default_lead_time_days=default_lead_time_days,
+                stale_order_days=stale_order_days,
             )
-            cache[unit.key] = _assessment_fields(assess_response_class(projection, as_of_date=as_of_date))
+            cache[unit.key] = _assessment_fields(
+                assess_response_class(
+                    projection, as_of_date=as_of_date, judgement_horizon_days=judgement_horizon_days
+                )
+            )
         copied.update(cache[unit.key])
         enriched.append(copied)
     return enriched
