@@ -18,7 +18,8 @@
   <p class="error">{{ error_message }}</p>
 {% endif %}
 {% if stock_stale %}
-  <p class="warning-banner">SLIMS 在庫データが古い可能性があります（最終取込: {{ stock_import_info.stock_as_of_date|date:"Y/m/d" }}）</p>
+  {# 在庫時点（T-202）は取込日時。同日に複数回取り込んでも新旧が分かるよう時分まで出す（ISSUE-0008） #}
+  <p class="warning-banner">SLIMS 在庫データが古い可能性があります（最終取込: {{ stock_import_info.imported_at|date:"Y/m/d H:i" }}）</p>
 {% endif %}
 {% if test_data_warning %}
   <p class="warning-banner">現在表示されているのは単体テスト用のサンプルデータです。業務の SLIMS 在庫 CSV を再取込してください。</p>
@@ -29,7 +30,7 @@
     <div class="ioa-table-head-main">
       <h2>
         {% if stock_import_info %}
-          {{ stock_import_info.stock_as_of_date|date:"Y年n月j日" }}時点の集計結果を表示しています。
+          {{ stock_import_info.imported_at|date:"Y年n月j日 H:i" }} 時点の集計結果を表示しています。
         {% else %}
           一覧
         {% endif %}

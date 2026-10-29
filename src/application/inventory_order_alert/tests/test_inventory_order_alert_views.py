@@ -1,12 +1,13 @@
 from __future__ import annotations
 
-from datetime import date
+from datetime import date, timedelta
 from pathlib import Path
 from unittest.mock import patch
 
 import pytest
 from django.contrib.auth import get_user_model
 from django.contrib.auth.models import Group
+from django.utils import timezone
 
 from application.inventory_order_alert.infrastructure.persistence.summary_snapshot_repository import store_summary_snapshot
 from application.inventory_order_alert.models import SlimsStockImport
@@ -335,6 +336,37 @@ def test_list_page_shows_stock_label_in_table_head(client, production_user):
     assert "※入出荷の実績があるもののみ表示されます。" in html
     assert 'class="ioa-list-scope-note"' in html
     assert "一覧（" not in html
+
+
+# ISSUE-0008: 在庫時点（T-202）は取込日時。同日に複数回取り込んでも新旧を見分けられるよう時分まで出す。
+
+
+@pytest.mark.django_db
+def test_list_page_heading_shows_import_time(client, production_user):
+    import_record = SlimsStockImport.objects.create(file_name="sample.csv", row_count=1)
+    store_summary_snapshot(import_record, [_sample_export_row()], as_of_date=date(2026, 6, 17))
+
+    client.force_login(production_user)
+    html = client.get("/app/production/inventory-order-alert").content.decode("utf-8")
+
+    local = timezone.localtime(import_record.imported_at)
+    expected = f"{local.year}年{local.month}月{local.day}日 {local:%H:%M} {STOCK_SUMMARY_HEADING_SUFFIX}"
+    assert expected in html
+
+
+@pytest.mark.django_db
+def test_stale_stock_banner_shows_import_time(client, production_user):
+    import_record = SlimsStockImport.objects.create(file_name="sample.csv", row_count=1)
+    store_summary_snapshot(import_record, [_sample_export_row()], as_of_date=date(2026, 6, 17))
+    # auto_now_add のため作成後に更新して陳腐化させる（SLIMS 取込警告日数を確実に超える日数）。
+    stale_at = timezone.now() - timedelta(days=400)
+    SlimsStockImport.objects.filter(pk=import_record.pk).update(imported_at=stale_at)
+
+    client.force_login(production_user)
+    html = client.get("/app/production/inventory-order-alert").content.decode("utf-8")
+
+    local = timezone.localtime(stale_at)
+    assert f"最終取込: {local:%Y/%m/%d %H:%M}" in html
 
 
 @pytest.mark.django_db
