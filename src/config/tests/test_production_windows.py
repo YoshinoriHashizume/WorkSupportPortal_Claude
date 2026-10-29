@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import re
 from pathlib import Path
 
 from config.repo_paths import repo_root
@@ -65,6 +66,37 @@ def test_start_production_app_ps1_uses_waitress_and_env_production():
     assert "collectstatic" in source
     assert "check_production_env" in source
     assert 'Join-Path $Root "src"' in source or "src\\manage.py" in source or 'Join-Path $Src "manage.py"' in source
+
+
+# 起動スクリプトが自分の位置から数えるリポジトリルートの相対階層を、実際に解決して検証する。
+# src/ 構成へ移行したときに相対階層の直し忘れで $Root が src を指し、本番起動が
+# "Missing src\manage.py" で止まった。文字列の有無だけ見る検査ではこれを通してしまうため、
+# パスを実解決してルートの目印が揃っているかまで確かめる。
+REPO_ROOT_MARKERS = ("src/manage.py", ".env.production.example", "requirements-windows-prod.txt")
+
+
+def assert_resolves_to_repo_root(script: Path, relative: str) -> None:
+    resolved = (script.parent / relative.replace("\\", "/")).resolve()
+    assert resolved == REPO_ROOT, f"{script.name} が指すルート {resolved} はリポジトリルートではない"
+    for marker in REPO_ROOT_MARKERS:
+        assert (resolved / marker).is_file(), f"{resolved} に {marker} が無い"
+
+
+def test_start_production_app_ps1_resolves_repo_root_from_its_own_location():
+    script = SRC_ROOT / "scripts" / "windows" / "Start-ProductionApp.ps1"
+    match = re.search(
+        r'\$Root\s*=\s*Resolve-Path\s*\(Join-Path\s*\$PSScriptRoot\s*"([^"]+)"\)',
+        script.read_text(encoding="utf-8"),
+    )
+    assert match, "$Root を算出する行が見つからない"
+    assert_resolves_to_repo_root(script, match.group(1))
+
+
+def test_start_production_app_cmd_changes_into_repo_root():
+    script = SRC_ROOT / "scripts" / "windows" / "Start-ProductionApp.cmd"
+    match = re.search(r'cd /d "%~dp0([^"]+)"', script.read_text(encoding="utf-8"))
+    assert match, "リポジトリルートへ移動する行が見つからない"
+    assert_resolves_to_repo_root(script, match.group(1))
 
 
 def test_start_production_app_ps1_is_ascii_only_for_windows_powershell():
