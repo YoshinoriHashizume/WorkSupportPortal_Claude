@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import date
+from datetime import date, datetime
 
 from application.inventory_order_alert.domain.value_objects.confirmation import ConfirmationRecord, attach_confirmation_fields
 from application.inventory_order_alert.domain.value_objects.dates import parse_optional_ymd
@@ -122,7 +122,8 @@ def enrich_summary_rows(
     as_of_date: date,
     query: ListQuery,
     stock_lines: list[SlimsStockLocationLine] | None = None,
-    stock_as_of_date: date | None = None,
+    #: 在庫時点（T-202）のラベル用。取込日時（datetime）を渡すと時分まで出る（ISSUE-0008）。
+    stock_as_of_date: date | datetime | None = None,
     confirmations: dict[tuple[str, str], ConfirmationRecord] | None = None,
     recommended_actions: RecommendedActions = DEFAULT_RECOMMENDED_ACTIONS,
 ) -> list[dict[str, object]]:

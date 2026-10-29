@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import date
+from datetime import date, datetime
 from decimal import Decimal
 
 from application.inventory_order_alert.domain.value_objects.dates import format_stock_as_of_label
@@ -18,7 +18,8 @@ def attach_stock_fields(
     rows: list[dict[str, object]],
     stock_lines: list[SlimsStockLocationLine] | None,
     *,
-    stock_as_of_date: date | None = None,
+    #: 在庫時点（T-202）のラベル用。取込日時（datetime）を渡すと時分まで出る（ISSUE-0008）。
+    stock_as_of_date: date | datetime | None = None,
 ) -> list[dict[str, object]]:
     if not stock_lines:
         return [dict(row) for row in rows]

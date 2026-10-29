@@ -38,7 +38,9 @@ def run_summary_aggregation(
                 connection,
                 query,
                 stock_lines=stock_lines,
-                stock_as_of_date=as_of_date,
+                # 在庫時点のラベル用。時分まで出すため取込日時を渡す（ISSUE-0008）。
+                # 判定の基準日（query.as_of_date）は暦日のまま据え置く。
+                stock_as_of_date=import_record.imported_at,
                 warnings=warnings,
             )
         if enrich_rows is not None:

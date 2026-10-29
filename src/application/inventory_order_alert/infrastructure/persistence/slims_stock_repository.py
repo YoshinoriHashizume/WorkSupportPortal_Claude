@@ -51,7 +51,9 @@ def import_slims_csv_text(
         row_count=import_record.row_count,
         file_name=import_record.file_name,
         stock_as_of_date=stock_date,
-        stock_as_of_label=format_stock_as_of_label(stock_date),
+        # 在庫時点のラベルは取込日時から作る（時分まで出す。ISSUE-0008）。
+        # 判定の基準日 stock_as_of_date は暦日のまま据え置く。
+        stock_as_of_label=format_stock_as_of_label(import_record.imported_at),
         summary_row_count=snapshot.total_count if snapshot else 0,
         aggregation_error=aggregation_error,
         confirmation_reset_count=confirmation_reset_count,
@@ -79,6 +81,8 @@ def load_latest_stock_lines() -> tuple[list[SlimsStockLocationLine], StockImport
         row_count=import_record.row_count,
         file_name=import_record.file_name,
         stock_as_of_date=stock_date,
-        stock_as_of_label=format_stock_as_of_label(stock_date),
+        # 在庫時点のラベルは取込日時から作る（時分まで出す。ISSUE-0008）。
+        # 判定の基準日 stock_as_of_date は暦日のまま据え置く。
+        stock_as_of_label=format_stock_as_of_label(import_record.imported_at),
     )
     return lines, info

@@ -32,5 +32,6 @@ def stock_info_from_import(import_record: object) -> StockImportInfo:
         row_count=import_record.row_count,
         file_name=import_record.file_name,
         stock_as_of_date=stock_date,
-        stock_as_of_label=format_stock_as_of_label(stock_date),
+        # 在庫時点のラベルは取込日時から作る（時分まで出す。ISSUE-0008）。
+        stock_as_of_label=format_stock_as_of_label(import_record.imported_at),
     )

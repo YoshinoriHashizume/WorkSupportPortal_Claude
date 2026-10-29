@@ -28,8 +28,17 @@ def to_date(value: object) -> date | None:
     return None
 
 
-def format_stock_as_of_label(stock_date: date) -> str:
-    return f"{stock_date.year}年{stock_date.month}月{stock_date.day}日時点の在庫"
+def format_stock_as_of_label(stock_as_of: date | datetime) -> str:
+    """在庫時点（T-202）のラベル。
+
+    取込日時（datetime）を渡すと時分まで出す。同じ日に複数回取り込んでも新旧を
+    見分けられるようにするため（ISSUE-0008）。暦日（date）を渡す呼び出しは従来の書式を保つ。
+    datetime が date のサブクラスなので、datetime の判定を先に行う。
+    """
+    if isinstance(stock_as_of, datetime):
+        localized = stock_as_of.astimezone(JST) if stock_as_of.tzinfo is not None else stock_as_of
+        return f"{localized.year}年{localized.month}月{localized.day}日 {localized:%H:%M} 時点の在庫"
+    return f"{stock_as_of.year}年{stock_as_of.month}月{stock_as_of.day}日時点の在庫"
 
 
 def format_display_datetime(value: datetime | None) -> str:
