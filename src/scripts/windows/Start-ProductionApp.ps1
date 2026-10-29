@@ -22,7 +22,8 @@ function Import-EnvFile([string]$Path) {
     }
 }
 
-$Root = Resolve-Path (Join-Path $PSScriptRoot "..\..")
+# This script lives in src\scripts\windows, so the repo root is three levels up.
+$Root = Resolve-Path (Join-Path $PSScriptRoot "..\..\..")
 $Src = Join-Path $Root "src"
 if (-not (Test-Path (Join-Path $Src "manage.py"))) {
     throw "Missing src\manage.py under $Root"
