@@ -1,12 +1,12 @@
 ---
 文書ID: ISSUE-INVENTORY-ORDER-ALERT-IMP-2026-008
 種別: 改善
-ステータス: Verifying
+ステータス: Closed
 優先度: 中
 起票者: Hashizume（利用者からの要望）
 起票日: 2026/10/29 14:35
-更新日: 2026/10/29 14:45
-クローズ日:
+更新日: 2026/10/29 14:48
+クローズ日: 2026/10/29 14:48
 対象コンテキスト: inventory_order_alert
 対象機能: 在庫時点（T-202）の表示（一覧・ダッシュボード帯・詳細ダイアログ・CSV 出力）
 対応文書: なし
@@ -165,7 +165,7 @@ SLIMS 在庫 CSV の取込日時は `SlimsStockImport.imported_at`（timestamptz
   `static/js/inventory-order-alert-list.js` / `-list-client.js`、`domain/value_objects/export_csv.py` の列定義。
   **JS を触っていないためキャッシュバスター `?v=` の更新も不要。**
 
-- コミット: （次のコミットで記入）
+- コミット: `fa6c555` feat: 在庫発注アラートの在庫時点を取込日時で表示する（ISSUE-0008）
 
 ## 検証結果 (Check)
 
