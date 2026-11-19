@@ -16,6 +16,9 @@ class PortalMenuItem:
     href: str
     group_key: str
     parent_key: str | None = None
+    #: True のメニュー項目は画面（サイドメニュー・検索・お気に入り）に出さない。
+    #: ページ（URL）自体は残す。can_access_menu_item() が一元的に除外する。
+    hidden: bool = False
 
 
 MENU_GROUPS = [
@@ -42,6 +45,7 @@ MENU_ITEMS = [
         title="検収書比較",
         href="",
         group_key="production",
+        hidden=True,  # EXPJC 移行に伴い一時的に非表示（T_ACPT_RSLT 未付与）
     ),
     PortalMenuItem(
         key="receipt-comparison-finished-product",
@@ -49,6 +53,7 @@ MENU_ITEMS = [
         href="/app/production/receipt-comparison?type=finished-product",
         group_key="production",
         parent_key="receipt-comparison",
+        hidden=True,  # 親 receipt-comparison に追従
     ),
     PortalMenuItem(
         key="receipt-comparison-supplied-parts",
@@ -56,6 +61,7 @@ MENU_ITEMS = [
         href="/app/production/receipt-comparison?type=supplied-parts",
         group_key="production",
         parent_key="receipt-comparison",
+        hidden=True,  # 親 receipt-comparison に追従
     ),
     PortalMenuItem(
         key="inventory-order-alert",
