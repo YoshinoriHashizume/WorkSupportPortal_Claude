@@ -222,7 +222,7 @@ def test_middleware_is_registered_after_access_approval():
 
 @pytest.mark.django_db
 @with_usage_logging
-def test_middleware_records_once_for_legacy_url_redirect(client, production_user):
+def test_middleware_records_once_for_legacy_url_redirect(client, production_user, unhide_receipt_comparison):
     """TC-UI-011: 旧 URL 経由（302 → 遷移先）でも記録は遷移先の 1 件だけ。"""
     client.force_login(production_user)
 

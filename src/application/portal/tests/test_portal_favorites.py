@@ -40,11 +40,12 @@ def test_dashboard_shows_portal_title_and_favorite_controls(client, user):
     assert "生産管理" in html
     assert "品保" in html
     assert "管理" in html
-    assert "完成品" in html
-    assert "支給品" in html
-    assert "検収書比較" in html
-    assert 'class="sidebar-menu-branch"' in html
-    assert "<details" in html
+    # 検収書比較は一時的に非表示（EXPJC 移行・T_ACPT_RSLT 未付与）。復活時は in に戻す。
+    assert "完成品" not in html
+    assert "支給品" not in html
+    assert "検収書比較" not in html
+    assert 'class="sidebar-menu-branch"' not in html  # 唯一の親子ブランチが非表示のため出ない
+    assert "<details" in html  # グループ自体は details で残る
     assert 'class="sidebar-menu-group"' in html
     assert "お知らせ" in html
     assert "承認依頼" in html
@@ -136,11 +137,12 @@ def test_general_user_sees_only_assigned_department_menu(client):
     html = response.content.decode("utf-8")
     assert "生産管理" in html
     assert "5年9組" in html
-    assert "完成品" in html
-    assert "支給品" in html
-    assert "検収書比較" in html
-    assert 'class="sidebar-menu-branch"' in html
-    assert "<details" in html
+    # 検収書比較は一時的に非表示（EXPJC 移行・T_ACPT_RSLT 未付与）。復活時は in に戻す。
+    assert "完成品" not in html
+    assert "支給品" not in html
+    assert "検収書比較" not in html
+    assert 'class="sidebar-menu-branch"' not in html
+    assert "<details" in html  # 生産管理グループ自体は details で残る
     assert 'class="sidebar-menu-group"' in html
     assert "承認依頼" not in html
     assert "データベース" not in html
@@ -189,7 +191,10 @@ def test_is_menu_path_active():
 
 
 @pytest.mark.django_db
-def test_receipt_comparison_branch_uses_same_row_layout_as_sibling_items(client):
+def test_hidden_receipt_comparison_branch_is_not_rendered(client):
+    # 検収書比較は一時的に非表示（EXPJC 移行・T_ACPT_RSLT 未付与）。
+    # 検収書比較は唯一の親子ブランチのため、非表示中はブランチ描画自体が出ない。
+    # 復活時は旧 test_receipt_comparison_branch_uses_same_row_layout_as_sibling_items に戻す。
     user = get_user_model().objects.create_user(username="branch-layout-user")
     group, _ = Group.objects.get_or_create(name="一般ユーザー")
     user.groups.add(group)
@@ -199,13 +204,16 @@ def test_receipt_comparison_branch_uses_same_row_layout_as_sibling_items(client)
     response = client.get("/app")
 
     html = response.content.decode("utf-8")
-    assert 'class="sidebar-menu-branch-icon"' in html
-    assert 'class="sidebar-menu-branch-label">検収書比較</span>' in html
+    assert 'class="sidebar-menu-branch-label">検収書比較</span>' not in html
+    assert "検収書比較" not in html
+    # 生産管理グループの通常項目（5年9組）は引き続き行レイアウトで描画される。
     assert 'class="sidebar-menu-item"' in html
 
 
 @pytest.mark.django_db
-def test_receipt_comparison_menu_is_grouped_under_parent(client):
+def test_hidden_receipt_comparison_is_absent_from_group(client):
+    # 検収書比較は一時的に非表示（EXPJC 移行・T_ACPT_RSLT 未付与）。
+    # 復活時は旧 test_receipt_comparison_menu_is_grouped_under_parent に戻す。
     user = get_user_model().objects.create_user(username="menu-structure-user")
     group, _ = Group.objects.get_or_create(name="一般ユーザー")
     user.groups.add(group)
@@ -213,16 +221,18 @@ def test_receipt_comparison_menu_is_grouped_under_parent(client):
 
     groups = menu_groups_with_items(user)
     production = next(group for group in groups if group["key"] == "production")
-    receipt_parent = next(item for item in production["items"] if item["key"] == "receipt-comparison")
+    keys = [item["key"] for item in production["items"]]
 
-    assert receipt_parent["title"] == "検収書比較"
-    assert receipt_parent["href"] == ""
-    assert [child["title"] for child in receipt_parent["children"]] == ["完成品", "支給品"]
-    assert receipt_parent["is_expanded"] is False
+    assert "receipt-comparison" not in keys
+    assert "five-year-nine" in keys  # 同グループの通常項目は残る
 
 
 @pytest.mark.django_db
-def test_active_receipt_comparison_page_expands_group_and_branch(client):
+def test_hidden_receipt_comparison_page_is_forbidden(client):
+    # 検収書比較は一時的に非表示（EXPJC 移行・T_ACPT_RSLT 未付与）。
+    # ビューのアクセス制御も can_access_menu_item を通すため、hidden 項目は
+    # メニューから消えるだけでなく URL 直打ちも 403 になる（EXPJC で壊れるページに入れない）。
+    # 復活時は旧 test_active_receipt_comparison_page_expands_group_and_branch に戻す。
     user = get_user_model().objects.create_user(username="receipt-expand-user")
     group, _ = Group.objects.get_or_create(name="一般ユーザー")
     user.groups.add(group)
@@ -231,13 +241,7 @@ def test_active_receipt_comparison_page_expands_group_and_branch(client):
 
     response = client.get("/app/production/receipt-comparison?type=finished-product")
 
-    assert response.status_code == 200
-    html = response.content.decode("utf-8")
-    assert 'data-menu-group-key="production"' in html
-    assert 'data-menu-key="receipt-comparison"' in html
-    assert 'data-sidebar-force-open="true"' in html
-    assert "<details" in html and " open" in html
-    assert 'href="/app/production/receipt-comparison?type=finished-product" class="is-active"' in html
+    assert response.status_code == 403
 
 
 @pytest.mark.django_db
@@ -247,13 +251,13 @@ def test_menu_groups_expand_when_current_path_matches(client):
     user.groups.add(group)
     PortalMenuGroupAccess.objects.create(user=user, group_key="production")
 
-    groups = menu_groups_with_items(user, "/app/production/receipt-comparison", "supplied-parts")
+    # 検収書比較が非表示のため、グループ展開の仕組みは同グループの通常項目で検証する。
+    groups = menu_groups_with_items(user, "/app/production/inventory-order-alert", "")
     production = next(group for group in groups if group["key"] == "production")
-    receipt_parent = next(item for item in production["items"] if item["key"] == "receipt-comparison")
+    active_item = next(item for item in production["items"] if item["key"] == "inventory-order-alert")
 
     assert production["is_expanded"] is True
-    assert receipt_parent["is_expanded"] is True
-    assert receipt_parent["children"][1]["is_active"] is True
+    assert active_item["is_active"] is True
 
 
 @pytest.mark.django_db
@@ -296,13 +300,18 @@ def test_parent_menu_cannot_be_favorited(client, user):
 
 
 @pytest.mark.django_db
-def test_can_access_parent_menu_when_child_is_accessible(client):
+def test_hidden_menu_item_is_not_accessible(client):
+    # 検収書比較は一時的に非表示（EXPJC 移行・T_ACPT_RSLT 未付与）。
+    # 非表示項目は親子とも can_access_menu_item が False を返す。
+    # 復活時は旧 test_can_access_parent_menu_when_child_is_accessible に戻す。
     user = get_user_model().objects.create_user(username="parent-access-user")
     group, _ = Group.objects.get_or_create(name="一般ユーザー")
     user.groups.add(group)
     PortalMenuGroupAccess.objects.create(user=user, group_key="production")
 
-    assert can_access_menu_item(user, "receipt-comparison") is True
+    assert can_access_menu_item(user, "receipt-comparison") is False
+    assert can_access_menu_item(user, "receipt-comparison-finished-product") is False
+    assert can_access_menu_item(user, "five-year-nine") is True  # 同グループの通常項目は可
 
 
 @pytest.mark.django_db

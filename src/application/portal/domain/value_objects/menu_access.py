@@ -72,6 +72,9 @@ def can_access_menu_item(
     item = MENU_BY_KEY.get(menu_key)
     if item is None:
         return False
+    if item.hidden:
+        # 非表示項目はメニュー・検索・お気に入りの全経路から除外する（ページ URL は残る）。
+        return False
     if not item.href:
         return any(
             can_access_menu_item(

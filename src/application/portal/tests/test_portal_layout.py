@@ -37,7 +37,7 @@ def test_authenticated_pages_use_portal_app_page_body_class(client, production_u
     client.force_login(production_user)
     pages = [
         "/app",
-        "/app/production/receipt-comparison?type=finished-product",
+        # 検収書比較は一時的に非表示（EXPJC 移行）で 403 になるため代表から外す。
         "/app/production/inventory-order-alert",
         "/app/production/five-year-nine",
     ]

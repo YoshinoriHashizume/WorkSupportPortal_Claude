@@ -148,7 +148,7 @@ def test_receipt_comparison_search_filter_labels_are_left_of_inputs():
 
 
 @pytest.mark.django_db
-def test_receipt_comparison_finished_product_renders_search_disclosure(client, production_user):
+def test_receipt_comparison_finished_product_renders_search_disclosure(client, production_user, unhide_receipt_comparison):
     client.force_login(production_user)
     html = client.get("/app/production/receipt-comparison?type=finished-product").content.decode("utf-8")
     head_index = html.index('class="portal-section-head receipt-head"')
@@ -162,7 +162,7 @@ def test_receipt_comparison_finished_product_renders_search_disclosure(client, p
 
 
 @pytest.mark.django_db
-def test_receipt_comparison_supplied_parts_renders_search_disclosure(client, production_user):
+def test_receipt_comparison_supplied_parts_renders_search_disclosure(client, production_user, unhide_receipt_comparison):
     client.force_login(production_user)
     html = client.get("/app/production/receipt-comparison?type=supplied-parts").content.decode("utf-8")
     assert 'data-storage-key="receipt-comparison-search-supplied-parts-v2"' in html
