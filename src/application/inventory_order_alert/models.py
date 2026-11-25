@@ -10,6 +10,18 @@ class ConfirmationStatus(models.TextChoices):
     CONFIRMED = "confirmed", "確認済み"
 
 
+def default_direct_shipment_supplier_codes() -> list[str]:
+    """直送仕入先（V-240）の初期値。丸栄豊田・テクノス工場（暫定）・丸栄豊田（福岡）。
+
+    値の正は domain の `DEFAULT_DIRECT_SHIPMENT_SUPPLIERS`。マイグレーションが参照するため関数で持つ。
+    """
+    from application.inventory_order_alert.domain.value_objects.direct_shipment import (
+        DEFAULT_DIRECT_SHIPMENT_SUPPLIERS,
+    )
+
+    return list(DEFAULT_DIRECT_SHIPMENT_SUPPLIERS.codes)
+
+
 class InventoryOrderAlertSettings(models.Model):
     id = models.PositiveSmallIntegerField(primary_key=True, default=1)
     warning_days = models.PositiveIntegerField(default=365)
@@ -33,6 +45,8 @@ class InventoryOrderAlertSettings(models.Model):
     judgement_horizon_days = models.PositiveIntegerField(default=30)
     # 滞留発注残（V-238、11 REQ-JS-F-002、1〜730 日・既定 30）と見なすまでの未更新日数
     stale_order_days = models.PositiveIntegerField(default=30)
+    # 直送仕入先（V-240、12 REQ-DSE-F-001）。仕入先コードの配列。直送品（T-212）の判定に使い、変更は次回取込から反映する
+    direct_shipment_supplier_codes = models.JSONField(default=default_direct_shipment_supplier_codes)
     updated_at = models.DateTimeField(auto_now=True)
     updated_by = models.ForeignKey(
         settings.AUTH_USER_MODEL,

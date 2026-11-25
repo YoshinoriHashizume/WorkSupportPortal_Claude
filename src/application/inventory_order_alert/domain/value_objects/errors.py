@@ -15,3 +15,15 @@ class ImportInProgressError(RuntimeError):
 
     def __init__(self, message: str = IMPORT_IN_PROGRESS_MESSAGE) -> None:
         super().__init__(message)
+
+
+VENDOR_LOOKUP_UNAVAILABLE_MESSAGE = (
+    "基幹に接続できないため仕入先コードを確認できませんでした。時間をおいて保存し直してください。"
+)
+
+
+class VendorLookupUnavailableError(RuntimeError):
+    """基幹に接続できず、仕入先マスタで仕入先コードを確かめられない（spec/12 design §6.2・§8）。"""
+
+    def __init__(self, message: str = VENDOR_LOOKUP_UNAVAILABLE_MESSAGE) -> None:
+        super().__init__(message)

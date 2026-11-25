@@ -138,6 +138,8 @@ def test_settings_payload_exposes_all_keys():
         # 11 TC-JS-A-003: 判定ホライズン（V-239）・滞留発注残（V-238）の閾値
         "judgementHorizonDays": 30,
         "staleOrderDays": 30,
+        # 12 TC-DSE-D-041: 直送仕入先（V-240）
+        "directShipmentSupplierCodes": ["9100", "9200", "9250"],
     }
 
 

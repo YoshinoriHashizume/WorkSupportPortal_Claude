@@ -7,6 +7,7 @@ from django.http import HttpRequest, HttpResponse, JsonResponse
 from django.shortcuts import render
 from django.views.decorators.http import require_http_methods
 
+from application.inventory_order_alert.domain.value_objects.errors import VendorLookupUnavailableError
 from application.inventory_order_alert.domain.value_objects.list_client_data import build_list_client_payload
 from application.inventory_order_alert.domain.value_objects.list_filter import visible_cust_options
 from application.inventory_order_alert.interfaces.wiring import (
@@ -162,7 +163,8 @@ def settings_page(request: HttpRequest) -> HttpResponse:
     if not is_portal_admin(request.user):
         return HttpResponse("権限がありません。", status=403)
 
-    settings = app_settings_usecase().load()
+    use_case = app_settings_usecase()
+    settings = use_case.load()
     return render(
         request,
         "inventory_order_alert/settings.html",
@@ -173,6 +175,8 @@ def settings_page(request: HttpRequest) -> HttpResponse:
             # 11 REQ-JS-F-001/002: 判定ホライズン（V-239）・滞留発注残（V-238）の閾値
             "judgement_horizon_days": settings.judgement_horizon_days,
             "stale_order_days": settings.stale_order_days,
+            # 12 REQ-DSE-F-001: 直送仕入先（V-240）。基幹に接続できなくても画面は開く（名前は取得できない旨を出す）
+            "direct_shipment_suppliers": use_case.vendor_names(settings.direct_shipment_suppliers),
             "can_reset_confirmations": can_reset_confirmations(),
         },
     )
@@ -187,7 +191,7 @@ def api_settings(request: HttpRequest) -> JsonResponse:
 
     use_case = app_settings_usecase()
     if request.method == "GET":
-        return JsonResponse({"ok": True, "settings": use_case.load_payload()})
+        return JsonResponse({"ok": True, **use_case.load_view()})
 
     try:
         payload = json.loads(request.body.decode("utf-8"))
@@ -195,11 +199,14 @@ def api_settings(request: HttpRequest) -> JsonResponse:
         return JsonResponse({"ok": False, "message": "JSON の形式が不正です。"}, status=400)
 
     try:
-        settings = use_case.save(payload, updated_by=request.user)
+        view = use_case.save_view(payload, updated_by=request.user)
     except ValueError as exc:
         return JsonResponse({"ok": False, "message": str(exc)}, status=400)
+    except VendorLookupUnavailableError as exc:
+        # 12 design §8: 新しい直送仕入先を確かめられないときは何も保存しない
+        return JsonResponse({"ok": False, "message": str(exc)}, status=503)
 
-    return JsonResponse({"ok": True, "settings": settings})
+    return JsonResponse({"ok": True, **view})
 
 
 @login_required

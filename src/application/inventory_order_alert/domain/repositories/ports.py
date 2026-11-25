@@ -10,6 +10,7 @@ from application.inventory_order_alert.domain.value_objects.confirmation import 
     ConfirmationRecord,
     MemoEntryRecord,
 )
+from application.inventory_order_alert.domain.value_objects.direct_shipment import DirectShipmentSuppliers
 from application.inventory_order_alert.domain.value_objects.slims_stock import SlimsStockLocationLine
 from application.inventory_order_alert.domain.value_objects.summary import (
     EditableSummarySnapshot,
@@ -36,8 +37,18 @@ class SaveAppSettings(Protocol):
         recent_incoming_days: int = ...,
         judgement_horizon_days: int = ...,
         stale_order_days: int = ...,
+        direct_shipment_suppliers: DirectShipmentSuppliers | None = ...,
         updated_by: object | None = ...,
     ) -> AppSettings: ...
+
+
+class LookupVendorNames(Protocol):
+    """仕入先コード → 仕入先名（仕入先マスタで見つかったものだけ）。
+
+    基幹に接続できなければ `VendorLookupUnavailableError`（spec/12 design §6.2）。
+    """
+
+    def __call__(self, codes: list[str]) -> dict[str, str]: ...
 
 
 #: 集計行の後処理（行, 基準日）→ 行。取込側が集計 → 後処理 → 保存 の順に適用する（05 design §6.7）。

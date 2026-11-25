@@ -98,7 +98,8 @@ def test_js_a007_settings_page_has_both_inputs():
     assert 'name="staleOrderDays"' in html
     assert 'min="1" max="730"' in html
     # 取込時に判定するため、変更が即時に反映されないことを明記する（REQ-JS-F-008）
-    assert html.count("変更は次回の SLIMS 在庫 CSV 取込から反映されます。") == 2
+    # 12 で直送仕入先（V-240）の欄にも同じ注記が加わったため「2 か所以上」とする
+    assert html.count("変更は次回の SLIMS 在庫 CSV 取込から反映されます。") >= 2
     # 推定であることを画面に残す（REQ-JS-NF-003）
     assert "基幹に発注停止のフラグがないため、最終更新日による推定です。" in html
 

@@ -290,3 +290,117 @@ def test_a002_import_stock_without_settings_loader_uses_defaults():
     ImportStock(fake_import).execute(b"x", file_name="sample.csv")
 
     assert captured["stored"][0]["order_deadline"] == "2026/09/26"  # 既定リードタイム 5 日
+
+
+# --- spec/12 TC-DSE-A-001〜004: 直送品（T-212）を後処理の最初で除く ---------------
+
+from application.inventory_order_alert.domain.value_objects.direct_shipment import (  # noqa: E402
+    DirectShipmentSuppliers,
+)
+
+
+def _dse_direct_row() -> dict[str, object]:
+    return {
+        "cust_code": "308",
+        "item_cd": "15D126-0020",
+        "level1_item_cd": "15D126-0020-9100",
+        "level1_vend_cd": "9100",
+        "stock_qty": "",
+    }
+
+
+def _dse_normal_row() -> dict[str, object]:
+    return {
+        "cust_code": "100",
+        "item_cd": "062432-0680",
+        "level1_item_cd": "062432-0680-9146",
+        "level1_vend_cd": "9146",
+        "stock_qty": "11165",
+    }
+
+
+def _dse_capture_enrich(load_app_settings=None, calls=None):
+    captured: dict[str, object] = {}
+
+    def fake_import(text, *, user=None, file_name="", enrich_rows=None):
+        if calls is not None:
+            calls.append("import")
+        captured["enrich_rows"] = enrich_rows
+        return _stock_info()
+
+    ImportStock(fake_import, load_app_settings).execute(b"x", file_name="sample.csv")
+    return captured["enrich_rows"]
+
+
+def test_dse_a001_post_processing_excludes_direct_shipment_items_first():
+    enrich = _dse_capture_enrich(
+        lambda: AppSettings(direct_shipment_suppliers=DirectShipmentSuppliers.parse(["9100"]))
+    )
+
+    enriched = enrich([_dse_direct_row(), _dse_normal_row()], AS_OF)
+
+    assert [row["item_cd"] for row in enriched] == ["062432-0680"]
+    assert enriched[0]["response_class"]
+    assert enriched[0]["reconciliation_unit_key"] == "062432-0680"
+
+
+def test_dse_a002_settings_are_loaded_once_before_import():
+    calls: list[str] = []
+    values = iter(
+        [
+            AppSettings(direct_shipment_suppliers=DirectShipmentSuppliers.parse(["9100"])),
+            AppSettings(direct_shipment_suppliers=DirectShipmentSuppliers.parse([])),
+        ]
+    )
+
+    def load_app_settings():
+        calls.append("load")
+        return next(values)
+
+    enrich = _dse_capture_enrich(load_app_settings, calls)
+    enriched = enrich([_dse_direct_row(), _dse_normal_row()], AS_OF)
+
+    assert calls == ["load", "import"]
+    assert [row["item_cd"] for row in enriched] == ["062432-0680"]
+
+
+def test_dse_a003_default_suppliers_are_used_without_settings_loader():
+    enrich = _dse_capture_enrich()
+
+    assert enrich([_dse_direct_row()], AS_OF) == []
+
+
+def test_dse_a004_no_direct_suppliers_keeps_all_rows_as_before():
+    rows = [_dse_direct_row(), _dse_normal_row()]
+    enrich = _dse_capture_enrich(
+        lambda: AppSettings(direct_shipment_suppliers=DirectShipmentSuppliers.parse([]))
+    )
+
+    enriched = enrich(rows, AS_OF)
+    before = attach_response_class_without_exclusion(rows)
+
+    assert enriched == before
+
+
+def attach_response_class_without_exclusion(rows):
+    """本機能の導入前と同じ後処理（直送品を除かない）。"""
+    from application.inventory_order_alert.domain.value_objects.demand_forecast import attach_demand_forecast
+    from application.inventory_order_alert.domain.value_objects.flow_quadrant import REFERENCE_FLOW_SELECTION
+    from application.inventory_order_alert.domain.value_objects.list_query import ListQuery
+    from application.inventory_order_alert.domain.value_objects.list_rows import apply_flow_quadrants_to_rows
+    from application.inventory_order_alert.domain.value_objects.stockout_risk import attach_response_class
+
+    settings = AppSettings()
+    with_flow = apply_flow_quadrants_to_rows(
+        attach_demand_forecast(rows, AS_OF),
+        as_of_date=AS_OF,
+        query=ListQuery(as_of_date=AS_OF, flow_selection=REFERENCE_FLOW_SELECTION),
+        thresholds=settings.to_flow_thresholds(),
+    )
+    return attach_response_class(
+        with_flow,
+        AS_OF,
+        default_lead_time_days=settings.default_lead_time_days,
+        judgement_horizon_days=settings.judgement_horizon_days,
+        stale_order_days=settings.stale_order_days,
+    )

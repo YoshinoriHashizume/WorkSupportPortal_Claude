@@ -9,6 +9,7 @@ from application.inventory_order_alert.domain.value_objects.app_settings import 
     clamp_stock_stale_days,
     clamp_warning_days,
 )
+from application.inventory_order_alert.domain.value_objects.direct_shipment import DirectShipmentSuppliers
 from application.inventory_order_alert.models import InventoryOrderAlertSettings
 
 
@@ -23,6 +24,8 @@ def load_app_settings() -> AppSettings:
         recent_incoming_days=clamp_recent_incoming_days(settings_row.recent_incoming_days),
         judgement_horizon_days=clamp_judgement_horizon_days(settings_row.judgement_horizon_days),
         stale_order_days=clamp_stale_order_days(settings_row.stale_order_days),
+        # 壊れた保存値は不正な要素を捨てて読む（12 design §8）
+        direct_shipment_suppliers=DirectShipmentSuppliers.from_stored(settings_row.direct_shipment_supplier_codes),
     )
 
 
@@ -34,6 +37,7 @@ def save_app_settings(
     recent_incoming_days: int | None = None,
     judgement_horizon_days: int | None = None,
     stale_order_days: int | None = None,
+    direct_shipment_suppliers: DirectShipmentSuppliers | None = None,
     updated_by: object | None = None,
 ) -> AppSettings:
     """設定画面（§4.2）・設定 API（§8.10）で更新できる項目を保存する。未指定の項目は据え置く。
@@ -51,6 +55,8 @@ def save_app_settings(
         settings_row.judgement_horizon_days = clamp_judgement_horizon_days(judgement_horizon_days)
     if stale_order_days is not None:
         settings_row.stale_order_days = clamp_stale_order_days(stale_order_days)
+    if direct_shipment_suppliers is not None:
+        settings_row.direct_shipment_supplier_codes = list(direct_shipment_suppliers.codes)
     update_fields = [
         "warning_days",
         "stock_stale_days",
@@ -58,6 +64,7 @@ def save_app_settings(
         "recent_incoming_days",
         "judgement_horizon_days",
         "stale_order_days",
+        "direct_shipment_supplier_codes",
         "updated_at",
     ]
     if updated_by is not None:

@@ -68,6 +68,32 @@
       </label>
     </div>
 
+    {# 12 REQ-DSE-F-001: 直送仕入先（V-240）。登録した仕入先の直送品（T-212）は一覧・CSV に出さない #}
+    <fieldset class="ioa-settings-field ioa-direct-suppliers" id="ioa-direct-suppliers">
+      <legend>直送仕入先</legend>
+      <small>
+        品物を得意先へ直接納入し、SLIMS の倉庫を通らない仕入先です。
+        ここに登録した仕入先の得意先品番のうち、SLIMS 在庫数がないものは一覧・CSV に表示しません。
+        <strong>変更は次回の SLIMS 在庫 CSV 取込から反映されます。</strong>
+      </small>
+      <ul class="ioa-direct-supplier-list" id="ioa-direct-supplier-list">
+        {% for supplier in direct_shipment_suppliers %}
+        <li class="ioa-direct-supplier" data-code="{{ supplier.code }}">
+          <span class="ioa-direct-supplier-code">{{ supplier.code }}</span>
+          <span class="ioa-direct-supplier-name">{% if supplier.status == "found" %}{{ supplier.name }}{% elif supplier.status == "not_found" %}（仕入先マスタに見つかりません）{% else %}（仕入先名を取得できません）{% endif %}</span>
+          <button type="button" class="button-link ioa-direct-supplier-remove">削除</button>
+        </li>
+        {% empty %}
+        <li class="ioa-direct-supplier-empty" id="ioa-direct-supplier-empty">登録されていません（直送品として除く品番はありません）。</li>
+        {% endfor %}
+      </ul>
+      <div class="ioa-direct-supplier-add">
+        <input type="text" id="ioa-direct-supplier-input" maxlength="20" placeholder="仕入先コード" aria-label="追加する仕入先コード">
+        <button type="button" class="secondary-button" id="ioa-direct-supplier-add">追加</button>
+      </div>
+      <small>追加した仕入先の名前は保存後に表示されます。保存時に仕入先マスタに存在するか確かめます。</small>
+    </fieldset>
+
     <div class="ioa-settings-actions">
       <button type="submit" id="ioa-settings-save">保存</button>
     </div>
@@ -112,6 +138,59 @@
       return payload;
     }
 
+    // 12 REQ-DSE-F-001: 直送仕入先の追加・削除は画面上の一覧を書き換え、保存ボタンでまとめて送る
+    const supplierList = document.getElementById("ioa-direct-supplier-list");
+    const supplierInput = document.getElementById("ioa-direct-supplier-input");
+    const supplierAdd = document.getElementById("ioa-direct-supplier-add");
+
+    function directSupplierCodes() {
+      return Array.from(supplierList.querySelectorAll(".ioa-direct-supplier")).map((item) => item.dataset.code);
+    }
+
+    function addDirectSupplier() {
+      const code = supplierInput.value.trim();
+      errorBox.hidden = true;
+      if (!code) {
+        showError("直送仕入先に空の仕入先コードは登録できません。");
+        return;
+      }
+      if (directSupplierCodes().includes(code)) {
+        showError(`直送仕入先に同じ仕入先コードが重複しています: ${code}`);
+        return;
+      }
+      document.getElementById("ioa-direct-supplier-empty")?.remove();
+      const item = document.createElement("li");
+      item.className = "ioa-direct-supplier";
+      item.dataset.code = code;
+      const codeLabel = document.createElement("span");
+      codeLabel.className = "ioa-direct-supplier-code";
+      codeLabel.textContent = code;
+      const nameLabel = document.createElement("span");
+      nameLabel.className = "ioa-direct-supplier-name";
+      nameLabel.textContent = "（保存後に仕入先名を表示します）";
+      const remove = document.createElement("button");
+      remove.type = "button";
+      remove.className = "button-link ioa-direct-supplier-remove";
+      remove.textContent = "削除";
+      item.append(codeLabel, nameLabel, remove);
+      supplierList.append(item);
+      supplierInput.value = "";
+    }
+
+    supplierAdd?.addEventListener("click", addDirectSupplier);
+    supplierInput?.addEventListener("keydown", (event) => {
+      if (event.key === "Enter") {
+        event.preventDefault();
+        addDirectSupplier();
+      }
+    });
+    supplierList?.addEventListener("click", (event) => {
+      const button = event.target.closest(".ioa-direct-supplier-remove");
+      if (button) {
+        button.closest(".ioa-direct-supplier").remove();
+      }
+    });
+
     form.addEventListener("submit", async (event) => {
       event.preventDefault();
       errorBox.hidden = true;
@@ -121,8 +200,9 @@
           warningDays: Number(document.getElementById("ioa-setting-warning-days").value),
           stockStaleDays: Number(document.getElementById("ioa-setting-stock-stale-days").value),
           recentIncomingDays: Number(document.getElementById("ioa-setting-recent-incoming-days").value),
-        judgementHorizonDays: Number(document.getElementById("ioa-setting-judgement-horizon-days").value),
-        staleOrderDays: Number(document.getElementById("ioa-setting-stale-order-days").value),
+          judgementHorizonDays: Number(document.getElementById("ioa-setting-judgement-horizon-days").value),
+          staleOrderDays: Number(document.getElementById("ioa-setting-stale-order-days").value),
+          directShipmentSupplierCodes: directSupplierCodes(),
         });
         window.location.reload();
       } catch (error) {

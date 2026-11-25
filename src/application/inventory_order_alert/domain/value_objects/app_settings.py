@@ -2,6 +2,10 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
+from application.inventory_order_alert.domain.value_objects.direct_shipment import (
+    DEFAULT_DIRECT_SHIPMENT_SUPPLIERS,
+    DirectShipmentSuppliers,
+)
 from application.inventory_order_alert.domain.value_objects.flow_quadrant import (
     DEFAULT_RECENT_INCOMING_DAYS,
     MAX_RECENT_INCOMING_DAYS,
@@ -53,6 +57,8 @@ class AppSettings:
     #: 滞留発注残（V-238、11 REQ-JS-F-002）と見なすまでの未更新日数。
     #: 基幹に発注停止フラグがないため `UPDATED_DATE` による推定である
     stale_order_days: int = DEFAULT_STALE_ORDER_DAYS
+    #: 直送仕入先（V-240、12 REQ-DSE-F-001）。直送品（T-212）の判定に使う。変更は次回取込から反映する
+    direct_shipment_suppliers: DirectShipmentSuppliers = DEFAULT_DIRECT_SHIPMENT_SUPPLIERS
 
     def __post_init__(self) -> None:
         _require_in_range(
@@ -104,6 +110,13 @@ class SettingsInput:
     recent_incoming_days: int = DEFAULT_RECENT_INCOMING_DAYS
     judgement_horizon_days: int = DEFAULT_JUDGEMENT_HORIZON_DAYS
     stale_order_days: int = DEFAULT_STALE_ORDER_DAYS
+    direct_shipment_suppliers: DirectShipmentSuppliers = DEFAULT_DIRECT_SHIPMENT_SUPPLIERS
+
+
+def _parse_direct_shipment_suppliers(value: object) -> DirectShipmentSuppliers:
+    if not isinstance(value, list) or not all(isinstance(item, str) for item in value):
+        raise ValueError("直送仕入先は仕入先コードの配列で指定してください。")
+    return DirectShipmentSuppliers.parse(value)
 
 
 def clamp_warning_days(value: int) -> int:
@@ -204,6 +217,11 @@ def parse_settings_payload(data: object, *, current: AppSettings | None = None) 
             maximum=MAX_STALE_ORDER_DAYS,
         )
 
+    direct_shipment_suppliers = base.direct_shipment_suppliers
+    if "directShipmentSupplierCodes" in data:
+        # 配列全体で置き換える（12 design §6.1）
+        direct_shipment_suppliers = _parse_direct_shipment_suppliers(data["directShipmentSupplierCodes"])
+
     return SettingsInput(
         warning_days=warning_days,
         stock_stale_days=stock_stale_days,
@@ -211,6 +229,7 @@ def parse_settings_payload(data: object, *, current: AppSettings | None = None) 
         recent_incoming_days=recent_incoming_days,
         judgement_horizon_days=judgement_horizon_days,
         stale_order_days=stale_order_days,
+        direct_shipment_suppliers=direct_shipment_suppliers,
     )
 
 
@@ -223,4 +242,5 @@ def settings_payload(settings: AppSettings) -> dict[str, object]:
         "recentIncomingDays": settings.recent_incoming_days,
         "judgementHorizonDays": settings.judgement_horizon_days,
         "staleOrderDays": settings.stale_order_days,
+        "directShipmentSupplierCodes": list(settings.direct_shipment_suppliers.codes),
     }

@@ -17,6 +17,7 @@ from application.inventory_order_alert.use_cases.summary_api import (
 )
 from application.inventory_order_alert.infrastructure.config.recommended_actions import load_recommended_actions
 from application.inventory_order_alert.infrastructure.oracle.list_rows_builder import ListQuery, build_list_rows
+from application.inventory_order_alert.infrastructure.oracle.vendor_lookup import lookup_vendor_names
 from application.inventory_order_alert.infrastructure.persistence.confirmation_repository import (
     add_confirmation_memo,
     has_resettable_confirmations,
@@ -76,7 +77,12 @@ def reset_confirmations_usecase() -> ResetConfirmations:
 
 
 def app_settings_usecase() -> AppSettingsUseCase:
-    return AppSettingsUseCase(load_app_settings, save_app_settings)
+    return AppSettingsUseCase(
+        load_app_settings,
+        save_app_settings,
+        # 直送仕入先（V-240）の実在確認・仕入先名の表示（spec/12 design §6.2）
+        lookup_vendor_names=lookup_vendor_names,
+    )
 
 
 def export_csv_usecase() -> ExportCsv:
