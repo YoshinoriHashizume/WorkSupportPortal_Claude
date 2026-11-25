@@ -106,6 +106,8 @@ def _unit_row(item_cd: str, *, internal: str = "IN-1", daily: list[dict[str, obj
         "demand_forecast_stock_total": 100,
         "unconfirmed_order_daily": daily if daily is not None else [{"date": "2026-10-10", "qty": 160}],
         "open_purchase_orders": [],
+        # 要発注は手動発注を含む照合単位だけ（ISSUE-0010）。単位ごとの判定を見るテストなので手動発注にする
+        "ordering_method": "手動発注",
     }
     row.update(extra)
     return row

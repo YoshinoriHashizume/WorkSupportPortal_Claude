@@ -17,10 +17,11 @@
 | [ISSUE-0005](ISSUE-0005-no-payload-size-requirement.md) | 改善 | 配信データ量の非機能要件がなく、見積り誤りを検出できなかった（L3レビュー L3F-6） | 中 | Triaged | なし | 2026/08/31 |
 | [ISSUE-0006](ISSUE-0006-large-replacement-release-strategy-unstated.md) | 改善 | 大規模な置換要件で段階リリースの可否が要件段階で示されていない（L3レビュー L3F-7） | 低 | Triaged | なし | 2026/08/31 |
 | [ISSUE-0007](ISSUE-0007-empty-stock-sort-sentinel-collides-with-negative.md) | 不具合 | 在庫数ソートの空値センチネル `-1` が負の在庫数と衝突する（実装レビュー IL1-4） | 低 | Triaged | [spec/03](../spec/03_mari-stock-visibility/design.md) | 2026/08/31 |
-| [ISSUE-0009](ISSUE-0009-same-day-due-order-counted-as-overdue.md) | 不具合 | 納期が基準日当日の発注残が「納期遅れ」に数えられ、予定入荷にも足されない | 中 | Verifying | なし | 2026/11/25 |
+| [ISSUE-0010](ISSUE-0010-mrp-items-excluded-from-order-needed.md) | 改善 | 要発注の大半が MRP 発注品で、人が発注をかける必要のない品番まで並んでいる | 中 | Verifying | なし | 2026/11/25 |
 
 ## クローズ済み
 
 | ID | 種別 | タイトル | 優先度 | ステータス | 対応文書 | 起票日 | クローズ日 |
 |----|------|----------|--------|-----------|----------|--------|-----------|
+| [ISSUE-0009](ISSUE-0009-same-day-due-order-counted-as-overdue.md) | 不具合 | 納期が基準日当日の発注残が「納期遅れ」に数えられ、予定入荷にも足されない | 中 | Closed | なし | 2026/11/25 | 2026/11/25 |
 | [ISSUE-0008](ISSUE-0008-stock-as-of-label-with-time.md) | 改善 | 在庫時点（T-202）の表示が暦日までのため、同日に複数回取り込むと新旧を見分けられない | 中 | Closed | なし | 2026/10/29 | 2026/10/29 |

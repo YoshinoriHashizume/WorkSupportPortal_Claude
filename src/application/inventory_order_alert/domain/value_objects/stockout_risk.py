@@ -129,13 +129,21 @@ def assess_response_class(
     # MRP は安全在庫を所要量計算に加味するため自動で発注が起票される（2026-10-27 業務確認）。
     # 人が動かないと発注されない手動発注だけを要監視にする（REQ-JS-F-003）。
     watchable = projection.below_safety_stock and projection.has_manual_ordering
+    # 同じ理由で、要発注も手動発注を含む照合単位だけにする（ISSUE-0010・2026-11-25 業務確認）。
+    # MRP の起票漏れは発注期限を過ぎた時点で発注遅れとして拾う。
+    mrp_left_to_order = False
 
     if stockout is not None:
         deadline = projection.order_deadline
         if deadline is not None and deadline <= as_of_date:
             response_class = RESPONSE_ORDER_OVERDUE
+        elif overdue:
+            response_class = RESPONSE_DELIVERY_CHECK
+        elif projection.has_manual_ordering:
+            response_class = RESPONSE_ORDER_NEEDED
         else:
-            response_class = RESPONSE_DELIVERY_CHECK if overdue else RESPONSE_ORDER_NEEDED
+            response_class = RESPONSE_NONE
+            mrp_left_to_order = True
     elif overdue:
         response_class = RESPONSE_DELIVERY_CHECK
     elif watchable:
@@ -153,7 +161,13 @@ def assess_response_class(
         else:
             reasons.append(f"在庫切れ {_format_date(projection.stockout_date)}")
             if projection.order_deadline is not None:
-                reasons.append(f"発注期限 {_format_date(projection.order_deadline)}")
+                if mrp_left_to_order:
+                    reasons.append(
+                        f"発注期限 {_format_date(projection.order_deadline)}"
+                        "（MRP が発注を自動で起票するため対応区分に反映していません）"
+                    )
+                else:
+                    reasons.append(f"発注期限 {_format_date(projection.order_deadline)}")
     if overdue:
         reasons.append(f"納期遅れの発注残 {projection.overdue_order_count} 件 {_format_qty(projection.overdue_order_qty)} 個")
     if stale:
