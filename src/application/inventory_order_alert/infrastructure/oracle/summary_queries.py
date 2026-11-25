@@ -619,9 +619,10 @@ def build_planned_incoming(
     level1_item_cd: str,
     level1_vend_cd: str,
 ) -> list[dict[str, object]]:
-    """予定入荷（V-236）: 納期が基準日より後の発注残を、発注番号の重複を除いて納期ごとに合算する。
+    """予定入荷（V-236）: 納期が基準日以後の発注残を、発注番号の重複を除いて納期ごとに合算する。
 
-    対象は完成品直下の工程のみ。納期遅れ（納期 ≤ 基準日）は**来ないもの**として含めない。
+    対象は完成品直下の工程のみ。納期が基準日当日のものは含める（ISSUE-0009）。
+    納期遅れ（納期 < 基準日）は**来ないもの**として含めない。
     在庫切れ日（V-232）の計算と同じ規則にする（09 design §4.1）。
     """
     totals: dict[date, int] = {}
@@ -641,7 +642,7 @@ def build_planned_incoming(
         except (ValueError, TypeError):
             continue
         qty = int(order.get("remaining_qty") or 0)
-        if qty > 0 and due > as_of_date:
+        if qty > 0 and due >= as_of_date:
             totals[due] = totals.get(due, 0) + qty
     return [{"date": day.isoformat(), "qty": totals[day]} for day in sorted(totals)]
 

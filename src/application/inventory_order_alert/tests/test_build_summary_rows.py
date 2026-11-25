@@ -653,7 +653,7 @@ def test_ssc_i001_rows_carry_daily_shipment_and_incoming() -> None:
 
 
 def test_ssc_i002_rows_carry_planned_incoming_without_overdue() -> None:
-    """予定入荷（V-236）は納期 > 基準日 のみ・発注番号で重複除去済み。"""
+    """予定入荷（V-236）は納期 ≥ 基準日（当日を含む。ISSUE-0009）・発注番号で重複除去済み。"""
     rows = _build_rows_with(
         {},
         **_stage3_patches(
@@ -662,7 +662,7 @@ def test_ssc_i002_rows_carry_planned_incoming_without_overdue() -> None:
                     ("PO-1", "X-9065", "9065", date(2026, 7, 10), date(2026, 7, 10), 100),   # 未来 → 含む
                     ("PO-2", "X-9065", "9065", date(2026, 7, 10), date(2026, 7, 10), 40),    # 同じ納期は合算
                     ("PO-3", "X-9065", "9065", date(2026, 6, 10), date(2026, 6, 10), 70),    # 納期遅れ → 含まない
-                    ("PO-4", "X-9065", "9065", date(2026, 6, 29), date(2026, 6, 29), 30),    # 基準日当日 → 含まない
+                    ("PO-4", "X-9065", "9065", date(2026, 6, 29), date(2026, 6, 29), 30),    # 基準日当日 → 含む（ISSUE-0009）
                     ("PO-5", "OTHER", "9065", date(2026, 7, 20), date(2026, 7, 20), 9),      # 直下の工程でない → 含まない
                 ],
                 "",
@@ -670,7 +670,7 @@ def test_ssc_i002_rows_carry_planned_incoming_without_overdue() -> None:
         ),
     )
 
-    assert rows[0]["planned_incoming"] == [{"date": "2026-07-10", "qty": 140}]
+    assert rows[0]["planned_incoming"] == [{"date": "2026-06-29", "qty": 30}, {"date": "2026-07-10", "qty": 140}]
 
 
 def test_ssc_i003_daily_series_does_not_add_oracle_queries() -> None:

@@ -92,10 +92,11 @@ def _sparse_series(
 
 
 def planned_incoming_by_due(unit_rows: list[dict[str, object]], *, as_of_date: date) -> dict[date, int]:
-    """予定入荷（V-236）: 納期が基準日より後の発注残を、発注番号の重複を除いて納期ごとに合算する。
+    """予定入荷（V-236）: 納期が基準日以後の発注残を、発注番号の重複を除いて納期ごとに合算する。
 
     対象は完成品直下の工程（`level1_item_cd` × `level1_vend_cd`）のみ。
-    納期が基準日以前（納期遅れ）のものは**来ないもの**として含めない。
+    納期が基準日当日のものは、まだ遅れていないので予定入荷に含める（ISSUE-0009）。
+    納期が基準日より前（納期遅れ）のものは**来ないもの**として含めない。
     """
     planned: dict[date, int] = {}
     seen: set[str] = set()
@@ -115,7 +116,7 @@ def planned_incoming_by_due(unit_rows: list[dict[str, object]], *, as_of_date: d
             seen.add(order_cd)
             due = _parse_date(order.get("due_date"))
             qty = _as_int(order.get("remaining_qty"))
-            if due is not None and qty > 0 and due > as_of_date:
+            if due is not None and qty > 0 and due >= as_of_date:
                 planned[due] = planned.get(due, 0) + qty
     return planned
 
@@ -154,7 +155,9 @@ def overdue_order_breakdown(
     as_of_date: date,
     stale_after_days: int | None = None,
 ) -> OverdueBreakdown:
-    """納期 ≤ 基準日 の発注残を「生きている納期遅れ」と「滞留」に分ける（11 REQ-JS-F-002）。
+    """納期 < 基準日 の発注残を「生きている納期遅れ」と「滞留」に分ける（11 REQ-JS-F-002）。
+
+    納期が基準日当日のものは遅れに数えない（予定入荷として扱う。ISSUE-0009）。
 
     どちらも在庫の計算には加算しない（REQ-SRR-F-002）。対象は完成品直下の工程のみ。
     """
@@ -179,7 +182,7 @@ def overdue_order_breakdown(
             seen.add(order_cd)
             due = _parse_date(order.get("due_date"))
             qty = _as_int(order.get("remaining_qty"))
-            if due is None or qty <= 0 or due > as_of_date:
+            if due is None or qty <= 0 or due >= as_of_date:
                 continue
             if _is_stale(order, as_of_date=as_of_date, stale_after_days=stale_after_days):
                 stale_qty += qty

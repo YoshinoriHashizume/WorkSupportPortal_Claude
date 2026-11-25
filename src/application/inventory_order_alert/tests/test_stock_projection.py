@@ -115,13 +115,14 @@ def test_p005_overdue_orders_are_not_added_to_stock():
     assert projection.overdue_order_count == 2
 
 
-def test_p005_order_due_on_the_base_date_counts_as_overdue():
+def test_p005_order_due_on_the_base_date_is_planned_incoming():
+    """ISSUE-0009 で改訂: 納期が基準日当日の発注残は遅れではなく、予定入荷として在庫に足す。"""
     rows = [_row(unconfirmed_order_daily=_demand(("2026-10-10", 120)), open_purchase_orders=[_order("PO-1", "2026/09/18", 300)])]
 
     projection = _build(rows, 100.0)
 
-    assert projection.overdue_order_qty == 300
-    assert projection.stockout_date == date(2026, 10, 10)
+    assert projection.overdue_order_qty == 0
+    assert projection.stockout_date is None
 
 
 # --- TC-SRR-P-006/012: 発注期限とリードタイム ---

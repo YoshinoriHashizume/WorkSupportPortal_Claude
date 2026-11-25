@@ -97,13 +97,14 @@ def test_d005_overdue_orders_are_not_planned_incoming():
         _row(
             open_purchase_orders=[
                 {"order_cd": "PO-1", "item_cd": "X-9065", "vend_cd": "9065", "due_date": "2026/09/10", "remaining_qty": 50},
-                {"order_cd": "PO-2", "item_cd": "X-9065", "vend_cd": "9065", "due_date": "2026/09/18", "remaining_qty": 30},
+                {"order_cd": "PO-2", "item_cd": "X-9065", "vend_cd": "9065", "due_date": "2026/09/17", "remaining_qty": 30},
             ]
         )
     ]
 
     movements = build_stock_simulation_input(rows, as_of_date=AS_OF)
 
+    # ISSUE-0009 で改訂: 納期遅れは「納期 < 基準日」。基準日当日の納期は test_same_day_due_order.py で確かめる
     assert all(movement.planned == 0 for movement in movements)
 
 

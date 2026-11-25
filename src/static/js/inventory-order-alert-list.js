@@ -714,9 +714,15 @@
       }
       past.reverse();
 
+      // 納期が基準日当日の予定入荷は遅れではない（ISSUE-0009）。基準日に棒を立て、未来側の起点に足す。
+      const asOfKey = toIsoDate(asOf);
+      if (past.length && past[past.length - 1].date === asOfKey && (planned[asOfKey] || 0) > 0) {
+        past[past.length - 1].planned = planned[asOfKey];
+      }
+
       // 未来側（asOf の翌日 → last）へ進む。
       const future = [];
-      qty = Number(anchorQty);
+      qty = Number(anchorQty) + (planned[asOfKey] || 0);
       const cursor = new Date(asOf);
       cursor.setDate(cursor.getDate() + 1);
       for (; cursor <= last; cursor.setDate(cursor.getDate() + 1)) {

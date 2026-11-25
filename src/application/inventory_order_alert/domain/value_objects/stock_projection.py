@@ -74,7 +74,7 @@ def _daily_demand(unit_rows: list[dict[str, object]], *, as_of_date: date) -> Co
 
 
 def _planned_incoming(unit_rows: list[dict[str, object]], *, as_of_date: date) -> Counter:
-    """納期が基準日より後の予定入荷（在庫シミュレーションと同じ材料）。"""
+    """納期が基準日以後の予定入荷（在庫シミュレーションと同じ材料。当日分を含む。ISSUE-0009）。"""
     return Counter(
         {movement.date: movement.planned for movement in _future_movements(unit_rows, as_of_date) if movement.planned}
     )
@@ -159,6 +159,8 @@ def build_stock_projection(
 
     # 在庫が未取得の行は 0 として計算する（REQ-SRR-F-002）
     stock = 0.0 if stock_total is None else float(stock_total)
+    # 納期が基準日当日の予定入荷は、見通しの起点の在庫に足す（ISSUE-0009。翌日から日次で進めるため）
+    stock += planned.get(as_of_date, 0)
     last_day = max(max(demand), max(planned) if planned else as_of_date)
     stockout_date: date | None = None
     below_safety = False
