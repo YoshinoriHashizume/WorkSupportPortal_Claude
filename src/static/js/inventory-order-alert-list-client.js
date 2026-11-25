@@ -31,6 +31,51 @@
     getValue: (row) => row.level1_item_cd,
   });
 
+  // 照合単位行（T-213）: 値が 2 つ以上ありうる列と、サーバが作った一覧キー（spec/13 design §6.1）。
+  // 一覧の先頭は代表得意先（V-241）の値。JS は一覧を読むだけで、合算・代表の選び方は持たない（REQ-RUR-NF-005）。
+  const UNIT_LIST_KEYS = {
+    cust_chrg_psn_cd: "cust_chrg_psn_cds",
+    cust_code: "cust_codes",
+    cust_name: "cust_names",
+    item_cd: "item_cds",
+    level1_vend_cd: "level1_vend_cds",
+    level1_vend_name: "level1_vend_names",
+    level1_item_cd: "level1_item_cds",
+  };
+
+  // 照合単位行に含まれる値の一覧。一覧キーのない行（旧データ）は単数キーの値だけ
+  function unitValues(row, column) {
+    const values = row?.[UNIT_LIST_KEYS[column]];
+    if (Array.isArray(values) && values.length) {
+      return values.map((value) => String(value ?? "").trim());
+    }
+    return [String(row?.[column] ?? "").trim()];
+  }
+
+  // 絞り込みは照合単位行に含まれるどの値でも当たる（REQ-RUR-F-004）
+  function matchesAnyPrefix(columnFilter, row, column, filterValue) {
+    if (!filterValue) {
+      return true;
+    }
+    return unitValues(row, column).some((value) => columnFilter.matchesRow({ ...row, [column]: value }, filterValue));
+  }
+
+  // 担当者 → 得意先の連動の材料。照合単位行は得意先別内訳（V-242）の行に展開して渡す
+  function memberRows(rows) {
+    return rows.flatMap((row) =>
+      Array.isArray(row?.customer_breakdown) && row.customer_breakdown.length ? row.customer_breakdown : [row],
+    );
+  }
+
+  // 「他 N」の印（REQ-RUR-F-002）。ポインタを当てると全件を「、」区切りで出す
+  function renderUnitMore(row, column) {
+    const values = unitValues(row, column).filter((value) => value);
+    if (values.length < 2) {
+      return "";
+    }
+    return ` <span class="ioa-unit-more" title="${Core.escapeHtml(values.join("、"))}">他${values.length - 1}</span>`;
+  }
+
   function parseRowKey(value) {
     const text = String(value || "").trim();
     const separatorIndex = text.indexOf("|");
@@ -157,7 +202,7 @@
   function readStateFromUrl(defaults, allRows) {
     const params = new URLSearchParams(window.location.search);
     const allCustOptions = defaults.filterOptions.custOptions || [];
-    const custChrgCustIndex = CustFilter.buildCustChrgCustIndex(allRows);
+    const custChrgCustIndex = CustFilter.buildCustChrgCustIndex(memberRows(allRows));
     const custChrgPsnCdRaw = params.get("cust_chrg_psn_cd") || "";
     const validChrg = new Set((defaults.filterOptions.custChrgPsnOptions || []).map((option) => option.value));
     const custChrgPsnCd = custChrgPsnCdRaw && validChrg.has(custChrgPsnCdRaw) ? custChrgPsnCdRaw : "";
@@ -259,16 +304,17 @@
       if (state.orderingMethod && String(row.orderingMethodKey || "unknown") !== state.orderingMethod) {
         return false;
       }
-      if (state.custCode && String(row.cust_code || "").trim() !== state.custCode) {
+      // 得意先・担当者・品番は照合単位行に含まれるどの値でも当たる（spec/13 REQ-RUR-F-004）
+      if (state.custCode && !unitValues(row, "cust_code").includes(state.custCode)) {
         return false;
       }
-      if (state.custChrgPsnCd && String(row.cust_chrg_psn_cd || "").trim() !== state.custChrgPsnCd) {
+      if (state.custChrgPsnCd && !unitValues(row, "cust_chrg_psn_cd").includes(state.custChrgPsnCd)) {
         return false;
       }
-      if (!itemCdColumnFilter.matchesRow(row, state.itemCd)) {
+      if (!matchesAnyPrefix(itemCdColumnFilter, row, "item_cd", state.itemCd)) {
         return false;
       }
-      if (!level1ItemCdColumnFilter.matchesRow(row, state.level1ItemCd)) {
+      if (!matchesAnyPrefix(level1ItemCdColumnFilter, row, "level1_item_cd", state.level1ItemCd)) {
         return false;
       }
       return true;
@@ -410,7 +456,7 @@
     };
     const allRows = Array.isArray(payload.rows) ? payload.rows : [];
     const allCustOptions = defaults.filterOptions?.custOptions || [];
-    const custChrgCustIndex = CustFilter.buildCustChrgCustIndex(allRows);
+    const custChrgCustIndex = CustFilter.buildCustChrgCustIndex(memberRows(allRows));
     const sortableColumns = Array.isArray(payload.sortableColumns) ? payload.sortableColumns : [];
     // 一覧の列には出さないが並び替えダイアログでは選べる項目（在庫月数）。05 design §6.1
     const sortOnlyColumns = Array.isArray(payload.sortOnlyColumns) ? payload.sortOnlyColumns : [];
@@ -803,7 +849,7 @@
                 const label = responseKey === "none" || !row.responseClassKey ? "" : RESPONSE_CLASS_LABELS[responseKey];
                 return `<td class="ioa-response-class-cell">${label ? `<span class="ioa-response-class ioa-response-class--${responseKey}">${Core.escapeHtml(label)}</span>` : ""}</td>`;
               }
-              return `<td>${Core.escapeHtml(display[column.key] ?? "")}</td>`;
+              return `<td>${Core.escapeHtml(display[column.key] ?? "")}${renderUnitMore(row, column.key)}</td>`;
             })
             .join("");
           return `<tr class="alert-row alert-row--${Core.escapeHtml(rowClass)} ioa-data-row"
@@ -981,6 +1027,11 @@
         return row ? urgencyTextOf(row) : "";
       },
       // 詳細ダイアログの対応区分（08 design §5）。
+      // 得意先別内訳（V-242）。サーバが作った内訳をそのまま返す（spec/13 REQ-RUR-F-006・F-007）
+      getCustomerBreakdown(custCode, itemCd) {
+        const row = findRow(custCode, itemCd);
+        return Array.isArray(row?.customer_breakdown) ? row.customer_breakdown : [];
+      },
       getResponseClass(custCode, itemCd) {
         const row = findRow(custCode, itemCd);
         if (!row) {

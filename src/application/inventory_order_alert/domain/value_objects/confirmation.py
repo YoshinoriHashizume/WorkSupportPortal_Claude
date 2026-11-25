@@ -69,6 +69,9 @@ class MemoEntryRecord:
     created_at: datetime | None
     created_by: str
     content: str
+    #: 照合単位行に追加したときの複製を束ねる識別子（spec/13 design §4.1）。空は移行前のメモ
+    entry_group: str = ""
+    entry_id: int = 0
 
 
 @dataclass(frozen=True)
@@ -83,6 +86,8 @@ class ConfirmationRecord:
     confirmed_by: str
     memo_history: str = ""
     memo_entries: tuple[MemoEntryRecord, ...] = ()
+    #: 照合単位行で最も新しい記録を選ぶために使う（spec/13 REQ-RUR-F-012）
+    updated_at: datetime | None = None
 
 
 @dataclass(frozen=True)
@@ -177,21 +182,67 @@ def format_memo_history_csv(
     return " | ".join(parts)
 
 
+def row_item_cds(row: dict[str, object]) -> list[str]:
+    """照合単位行（T-213）に属する得意先品番。まとめる前の行は自分の得意先品番だけ。"""
+    values = row.get("item_cds")
+    if isinstance(values, list) and values:
+        return [str(value) for value in values if str(value or "").strip()]
+    item_cd = str(row.get("item_cd") or "").strip()
+    return [item_cd] if item_cd else []
+
+
+def unit_confirmation(item_cds, confirmations: dict[str, ConfirmationRecord]) -> ConfirmationRecord | None:
+    """照合単位行の確認記録: 単位内の得意先品番の記録のうち最も新しく更新されたもの（spec/13 REQ-RUR-F-012）。
+
+    照合単位が分かれても、各単位は自分の得意先品番の記録を引き継ぐ。品番が加わっても既存の記録を引き継ぐ。
+    """
+    records = [confirmations[item_cd] for item_cd in item_cds if item_cd in confirmations]
+    if not records:
+        return None
+    return max(records, key=lambda record: (record.updated_at is not None, record.updated_at or 0, record.item_cd))
+
+
+def merge_memo_entries(records) -> list[MemoEntryRecord]:
+    """照合単位行の確認メモ: メモ識別子（空なら id）で 1 件にまとめ、新しい順に並べる（spec/13 design §4.1）。"""
+    entries: dict[str, MemoEntryRecord] = {}
+    for record in records:
+        for entry in record.memo_entries:
+            identity = f"g:{entry.entry_group}" if entry.entry_group else f"id:{entry.entry_id}"
+            entries.setdefault(identity, entry)
+    return sorted(
+        entries.values(),
+        key=lambda entry: (entry.created_at is not None, entry.created_at or 0, entry.entry_id),
+        reverse=True,
+    )
+
+
 def attach_confirmation_fields(
     rows: list[dict[str, object]],
-    confirmations: dict[tuple[str, str], ConfirmationRecord],
+    confirmations: dict[str, ConfirmationRecord],
+    *,
+    author_names: dict[str, str] | None = None,
 ) -> list[dict[str, object]]:
+    """行に確認状態を付ける。確認記録は得意先品番ごと（spec/13 REQ-RUR-F-011）。
+
+    照合単位行は `item_cds` の記録から最も新しいものを採り、確認メモは単位内の記録から集めて 1 件にまとめる。
+    """
     enriched: list[dict[str, object]] = []
     for row in rows:
         copied = dict(row)
-        key = (str(copied.get("cust_code") or ""), str(copied.get("item_cd") or ""))
-        confirmation = confirmations.get(key)
+        item_cds = row_item_cds(copied)
+        confirmation = unit_confirmation(item_cds, confirmations)
         if confirmation:
+            records = [confirmations[item_cd] for item_cd in item_cds if item_cd in confirmations]
             copied["confirmation_status"] = confirmation_label(confirmation.status)
             copied["confirmed_at"] = format_display_datetime(confirmation.confirmed_at)
             copied["confirmed_by"] = confirmation.confirmed_by
-            copied["confirmation_memo"] = confirmation.memo
-            copied["confirmation_memo_history"] = confirmation.memo_history
+            if len(records) == 1:
+                copied["confirmation_memo"] = confirmation.memo
+                copied["confirmation_memo_history"] = confirmation.memo_history
+            else:
+                entries = merge_memo_entries(records)
+                copied["confirmation_memo"] = entries[0].content if entries else ""
+                copied["confirmation_memo_history"] = format_memo_history_csv(entries, author_names=author_names)
         else:
             copied.setdefault("confirmation_status", "未確認")
             copied.setdefault("confirmed_at", "")

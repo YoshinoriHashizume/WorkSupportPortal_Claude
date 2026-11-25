@@ -12,7 +12,10 @@ from application.inventory_order_alert.domain.value_objects.flow_quadrant import
     normalize_flow_quadrant,
 )
 from application.inventory_order_alert.domain.value_objects.list_query import ListQuery
-from application.inventory_order_alert.domain.value_objects.list_rows import apply_flow_quadrants_to_rows
+from application.inventory_order_alert.domain.value_objects.list_rows import (
+    apply_flow_quadrants_to_rows,
+    unit_rows_with_reference_flow,
+)
 from application.inventory_order_alert.domain.value_objects.snapshot_patch import (
     SnapshotRowPatchResult,
     find_snapshot_row_index,
@@ -68,7 +71,12 @@ class PatchSnapshotRow:
         new_flow_quadrant = normalize_flow_quadrant(str(updated.get("flow_quadrant") or ""))
 
         self._persist_snapshot(editable, rows)
-        reset_count = self._reconcile_confirmations_after_import(rows) if run_reconcile else 0
+        # 確認リセットは照合単位行の流動区分で判定する（spec/13 REQ-RUR-F-014）
+        reset_count = (
+            self._reconcile_confirmations_after_import(unit_rows_with_reference_flow(rows, as_of_date=editable.as_of_date))
+            if run_reconcile
+            else 0
+        )
         return SnapshotRowPatchResult(
             cust_code=cust_code,
             item_cd=item_cd,

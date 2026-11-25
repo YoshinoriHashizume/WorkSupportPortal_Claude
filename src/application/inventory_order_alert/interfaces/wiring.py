@@ -69,6 +69,8 @@ def confirmation_memos_usecase() -> ConfirmationMemos:
         list_confirmation_memos,
         add_confirmation_memo,
         resolve_user_display_names,
+        # 照合単位行の得意先品番すべてを対象にする（spec/13 REQ-RUR-F-011）
+        load_summary=load_latest_summary,
     )
 
 

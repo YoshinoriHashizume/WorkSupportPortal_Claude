@@ -16,6 +16,7 @@ from application.inventory_order_alert.domain.value_objects.flow_quadrant import
 from application.inventory_order_alert.domain.value_objects.list_query import ListQuery
 from application.inventory_order_alert.domain.value_objects.list_rows import apply_flow_quadrants_to_rows
 from application.inventory_order_alert.domain.value_objects.row_counts import RowCounts, count_rows
+from application.inventory_order_alert.domain.value_objects.reconciliation_unit_row import find_unit_row, unit_item_cds_for
 from application.inventory_order_alert.domain.value_objects.row_display import row_alert_class
 from application.inventory_order_alert.domain.value_objects.summary import SummaryLoadResult
 
@@ -49,10 +50,13 @@ def lookup_flow_quadrant_for_row(
     cust_code: str,
     item_cd: str,
 ) -> str:
-    """確認記録に残す流動区分を引く。見つからない行は安全側の通常流動品に倒す（design.md §5.2）。"""
-    for row in rows:
-        if str(row.get("cust_code") or "") == cust_code and str(row.get("item_cd") or "") == item_cd:
-            return normalize_flow_quadrant(str(row.get("flow_quadrant") or ""))
+    """確認記録に残す流動区分を引く。見つからない行は安全側の通常流動品に倒す（design.md §5.2）。
+
+    照合単位行（T-213）の流動区分を使う（spec/13 REQ-RUR-F-003）。
+    """
+    row = find_unit_row(rows, cust_code=cust_code, item_cd=item_cd)
+    if row is not None:
+        return normalize_flow_quadrant(str(row.get("flow_quadrant") or ""))
     return QUADRANT_NORMAL_FLOW
 
 
@@ -65,15 +69,7 @@ def _build_save_result(
     filtered_rows = apply_list_filters(rows, filter_params)
     counts = count_rows(filtered_rows)
 
-    target_row = next(
-        (
-            row
-            for row in rows
-            if str(row.get("cust_code") or "") == input_data.cust_code
-            and str(row.get("item_cd") or "") == input_data.item_cd
-        ),
-        None,
-    )
+    target_row = find_unit_row(rows, cust_code=input_data.cust_code, item_cd=input_data.item_cd)
     if target_row is None:
         target_row = {
             "flow_quadrant": QUADRANT_NORMAL_FLOW,
@@ -96,15 +92,18 @@ class SaveConfirmationUseCase:
     def execute(self, payload: dict[str, object], *, confirmed_by: str) -> dict[str, object]:
         input_data = parse_confirmation_payload(payload)
         summary = self._load_summary()
+        rows = self._rows_with_reference_quadrant(summary)
         # 保存する流動区分は基準判定条件で固定する。利用者の画面選択には依存しない（design.md §5.2）。
+        # 照合単位行の得意先品番すべてに保存する（spec/13 REQ-RUR-F-011）
         self._save_confirmation(
             input_data,
             confirmed_by=confirmed_by,
             flow_quadrant=lookup_flow_quadrant_for_row(
-                self._rows_with_reference_quadrant(summary),
+                rows,
                 cust_code=input_data.cust_code,
                 item_cd=input_data.item_cd,
             ),
+            item_cds=unit_item_cds_for(rows, cust_code=input_data.cust_code, item_cd=input_data.item_cd),
         )
         filter_params = list_filter_params_from_client_payload(payload)
         summary = self._load_summary()

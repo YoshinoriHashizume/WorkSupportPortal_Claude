@@ -79,7 +79,7 @@ class HasResettableConfirmations(Protocol):
 
 
 class SaveConfirmation(Protocol):
-    """確認状況を保存する。"""
+    """確認状況を保存する。`item_cds` を渡すと照合単位行（T-213）の得意先品番すべてに 1 トランザクションで保存する（spec/13）。"""
 
     def __call__(
         self,
@@ -87,6 +87,7 @@ class SaveConfirmation(Protocol):
         *,
         confirmed_by: str,
         flow_quadrant: str = ...,
+        item_cds: tuple[str, ...] = ...,
     ) -> ConfirmationRecord: ...
 
 
@@ -103,13 +104,13 @@ class ReconcileConfirmationsAfterImport(Protocol):
 
 
 class ListConfirmationMemos(Protocol):
-    """指定明細の確認メモを古い順で返す。"""
+    """指定明細の確認メモを新しい順で返す。`item_cds` を渡すと照合単位行の得意先品番から集めて 1 件にまとめる（spec/13）。"""
 
-    def __call__(self, *, cust_code: str, item_cd: str) -> list[dict[str, str]]: ...
+    def __call__(self, *, cust_code: str, item_cd: str, item_cds: tuple[str, ...] = ...) -> list[dict[str, str]]: ...
 
 
 class AddConfirmationMemo(Protocol):
-    """指定明細に確認メモを 1 件追加する。"""
+    """指定明細に確認メモを 1 件追加する。`item_cds` を渡すと得意先品番の数だけ同じメモ識別子で複製する（spec/13）。"""
 
     def __call__(
         self,
@@ -118,6 +119,7 @@ class AddConfirmationMemo(Protocol):
         item_cd: str,
         content: str,
         created_by: str,
+        item_cds: tuple[str, ...] = ...,
     ) -> MemoEntryRecord: ...
 
 

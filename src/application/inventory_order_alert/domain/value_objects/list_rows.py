@@ -10,6 +10,7 @@ from application.inventory_order_alert.domain.value_objects.flow_quadrant import
     EVALUATION_PERIODS,
     FLOW_QUADRANT_KEYS,
     FLOW_QUADRANT_LABELS,
+    REFERENCE_FLOW_SELECTION,
     QUADRANT_NORMAL_FLOW,
     RESPONSIBLE_DEPARTMENT_SEPARATOR,
     FlowSelection,
@@ -20,6 +21,7 @@ from application.inventory_order_alert.domain.value_objects.flow_quadrant import
     resolve_flow_quadrant_matrix,
 )
 from application.inventory_order_alert.domain.value_objects.list_query import ListQuery
+from application.inventory_order_alert.domain.value_objects.reconciliation_unit_row import build_reconciliation_unit_rows
 from application.inventory_order_alert.domain.value_objects.recommended_action import (
     DEFAULT_RECOMMENDED_ACTIONS,
     RecommendedActions,
@@ -124,7 +126,7 @@ def enrich_summary_rows(
     stock_lines: list[SlimsStockLocationLine] | None = None,
     #: 在庫時点（T-202）のラベル用。取込日時（datetime）を渡すと時分まで出る（ISSUE-0008）。
     stock_as_of_date: date | datetime | None = None,
-    confirmations: dict[tuple[str, str], ConfirmationRecord] | None = None,
+    confirmations: dict[str, ConfirmationRecord] | None = None,
     recommended_actions: RecommendedActions = DEFAULT_RECOMMENDED_ACTIONS,
 ) -> list[dict[str, object]]:
     rows_with_stock = attach_stock_fields(rows, stock_lines, stock_as_of_date=stock_as_of_date)
@@ -138,14 +140,23 @@ def enrich_summary_rows(
     return attach_confirmation_fields(enriched, confirmation_map)
 
 
+def row_values(row: dict[str, object], list_key: str, single_key: str) -> list[str]:
+    """照合単位行（T-213）に含まれる値の一覧。一覧キーがない行（まとめる前・旧データ）は単数キーの値。"""
+    values = row.get(list_key)
+    if isinstance(values, list) and values:
+        return [str(value or "") for value in values]
+    return [str(row.get(single_key) or "")]
+
+
 def filter_summary_rows(rows: list[dict[str, object]], query: ListQuery) -> list[dict[str, object]]:
     #: 未知のキーは絞り込みなしに倒す（design.md §8）。
+    #: 得意先・仕入先は照合単位行に含まれるどの値でも当たる（spec/13 REQ-RUR-F-004）。
     selected_quadrant = FLOW_QUADRANT_LABELS.get(query.flow_quadrant, "")
     filtered: list[dict[str, object]] = []
     for row in rows:
-        if query.cust_code and str(row.get("cust_code") or "") != query.cust_code:
+        if query.cust_code and query.cust_code not in row_values(row, "cust_codes", "cust_code"):
             continue
-        if query.vend_code and str(row.get("level1_vend_cd") or "") != query.vend_code:
+        if query.vend_code and query.vend_code not in row_values(row, "level1_vend_cds", "level1_vend_cd"):
             continue
         quadrant = str(row.get("flow_quadrant") or "")
         if selected_quadrant and quadrant != selected_quadrant:
@@ -188,3 +199,15 @@ def sort_summary_rows(rows: list[dict[str, object]]) -> list[dict[str, object]]:
         )
 
     return sorted(rows, key=sort_key)
+
+
+def unit_rows_with_reference_flow(rows: list[dict[str, object]], *, as_of_date: date) -> list[dict[str, object]]:
+    """行を照合単位行（T-213）にまとめ、基準判定条件で流動区分を付ける（spec/13 REQ-RUR-F-003・F-014）。
+
+    取込後の確認リセットとスナップショット修正で使う。流動区分は照合単位の合算値で判定する。
+    """
+    return apply_flow_quadrants_to_rows(
+        build_reconciliation_unit_rows(rows),
+        as_of_date=as_of_date,
+        query=ListQuery(as_of_date=as_of_date, flow_selection=REFERENCE_FLOW_SELECTION),
+    )

@@ -62,6 +62,7 @@ class InventoryOrderAlertSettings(models.Model):
 
 
 class InventoryOrderAlertConfirmation(models.Model):
+    #: 最後に記録した照合単位行の代表得意先コード（参考値。キーではない。spec/13 design §5.1）
     cust_code = models.CharField(max_length=40)
     item_cd = models.CharField(max_length=80)
     status = models.CharField(
@@ -77,10 +78,11 @@ class InventoryOrderAlertConfirmation(models.Model):
     updated_at = models.DateTimeField(auto_now=True)
 
     class Meta:
+        # 確認記録は得意先品番ごとに 1 件（照合単位行で読み書きする。spec/13 REQ-RUR-F-011）
         constraints = [
             models.UniqueConstraint(
-                fields=["cust_code", "item_cd"],
-                name="unique_inventory_order_alert_confirmation",
+                fields=["item_cd"],
+                name="unique_inventory_order_alert_confirmation_item",
             ),
         ]
 
@@ -94,6 +96,8 @@ class InventoryOrderAlertConfirmationMemoEntry(models.Model):
     content = models.CharField(max_length=500)
     created_by = models.CharField(max_length=40, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
+    #: 照合単位行に追加したときの複製を束ねる識別子（UUID 文字列）。空は移行前のメモ（spec/13 design §5.2）
+    entry_group = models.CharField(max_length=36, blank=True, default="")
 
     class Meta:
         ordering = ["-created_at", "-id"]

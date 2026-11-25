@@ -9,9 +9,27 @@ from django.contrib.auth import get_user_model
 from django.contrib.auth.models import Group
 from django.utils import timezone
 
-from application.inventory_order_alert.infrastructure.persistence.summary_snapshot_repository import store_summary_snapshot
+from application.inventory_order_alert.infrastructure.persistence.summary_snapshot_repository import (
+    store_summary_snapshot as _store_summary_snapshot,
+)
 from application.inventory_order_alert.models import SlimsStockImport
 from application.portal.models import PortalMenuGroupAccess
+
+
+def store_summary_snapshot(import_record, rows, **kwargs):
+    """行ごとに仕入先品番を「得意先品番-仕入先コード」にそろえて保存する（spec/13）。
+
+    一覧は照合単位行（T-213）で表示する。本ファイルのテストは件数・並び替え・ページ送りを確かめるもので、
+    行どうしが仕入先品番を共有して 1 つの照合単位にまとまると意図が変わるため、行ごとに別の照合単位にする。
+    既定行（90249-10112 / 90249-10112-9209）はもともとこの形なので値は変わらない。
+    """
+    separated = [
+        {**row, "level1_item_cd": f"{row.get('item_cd')}-{row.get('level1_vend_cd') or '9209'}"}
+        if row.get("item_cd") and row.get("level1_item_cd")
+        else row
+        for row in rows
+    ]
+    return _store_summary_snapshot(import_record, separated, **kwargs)
 
 
 @pytest.fixture

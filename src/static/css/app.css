@@ -1365,6 +1365,45 @@ body.inventory-order-alert-page .ioa-detail-process-chain-table th {
 body.inventory-order-alert-page .ioa-detail-process-chain-row--overdue td {
   background: #fff8e1;
 }
+/* 照合単位行（T-213）の「他 N」の印と得意先別内訳（V-242）。spec/13 REQ-RUR-F-002・F-006 */
+body.inventory-order-alert-page .ioa-unit-more {
+  display: inline-block;
+  margin-left: 4px;
+  padding: 0 5px;
+  border-radius: 8px;
+  background: #e2e8f0;
+  color: #334155;
+  font-size: 11px;
+  line-height: 16px;
+  cursor: help;
+  white-space: nowrap;
+}
+body.inventory-order-alert-page .ioa-detail-customer-breakdown-section {
+  margin-top: 12px;
+}
+body.inventory-order-alert-page .ioa-detail-customer-count {
+  margin-left: 6px;
+  font-weight: normal;
+  color: #475569;
+}
+body.inventory-order-alert-page .ioa-detail-customer-breakdown-wrap {
+  overflow-x: auto;
+}
+body.inventory-order-alert-page .ioa-detail-customer-breakdown-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 12px;
+}
+body.inventory-order-alert-page .ioa-detail-customer-breakdown-table th,
+body.inventory-order-alert-page .ioa-detail-customer-breakdown-table td {
+  border: 1px solid #cbd5e1;
+  padding: 4px 6px;
+  text-align: left;
+  white-space: normal;
+}
+body.inventory-order-alert-page .ioa-detail-customer-breakdown-table th {
+  background: #f8fafc;
+}
 /* 詳細ダイアログの需要予測区分（05 design §6.4）。 */
 body.inventory-order-alert-page .ioa-detail-demand-forecast-fields {
   grid-template-columns: 9em minmax(0, 1fr);

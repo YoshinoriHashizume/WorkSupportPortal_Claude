@@ -77,7 +77,8 @@ def test_load_confirmation_map_includes_memo_history():
         memo="最新メモ",
     )
     confirmation_map = load_confirmation_map()
-    record = confirmation_map[("112", "ITEM-A")]
+    # spec/13: 確認記録は得意先品番ごと（キーは得意先品番。得意先コードは参考値）
+    record = confirmation_map["ITEM-A"]
     assert record.memo == "最新メモ"
     assert record.status == STATUS_UNCONFIRMED
 

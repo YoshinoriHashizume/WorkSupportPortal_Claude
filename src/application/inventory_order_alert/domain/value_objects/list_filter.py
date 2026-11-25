@@ -62,7 +62,33 @@ def matches_level1_item_cd_filter(level1_item_cd: str, level1_item_cd_filter: st
     return matches_prefix_filter(level1_item_cd, level1_item_cd_filter)
 
 
+def _member_rows(rows: list[dict[str, object]]) -> list[dict[str, object]]:
+    """照合単位行（T-213）を得意先別内訳（V-242）の行に展開する。内訳のない行はそのまま（spec/13 REQ-RUR-F-004）。"""
+    members: list[dict[str, object]] = []
+    for row in rows:
+        breakdown = row.get("customer_breakdown")
+        if isinstance(breakdown, list) and breakdown:
+            members.extend(entry for entry in breakdown if isinstance(entry, dict))
+        else:
+            members.append(row)
+    return members
+
+
+def _level1_rows(rows: list[dict[str, object]]) -> list[dict[str, object]]:
+    expanded: list[dict[str, object]] = []
+    for row in rows:
+        values = row.get("level1_item_cds")
+        if isinstance(values, list) and values:
+            expanded.extend({"level1_item_cd": value} for value in values)
+        else:
+            expanded.append(row)
+    return expanded
+
+
 def build_filter_options(rows: list[dict[str, object]]) -> ListFilterOptions:
+    # 選択肢は照合単位行に含まれるすべての値から作る（代表得意先に限らない。spec/13 REQ-RUR-F-004）
+    level1_rows = _level1_rows(rows)
+    rows = _member_rows(rows)
     cust_labels: dict[str, str] = {}
     chrg_codes: set[str] = set()
     for row in rows:
@@ -86,7 +112,7 @@ def build_filter_options(rows: list[dict[str, object]]) -> ListFilterOptions:
         for code in sorted(chrg_codes, key=numeric_code_sort_key)
     )
     item_cd_options = extract_distinct_values_from_rows(rows, "item_cd")
-    level1_item_cd_options = extract_distinct_values_from_rows(rows, "level1_item_cd")
+    level1_item_cd_options = extract_distinct_values_from_rows(level1_rows, "level1_item_cd")
     return ListFilterOptions(
         cust_options=cust_options,
         cust_chrg_psn_options=cust_chrg_psn_options,
@@ -138,27 +164,39 @@ def list_filter_params_from_client_payload(payload: dict[str, object]) -> ListFi
     )
 
 
+def _values(row: dict[str, object], list_key: str, single_key: str) -> list[str]:
+    """照合単位行（T-213）に含まれる値。一覧キーのない行は単数キーの値（spec/13 REQ-RUR-F-004）。"""
+    values = row.get(list_key)
+    if isinstance(values, list) and values:
+        return [str(value or "").strip() for value in values]
+    return [str(row.get(single_key) or "").strip()]
+
+
 def apply_list_filters(rows: list[dict[str, object]], params: ListFilterParams) -> list[dict[str, object]]:
+    # 照合単位行に含まれるどの値でも当たる（代表得意先に限らない。spec/13 REQ-RUR-F-004）
     filtered = rows
     if params.cust_code:
-        filtered = [row for row in filtered if str(row.get("cust_code") or "").strip() == params.cust_code]
+        filtered = [row for row in filtered if params.cust_code in _values(row, "cust_codes", "cust_code")]
     if params.cust_chrg_psn_cd:
         filtered = [
             row
             for row in filtered
-            if str(row.get("cust_chrg_psn_cd") or "").strip() == params.cust_chrg_psn_cd
+            if params.cust_chrg_psn_cd in _values(row, "cust_chrg_psn_cds", "cust_chrg_psn_cd")
         ]
     if params.item_cd:
         filtered = [
             row
             for row in filtered
-            if matches_item_cd_filter(str(row.get("item_cd") or ""), params.item_cd)
+            if any(matches_item_cd_filter(value, params.item_cd) for value in _values(row, "item_cds", "item_cd"))
         ]
     if params.level1_item_cd:
         filtered = [
             row
             for row in filtered
-            if matches_level1_item_cd_filter(str(row.get("level1_item_cd") or ""), params.level1_item_cd)
+            if any(
+                matches_level1_item_cd_filter(value, params.level1_item_cd)
+                for value in _values(row, "level1_item_cds", "level1_item_cd")
+            )
         ]
     return filtered
 

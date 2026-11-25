@@ -10,6 +10,7 @@ from application.sales.infrastructure.oracle.client import (
 from application.inventory_order_alert.domain.repositories.ports import EnrichRows
 from application.inventory_order_alert.domain.value_objects.flow_quadrant import REFERENCE_FLOW_SELECTION
 from application.inventory_order_alert.domain.value_objects.list_query import ListQuery
+from application.inventory_order_alert.domain.value_objects.list_rows import unit_rows_with_reference_flow
 from application.inventory_order_alert.infrastructure.persistence.summary_snapshot_repository import store_summary_snapshot
 from application.inventory_order_alert.infrastructure.persistence.confirmation_repository import reconcile_confirmations_after_import
 from application.inventory_order_alert.domain.value_objects.slims_stock import SlimsStockLocationLine
@@ -50,5 +51,6 @@ def run_summary_aggregation(
         return str(exc), 0, ""
 
     store_summary_snapshot(import_record, rows, as_of_date=as_of_date)
-    reset_count = reconcile_confirmations_after_import(rows)
+    # 確認リセットは照合単位行の流動区分で判定する（spec/13 REQ-RUR-F-014）
+    reset_count = reconcile_confirmations_after_import(unit_rows_with_reference_flow(rows, as_of_date=as_of_date))
     return "", reset_count, " ".join(warnings)

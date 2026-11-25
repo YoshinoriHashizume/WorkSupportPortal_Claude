@@ -952,7 +952,47 @@
       renderAssessment(custCode, row.dataset.itemCd || "");
       renderStockAndOrders(custCode, row.dataset.itemCd || "");
       renderMonthlyDemand(custCode, row.dataset.itemCd || "");
+      renderCustomerBreakdown(custCode, row.dataset.itemCd || "");
       updateGonenLink(custCode, row.dataset.itemCd || "");
+    }
+
+    // 得意先別内訳（V-242）。照合単位行（T-213）に含まれる得意先ごとの値を表にする（spec/13 REQ-RUR-F-006・F-007）。
+    // 内訳はサーバが作ったものを表示するだけで、合算や代表の選び方は JS に持たない（REQ-RUR-NF-005）。
+    const customerBreakdownBody = dialog.querySelector(".ioa-detail-customer-breakdown-body");
+    const customerCountLabel = dialog.querySelector(".ioa-detail-customer-count");
+
+    function upcomingDemandText(trend) {
+      const points = Array.isArray(trend) ? trend : [];
+      const currentMonth = currentYearMonth();
+      const upcoming = points.filter((point) => String(point?.month || "") >= currentMonth && Number(point?.qty) > 0);
+      if (!upcoming.length) {
+        return "なし";
+      }
+      return upcoming.map((point) => `${String(point.month).slice(5)}月 ${formatQty(point.qty)}`).join(" / ");
+    }
+
+    function renderCustomerBreakdown(custCode, itemCd) {
+      if (!customerBreakdownBody) {
+        return;
+      }
+      const breakdown = listClient?.getCustomerBreakdown?.(custCode, itemCd) || [];
+      const customerCount = new Set(breakdown.map((entry) => String(entry?.cust_code || ""))).size;
+      if (customerCountLabel) {
+        customerCountLabel.textContent = customerCount >= 2 ? `（得意先 ${customerCount} 社）` : "";
+      }
+      customerBreakdownBody.innerHTML = breakdown
+        .map((entry) => {
+          const cust = entry.cust_name ? `${entry.cust_code} - ${entry.cust_name}` : String(entry.cust_code || "");
+          return `<tr>
+            <td>${escapeHtml(cust)}</td>
+            <td class="mono">${escapeHtml(entry.item_cd || "")}</td>
+            <td>${escapeHtml(entry.cust_chrg_psn_cd || "")}</td>
+            <td class="ioa-location-qty">${escapeHtml(formatQty(entry.post_shipment_total_qty || 0))}</td>
+            <td>${escapeHtml(entry.last_ship_date || "-")}</td>
+            <td>${escapeHtml(upcomingDemandText(entry.unconfirmed_order_trend))}</td>
+          </tr>`;
+        })
+        .join("");
     }
 
     // 在庫シミュレーションのグラフ（09 design §5.4）。横軸は日付で、範囲内の**全日**を出す。

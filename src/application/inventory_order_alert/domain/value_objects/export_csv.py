@@ -61,10 +61,25 @@ EXPORT_HEADER_LABELS = {column: label for column, label in EXPORT_COLUMNS}
 #: 列は残すが値を出さない列。
 EMPTY_COLUMNS = ("flow_axis",)
 
+#: 照合単位行（T-213）で値が 2 つ以上ありうる列と、その一覧キー。全件を「、」で連結する（spec/13 REQ-RUR-F-010）
+MULTI_VALUE_COLUMNS = {
+    "cust_chrg_psn_cd": "cust_chrg_psn_cds",
+    "cust_code": "cust_codes",
+    "cust_name": "cust_names",
+    "item_cd": "item_cds",
+    "level1_vend_cd": "level1_vend_cds",
+    "level1_vend_name": "level1_vend_names",
+    "level1_item_cd": "level1_item_cds",
+}
+MULTI_VALUE_SEPARATOR = "、"
+
 
 def render_export_cell(row: dict[str, object], column: str) -> object:
     if column in EMPTY_COLUMNS:
         return ""
+    values = row.get(MULTI_VALUE_COLUMNS.get(column, ""))
+    if isinstance(values, list) and values:
+        return MULTI_VALUE_SEPARATOR.join(str(value) for value in values)
     if column == "flow_quadrant":
         # 旧称が行に残っていても新区分名で出す（TC-SFV-D-062）
         return normalize_flow_quadrant(str(row.get(column) or ""))
